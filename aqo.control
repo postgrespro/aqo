@@ -1,0 +1,5 @@
+# aqo extension
+comment = 'machine learning for cardinality estimation in optimizer'
+default_version = '1.0'
+module_pathname = '$libdir/aqo'
+relocatable = true
