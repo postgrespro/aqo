@@ -13,6 +13,9 @@ static void deform_matrix(Datum datum, double **matrix);
 static void deform_vector(Datum datum, double *vector, int *nelems);
 static ArrayType *form_matrix(double **matrix, int nrows, int ncols);
 static ArrayType *form_vector(double *vector, int nrows);
+static bool my_simple_heap_update(Relation relation,
+								  ItemPointer otid,
+								  HeapTuple tup);
 
 
 /*
@@ -115,12 +118,21 @@ add_query(int query_hash, bool learn_aqo, bool use_aqo,
 
 	tuple = heap_form_tuple(RelationGetDescr(aqo_queries_heap),
 							values, nulls);
-	simple_heap_insert(aqo_queries_heap, tuple);
-	index_insert(query_index_rel,
-				 values, nulls,
-				 &(tuple->t_self),
-				 aqo_queries_heap,
-				 UNIQUE_CHECK_YES);
+	PG_TRY();
+	{
+		simple_heap_insert(aqo_queries_heap, tuple);
+		index_insert(query_index_rel,
+					 values, nulls,
+					 &(tuple->t_self),
+					 aqo_queries_heap,
+					 UNIQUE_CHECK_YES);
+	}
+	PG_CATCH();
+	{
+		CommandCounterIncrement();
+		simple_heap_delete(aqo_queries_heap, &(tuple->t_self));
+	}
+	PG_END_TRY();
 
 	index_close(query_index_rel, heap_lock);
 	heap_close(aqo_queries_heap, heap_lock);
@@ -187,9 +199,20 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 
 	nw_tuple = heap_modify_tuple(tuple, aqo_queries_heap->rd_att,
 								 values, nulls, do_replace);
-	simple_heap_update(aqo_queries_heap, &(nw_tuple->t_self), nw_tuple);
-	index_insert(query_index_rel, values, nulls, &(nw_tuple->t_self),
-				 aqo_queries_heap, UNIQUE_CHECK_NO);
+	if (my_simple_heap_update(aqo_queries_heap, &(nw_tuple->t_self), nw_tuple))
+	{
+		index_insert(query_index_rel, values, nulls, &(nw_tuple->t_self),
+					 aqo_queries_heap, UNIQUE_CHECK_YES);
+	}
+	else
+	{
+		/*
+		 * Ooops, somebody concurrently updated the tuple. We have to merge our
+		 * changes somehow, but now we just discard ours. We don't believe in
+		 * high probability of simultaneously finishing of two long, complex,
+		 * and important queries, so we don't loss important data.
+		 */
+	}
 
 	index_endscan(query_index_scan);
 	index_close(query_index_rel, heap_lock);
@@ -237,12 +260,23 @@ add_query_text(int query_hash, const char *query_text)
 
 	tuple = heap_form_tuple(RelationGetDescr(aqo_query_texts_heap),
 							values, nulls);
-	simple_heap_insert(aqo_query_texts_heap, tuple);
-	index_insert(query_index_rel,
-				 values, nulls,
-				 &(tuple->t_self),
-				 aqo_query_texts_heap,
-				 UNIQUE_CHECK_YES);
+
+	PG_TRY();
+	{
+		simple_heap_insert(aqo_query_texts_heap, tuple);
+		index_insert(query_index_rel,
+					 values, nulls,
+					 &(tuple->t_self),
+					 aqo_query_texts_heap,
+					 UNIQUE_CHECK_YES);
+	}
+	PG_CATCH();
+	{
+		CommandCounterIncrement();
+		simple_heap_delete(aqo_query_texts_heap, &(tuple->t_self));
+	}
+	PG_END_TRY();
+
 
 	index_close(query_index_rel, heap_lock);
 	heap_close(aqo_query_texts_heap, heap_lock);
@@ -431,9 +465,18 @@ update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets,
 		values[3] = PointerGetDatum(form_matrix(matrix, nrows, ncols));
 		values[4] = PointerGetDatum(form_vector(targets, nrows));
 		tuple = heap_form_tuple(tuple_desc, values, nulls);
-		simple_heap_insert(aqo_data_heap, tuple);
-		index_insert(data_index_rel, values, nulls, &(tuple->t_self),
-					 aqo_data_heap, UNIQUE_CHECK_YES);
+		PG_TRY();
+		{
+			simple_heap_insert(aqo_data_heap, tuple);
+			index_insert(data_index_rel, values, nulls, &(tuple->t_self),
+						 aqo_data_heap, UNIQUE_CHECK_YES);
+		}
+		PG_CATCH();
+		{
+			CommandCounterIncrement();
+			simple_heap_delete(aqo_data_heap, &(tuple->t_self));
+		}
+		PG_END_TRY();
 	}
 	else
 	{
@@ -442,9 +485,21 @@ update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets,
 		values[4] = PointerGetDatum(form_vector(targets, nrows));
 		nw_tuple = heap_modify_tuple(tuple, tuple_desc,
 									 values, nulls, do_replace);
-		simple_heap_update(aqo_data_heap, &(nw_tuple->t_self), nw_tuple);
-		index_insert(data_index_rel, values, nulls, &(nw_tuple->t_self),
-					 aqo_data_heap, UNIQUE_CHECK_YES);
+		if (my_simple_heap_update(aqo_data_heap, &(nw_tuple->t_self), nw_tuple))
+		{
+			index_insert(data_index_rel, values, nulls, &(nw_tuple->t_self),
+						 aqo_data_heap, UNIQUE_CHECK_YES);
+		}
+		else
+		{
+			/*
+			 * Ooops, somebody concurrently updated the tuple. We have to merge
+			 * our changes somehow, but now we just discard ours. We don't
+			 * believe in high probability of simultaneously finishing of two
+			 * long, complex, and important queries, so we don't loss important
+			 * data.
+			 */
+		}
 	}
 
 	index_endscan(data_index_scan);
@@ -604,17 +659,38 @@ update_aqo_stat(int query_hash, QueryStat * stat)
 	if (tuple == NULL)
 	{
 		tuple = heap_form_tuple(tuple_desc, values, nulls);
-		simple_heap_insert(aqo_stat_heap, tuple);
-		index_insert(stat_index_rel, values, nulls, &(tuple->t_self),
-					 aqo_stat_heap, UNIQUE_CHECK_YES);
+		PG_TRY();
+		{
+			simple_heap_insert(aqo_stat_heap, tuple);
+			index_insert(stat_index_rel, values, nulls, &(tuple->t_self),
+						 aqo_stat_heap, UNIQUE_CHECK_YES);
+		}
+		PG_CATCH();
+		{
+			CommandCounterIncrement();
+			simple_heap_delete(aqo_stat_heap, &(tuple->t_self));
+		}
+		PG_END_TRY();
 	}
 	else
 	{
 		nw_tuple = heap_modify_tuple(tuple, tuple_desc,
 									 values, nulls, do_replace);
-		simple_heap_update(aqo_stat_heap, &(nw_tuple->t_self), nw_tuple);
-		index_insert(stat_index_rel, values, nulls, &(nw_tuple->t_self),
-					 aqo_stat_heap, UNIQUE_CHECK_YES);
+		if (my_simple_heap_update(aqo_stat_heap, &(nw_tuple->t_self), nw_tuple))
+		{
+			index_insert(stat_index_rel, values, nulls, &(nw_tuple->t_self),
+						 aqo_stat_heap, UNIQUE_CHECK_YES);
+		}
+		else
+		{
+			/*
+			 * Ooops, somebody concurrently updated the tuple. We have to merge
+			 * our changes somehow, but now we just discard ours. We don't
+			 * believe in high probability of simultaneously finishing of two
+			 * long, complex, and important queries, so we don't loss important
+			 * data.
+			 */
+		}
 	}
 
 	index_endscan(stat_index_scan);
@@ -718,4 +794,41 @@ form_vector(double *vector, int nrows)
 							   FLOAT8OID, 8, true, 'd');
 	pfree(elems);
 	return array;
+}
+
+/*
+ * Return true if updated successfully, false if updated concurrently by
+ * another session, error otherwise.
+ */
+static bool
+my_simple_heap_update(Relation relation, ItemPointer otid, HeapTuple tup)
+{
+	HTSU_Result result;
+	HeapUpdateFailureData hufd;
+	LockTupleMode lockmode;
+
+	result = heap_update(relation, otid, tup,
+						 GetCurrentCommandId(true), InvalidSnapshot,
+						 true /* wait for commit */ ,
+						 &hufd, &lockmode);
+	switch (result)
+	{
+		case HeapTupleSelfUpdated:
+			/* Tuple was already updated in current command? */
+			elog(ERROR, "tuple already updated by self");
+			break;
+
+		case HeapTupleMayBeUpdated:
+			/* done successfully */
+			return true;
+			break;
+
+		case HeapTupleUpdated:
+			return false;
+			break;
+
+		default:
+			elog(ERROR, "unrecognized heap_update status: %u", result);
+			break;
+	}
 }

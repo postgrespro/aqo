@@ -100,6 +100,7 @@ automatical_query_tuning(int query_hash, QueryStat * stat)
 		p_use /= 1 - 2 / (1 + exp(-0.5 / unstability));
 
 		use_aqo = ((double) rand() / RAND_MAX < p_use);
+		learn_aqo = use_aqo;
 	}
 
 	update_query(query_hash, learn_aqo, use_aqo, fspace_hash, true);

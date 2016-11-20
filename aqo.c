@@ -17,7 +17,7 @@ static const struct config_enum_entry format_options[] = {
 };
 
 /* Parameters of autotuning */
-int			aqo_stat_size = 30;
+int			aqo_stat_size = 10;
 int			auto_tuning_window_size = 5;
 double		auto_tuning_exploration = 0.1;
 
@@ -26,7 +26,7 @@ double		object_selection_prediction_threshold = 0.3;
 double		object_selection_object_threshold = 0.1;
 double		learning_rate = 1e-1;
 int			aqo_k = 3;
-int			aqo_K = 50;
+int			aqo_K = 30;
 double		log_selectivity_lower_bound = -30;
 
 /* Parameters for current query */
