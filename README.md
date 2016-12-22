@@ -6,6 +6,9 @@ for improving cardinality estimation. Experimental evaluation shows that this
 improvement sometimes provides an enourmously large speed-up for rather
 complicated queries.
 
+This extension is under development now, but its main functionality is already
+available.
+
 ## Installation
 
 The module works with PostgreSQL 9.6.
@@ -18,9 +21,11 @@ Extension has to be unpacked into contrib directory and then to be compiled and
 installed with "make install".
 
 In your db:
+
 CREATE EXTENSION aqo;
 
 and modify your postgresql.conf:
+
 shared_preload_libraries = 'aqo.so'
 
 It is essential that library is preloaded during server startup, because
@@ -38,8 +43,12 @@ on it, just add line "aqo.mode = 'intelligent'" into your postgresql.conf.
 Now this mode may work not good for rapidly changing data and query
 distributions, so it is better to reset extension manually when that happens.
 
-Also please note that intelligent mode is not supposed to work with queries
-with dynamically generated structure. Dynamically generated constants are okay.
+Intelligent mode also may decrease performance for workloads with a large frequency
+of fast simple queries. This drawback will be fixed soon.
+
+Please note that intelligent mode is not supposed to work with queries with
+dynamically generated structure. Nevertheless, dynamically generated constants
+are being handled well.
 
 For handling workloads with dynamically generated query structures the forced
 mode "aqo.mode = 'forced'" is provided. We cannot guarantee performance
@@ -47,11 +56,14 @@ improvement with this mode, but you may try it nevertheless.
 
 If you want to completelly control how PostgreSQL optimizes queries, use manual
 mode "aqo.mode = 'manual'" and
+
 contrib/aqo/learn_queries.sh file_with_sql_queries.sql "psql -d YOUR_DATABASE"
+
 where file_with_sql_queries.sql is a textfile with queries on which aqo is
 supposed to learn. Please use only SELECT queries file_with_sql_queries.sql.
 More sophisticated and convenient tool for aqo administration is in the
 development now.
+
 If you want to freeze optimizer's behaviour (i. e. disable learning under
 workload), use "UPDATE aqo_queries SET auto_tuning=false;".
 If you want to disable aqo for all queries, you may use
@@ -64,6 +76,7 @@ We consider that queries belong to the same type if and only if they differ only
 in their constants.
 One can see an example of query corresponding to the specified query type
 in table aqo_query_texts.
+
 select * from aqo_query_texts;
 
 That is why intelligent mode does not work for dynamically generated query
@@ -108,4 +121,14 @@ statistics is collected. The statistics is cardinality quality, planning and
 execution time. For forced mode the statistics for all untracked query types
 is stored in common query type with hash 0.
 
-One can see the collected statistics in table aqo_query_stat.
+One can see the collected statistics in the table aqo_query_stat.
+
+## License
+
+© [Postgres Professional](https://postgrespro.com/), 2016. Licensed under
+[The PostgreSQL License](LICENSE).
+
+## Reference
+
+The paper on the proposed method is also under development, but the draft version
+with experiments is available [here](paper-draft.pdf).
