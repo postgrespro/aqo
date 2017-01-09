@@ -69,17 +69,22 @@ converged_cq(double *elems, int nelems)
  * If we find out that cardinality quality diverged during the exploration, we
  * return to step 2 and run the query type with both aqo usage and aqo learning
  * enabled until convergence.
+ * If after auto_tuning_max_iterations steps we consider that for this query
+ * it is better not to use aqo, we set auto_tuning, learn_aqo and use_aqo for
+ * this query to false.
  */
 void
-automatical_query_tuning(int query_hash, QueryStat * stat)
+automatical_query_tuning(int query_hash, QueryStat *stat)
 {
 	double		unstability = auto_tuning_exploration;
 	double		t_aqo,
 				t_not_aqo;
-	double		p_use;
+	double		p_use = -1;
+	long long	num_iterations;
 
+	num_iterations = stat->executions_with_aqo + stat->executions_without_aqo;
 	learn_aqo = true;
-	if (stat->executions_without_aqo < auto_tuning_window_size)
+	if (stat->executions_without_aqo < auto_tuning_window_size + 1)
 		use_aqo = false;
 	else if (!converged_cq(stat->cardinality_error_with_aqo,
 						   stat->cardinality_error_with_aqo_size))
@@ -103,5 +108,8 @@ automatical_query_tuning(int query_hash, QueryStat * stat)
 		learn_aqo = use_aqo;
 	}
 
-	update_query(query_hash, learn_aqo, use_aqo, fspace_hash, true);
+	if (num_iterations <= auto_tuning_max_iterations || p_use > 0.5)
+		update_query(query_hash, learn_aqo, use_aqo, fspace_hash, true);
+	else
+		update_query(query_hash, false, false, fspace_hash, false);
 }

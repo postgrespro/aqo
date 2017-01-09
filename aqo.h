@@ -132,6 +132,7 @@
 #include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/guc.h"
+#include "utils/hsearch.h"
 #include "utils/rel.h"
 #include "utils/tqual.h"
 #include "utils/fmgroids.h"
@@ -172,6 +173,7 @@ typedef struct
 extern int	aqo_stat_size;
 extern int	auto_tuning_window_size;
 extern double auto_tuning_exploration;
+extern int	auto_tuning_max_iterations;
 
 /* Machine learning parameters */
 extern double object_selection_prediction_threshold;
@@ -236,6 +238,10 @@ bool update_fss(int fss_hash, int nrows, int ncols,
 		   int old_nrows, List *changed_rows);
 QueryStat  *get_aqo_stat(int query_hash);
 void		update_aqo_stat(int query_hash, QueryStat * stat);
+void		init_deactivated_queries_storage(void);
+void		fini_deactivated_queries_storage(void);
+bool		query_is_deactivated(int query_hash);
+void		add_deactivated_query(int query_hash);
 
 /* Query preprocessing hooks */
 void		get_query_text(ParseState *pstate, Query *query);

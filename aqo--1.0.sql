@@ -58,3 +58,10 @@ ALTER COLUMN cardinality_error_with_aqo SET STORAGE MAIN;
 INSERT INTO aqo_queries VALUES (0, false, false, 0, false);
 INSERT INTO aqo_query_texts VALUES (0, 'COMMON feature space (do not delete!)');
 -- a virtual query for COMMON feature space
+
+CREATE FUNCTION invalidate_deactivated_queries_cache() RETURNS trigger
+	AS 'MODULE_PATHNAME' LANGUAGE C;
+
+CREATE TRIGGER aqo_queries_invalidate AFTER UPDATE OR DELETE OR TRUNCATE
+	ON aqo_queries FOR EACH STATEMENT
+	EXECUTE PROCEDURE invalidate_deactivated_queries_cache();

@@ -43,9 +43,6 @@ on it, just add line "aqo.mode = 'intelligent'" into your postgresql.conf.
 Now this mode may work not good for rapidly changing data and query
 distributions, so it is better to reset extension manually when that happens.
 
-Intelligent mode also may decrease performance for workloads with a large frequency
-of fast simple queries. This drawback will be fixed soon.
-
 Please note that intelligent mode is not supposed to work with queries with
 dynamically generated structure. Nevertheless, dynamically generated constants
 are being handled well.

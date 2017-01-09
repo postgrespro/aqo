@@ -81,7 +81,7 @@ call_default_planner(Query *parse,
  * This hook computes query_hash, and sets values of learn_aqo,
  * use_aqo and is_common flags for given query.
  * Creates an entry in aqo_queries for new type of query if it is
- * necessary, i. e. linking strategy is not "disabled".
+ * necessary, i. e. aqo mode is not "manual".
  */
 PlannedStmt *
 aqo_planner(Query *parse,
@@ -104,6 +104,13 @@ aqo_planner(Query *parse,
 	INSTR_TIME_SET_CURRENT(query_starttime);
 
 	query_hash = get_query_hash(parse, query_text);
+
+	if (query_is_deactivated(query_hash))
+	{
+		disable_aqo_for_query();
+		return call_default_planner(parse, cursorOptions, boundParams);
+	}
+
 	query_is_stored = find_query(query_hash, &query_params[0], &query_nulls[0]);
 
 	if (!query_is_stored)
@@ -151,7 +158,9 @@ aqo_planner(Query *parse,
 		use_aqo = DatumGetBool(query_params[2]);
 		fspace_hash = DatumGetInt32(query_params[3]);
 		auto_tuning = DatumGetBool(query_params[4]);
-		collect_stat = true;
+		collect_stat = learn_aqo || use_aqo || auto_tuning;
+		if (!collect_stat)
+			add_deactivated_query(query_hash);
 	}
 
 	return call_default_planner(parse, cursorOptions, boundParams);

@@ -9,6 +9,8 @@
  *
  *****************************************************************************/
 
+HTAB  *deactivated_queries = NULL;
+
 static void deform_matrix(Datum datum, double **matrix);
 static void deform_vector(Datum datum, double *vector, int *nelems);
 static ArrayType *form_matrix(double **matrix, int nrows, int ncols);
@@ -831,4 +833,47 @@ my_simple_heap_update(Relation relation, ItemPointer otid, HeapTuple tup)
 			elog(ERROR, "unrecognized heap_update status: %u", result);
 			break;
 	}
+}
+
+/* Creates a storage for hashes of deactivated queries */
+void
+init_deactivated_queries_storage(void)
+{
+	HASHCTL	hash_ctl;
+
+	/* Create the hashtable proper */
+	MemSet(&hash_ctl, 0, sizeof(hash_ctl));
+	hash_ctl.keysize = sizeof(int);
+	hash_ctl.entrysize = sizeof(int);
+	deactivated_queries = hash_create("aqo_deactivated_queries",
+									  128,  /* start small and extend */
+									  &hash_ctl,
+									  HASH_ELEM);
+}
+
+/* Destroys the storage for hash of deactivated queries */
+void
+fini_deactivated_queries_storage(void)
+{
+	hash_destroy(deactivated_queries);
+	deactivated_queries = NULL;
+}
+
+/* Checks whether the query with given hash is deactivated */
+bool
+query_is_deactivated(int query_hash)
+{
+	bool	found;
+
+	hash_search(deactivated_queries, &query_hash, HASH_FIND, &found);
+	return found;
+}
+
+/* Adds given query hash into the set of hashes of deactivated queries*/
+void
+add_deactivated_query(int query_hash)
+{
+	bool	found;
+
+	hash_search(deactivated_queries, &query_hash, HASH_ENTER, &found);
 }

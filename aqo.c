@@ -20,6 +20,7 @@ static const struct config_enum_entry format_options[] = {
 int			aqo_stat_size = 10;
 int			auto_tuning_window_size = 5;
 double		auto_tuning_exploration = 0.1;
+int			auto_tuning_max_iterations = 50;
 
 /* Machine learning parameters */
 double		object_selection_prediction_threshold = 0.3;
@@ -97,6 +98,7 @@ _PG_init(void)
 		&aqo_get_parameterized_joinrel_size;
 	prev_copy_generic_path_info_hook = copy_generic_path_info_hook;
 	copy_generic_path_info_hook = &aqo_copy_generic_path_info;
+	init_deactivated_queries_storage();
 }
 
 void
@@ -113,4 +115,15 @@ _PG_fini(void)
 	get_parameterized_joinrel_size_hook =
 		prev_get_parameterized_joinrel_size_hook;
 	copy_generic_path_info_hook = prev_copy_generic_path_info_hook;
+	fini_deactivated_queries_storage();
+}
+
+PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
+
+Datum
+invalidate_deactivated_queries_cache(PG_FUNCTION_ARGS)
+{
+	fini_deactivated_queries_storage();
+	init_deactivated_queries_storage();
+	PG_RETURN_POINTER(NULL);
 }
