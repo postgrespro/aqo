@@ -364,7 +364,7 @@ get_id_in_sorted_int_array(int val, int n, int *arr)
 
 /*
  * Returns class of equivalence for given argument hash or 0 if such hash
- * doen't belong to any equivalence class.
+ * does not belong to any equivalence class.
  */
 int
 get_arg_eclass(int arg_hash, int nargs, int *args_hash, int *eclass_hash)
@@ -499,7 +499,7 @@ perform_eclasses_join(List *clauselist, int nargs, int *args_hash)
 }
 
 /*
- * Constructs arg_hashes and arg_hash->eclass_hash maping for all non-constant
+ * Constructs arg_hashes and arg_hash->eclass_hash mapping for all non-constant
  * arguments of equivalence clauses of given clauselist.
  */
 void
@@ -565,7 +565,7 @@ has_consts(List *lst)
 /*
  * Returns pointer on the args list in clause or NULL.
  */
-List **
+List	  **
 get_clause_args_ptr(Expr *clause)
 {
 	switch (clause->type)

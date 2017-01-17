@@ -84,7 +84,7 @@ inverse_permutation(int *idx, int n)
 }
 
 /*
- * Allocates empty QuertStat object.
+ * Allocates empty QueryStat object.
  */
 QueryStat *
 palloc_query_stat(void)

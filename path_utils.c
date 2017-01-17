@@ -73,8 +73,8 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 	List	   *cur;
 	List	   *cur_sel = NIL;
 
-	if (selectivities)
-		*selectivities = NIL;
+	Assert(selectivities != NULL);
+	*selectivities = NIL;
 
 	if (path == NULL)
 		return NIL;

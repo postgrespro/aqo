@@ -9,11 +9,11 @@
  *
  * The configurable settings are:
  *		'query_hash': hash of the type of the given query
- *		'use_aqo': whether to use aqo estimations in query optimization
- *		'learn_aqo': whether to update aqo data based on query execution
+ *		'use_aqo': whether to use AQO estimations in query optimization
+ *		'learn_aqo': whether to update AQO data based on query execution
  *					 statistics
  *		'fspace_hash': hash of feature space to use with given query
- *		'auto_tuning': whether aqo may change use_aqo and learn_aqo values
+ *		'auto_tuning': whether AQO may change use_aqo and learn_aqo values
  *					   for the next execution of such type of query using
  *					   its self-tuning algorithm
  *
@@ -23,21 +23,21 @@
  *		constants. We use hash function, which returns the same value for all
  *		queries of the same type. This typing strategy is not the only possible
  *		one for adaptive query optimization. One can easily implement another
- *		typing stategy by changing hash function.
+ *		typing strategy by changing hash function.
  * 2. New query type proceeding. The handling policy for new query types is
  *		contained in variable 'aqo.mode'. It accepts three values:
  *		"intelligent", "forced", and "manual".
- *		Intellignet linking strategy means that for each new query type the new
+ *		Intelligent linking strategy means that for each new query type the new
  *		separate feature space is created. The hash of new feature space is
- *		setted the same as the hash of new query type. Auto tuning is on by
- *		default in this mode. Aqo also automatically memorizes query hash to
+ *		set the same as the hash of new query type. Auto tuning is on by
+ *		default in this mode. AQO also automatically memorizes query hash to
  *		query text mapping in aqo_query_texts table.
- *		Forced linking startegy means that every new query type is linked to
+ *		Forced linking strategy means that every new query type is linked to
  *		the common feature space with hash 0, but we don't memorize
  *		the hash and the settings for this query.
  *		Manual linking strategy means that new query types do not induce new
- *		feature spaces neither interact aqo somehow. In this mode the
- *		configuration of settings for different query types lies completelly on
+ *		feature spaces neither interact AQO somehow. In this mode the
+ *		configuration of settings for different query types lies completely on
  *		user.
  * 3. For given query type we determine its query_hash, use_aqo, learn_aqo,
  *		fspace_hash and auto_tuning parameters.
@@ -81,7 +81,7 @@ call_default_planner(Query *parse,
  * This hook computes query_hash, and sets values of learn_aqo,
  * use_aqo and is_common flags for given query.
  * Creates an entry in aqo_queries for new type of query if it is
- * necessary, i. e. aqo mode is not "manual".
+ * necessary, i. e. AQO mode is not "manual".
  */
 PlannedStmt *
 aqo_planner(Query *parse,
@@ -141,7 +141,7 @@ aqo_planner(Query *parse,
 				break;
 			default:
 				elog(WARNING,
-					 "unrecognized mode in aqo: %d",
+					 "unrecognized mode in AQO: %d",
 					 aqo_mode);
 				break;
 		}
@@ -167,7 +167,7 @@ aqo_planner(Query *parse,
 }
 
 /*
- * Turn off all aqo functionality for the current query.
+ * Turn off all AQO functionality for the current query.
  */
 void
 disable_aqo_for_query(void)

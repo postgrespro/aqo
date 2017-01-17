@@ -2,7 +2,7 @@
 
 /*****************************************************************************
  *
- *	QUERY EXECUTION STATISTICS COLLECTING UNTILITIES
+ *	QUERY EXECUTION STATISTICS COLLECTING UTILITIES
  *
  * The module which updates data in the feature space linked with executed query
  * type using obtained query execution statistics.
@@ -10,10 +10,10 @@
  *
  *****************************************************************************/
 
-static double	cardinality_sum_errors;
-static int		cardinality_num_objects;
+static double cardinality_sum_errors;
+static int	cardinality_num_objects;
 
-/* Query execution statictics collecting utilities */
+/* Query execution statistics collecting utilities */
 static void atomic_fss_learn_step(int fss_hash, int matrix_cols,
 					  double **matrix, double *targets,
 					  double *features, double target);
@@ -42,7 +42,7 @@ static void update_query_stat_row(double *et, int *et_size,
 /*
  * This is the critical section: only one runner is allowed to be inside this
  * function for one feature subspace.
- * matrix and targets are just pre-allocated memory for computations.
+ * matrix and targets are just preallocated memory for computations.
  */
 void
 atomic_fss_learn_step(int fss_hash, int matrix_cols,
@@ -131,9 +131,9 @@ restore_selectivities(List *clauselist,
 	ListCell   *l;
 	int			i = 0;
 	bool		parametrized_sel;
-	int         nargs;
-	int        *args_hash;
-	int        *eclass_hash;
+	int			nargs;
+	int		   *args_hash;
+	int		   *eclass_hash;
 	double	   *cur_sel;
 	int			cur_hash;
 	int			cur_relid;
@@ -199,7 +199,7 @@ collect_planstat(PlanState *p, List **other_plans,
 	ListCell   *l;
 
 	foreach(l, p->subPlan)
-		*other_plans = lappend(*other_plans, lfirst(l));
+		* other_plans = lappend(*other_plans, lfirst(l));
 
 	if (p->lefttree == NULL && p->righttree != NULL)
 	{
@@ -255,7 +255,7 @@ collect_planstat(PlanState *p, List **other_plans,
 }
 
 /*
- * Updating given row of query statistics.
+ * Updates given row of query statistics.
  */
 void
 update_query_stat_row(double *et, int *et_size,
@@ -319,7 +319,7 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 }
 
 /*
- * Retranslates path info to plan node for collecting it after query execution.
+ * Converts path info into plan node for collecting it after query execution.
  */
 void
 aqo_copy_generic_path_info(PlannerInfo *root, Plan *dest, Path *src)

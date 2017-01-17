@@ -4,20 +4,20 @@
  *
  *	STORAGE INTERACTION
  *
- * This module is responsible for intercation with the storage of aqo data.
+ * This module is responsible for interaction with the storage of AQO data.
  * It does not provide information protection from concurrent updates.
  *
  *****************************************************************************/
 
-HTAB  *deactivated_queries = NULL;
+HTAB	   *deactivated_queries = NULL;
 
 static void deform_matrix(Datum datum, double **matrix);
 static void deform_vector(Datum datum, double *vector, int *nelems);
 static ArrayType *form_matrix(double **matrix, int nrows, int ncols);
 static ArrayType *form_vector(double *vector, int nrows);
 static bool my_simple_heap_update(Relation relation,
-								  ItemPointer otid,
-								  HeapTuple tup);
+					  ItemPointer otid,
+					  HeapTuple tup);
 
 
 /*
@@ -209,10 +209,10 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 	else
 	{
 		/*
-		 * Ooops, somebody concurrently updated the tuple. We have to merge our
-		 * changes somehow, but now we just discard ours. We don't believe in
-		 * high probability of simultaneously finishing of two long, complex,
-		 * and important queries, so we don't loss important data.
+		 * Ooops, somebody concurrently updated the tuple. We have to merge
+		 * our changes somehow, but now we just discard ours. We don't believe
+		 * in high probability of simultaneously finishing of two long,
+		 * complex, and important queries, so we don't loss important data.
 		 */
 	}
 
@@ -296,7 +296,7 @@ add_query_text(int query_hash, const char *query_text)
  * 'fss_hash' is the hash of feature subspace which is supposed to be loaded
  * 'ncols' is the number of clauses in the feature subspace
  * 'matrix' is an allocated memory for matrix with the size of aqo_K rows
- *			and nhashes colums
+ *			and nhashes columns
  * 'targets' is an allocated memory with size aqo_K for target values
  *			of the objects
  * 'rows' is the pointer in which the function stores actual number of
@@ -495,11 +495,11 @@ update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets,
 		else
 		{
 			/*
-			 * Ooops, somebody concurrently updated the tuple. We have to merge
-			 * our changes somehow, but now we just discard ours. We don't
-			 * believe in high probability of simultaneously finishing of two
-			 * long, complex, and important queries, so we don't loss important
-			 * data.
+			 * Ooops, somebody concurrently updated the tuple. We have to
+			 * merge our changes somehow, but now we just discard ours. We
+			 * don't believe in high probability of simultaneously finishing
+			 * of two long, complex, and important queries, so we don't loss
+			 * important data.
 			 */
 		}
 	}
@@ -516,6 +516,12 @@ update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets,
 	return true;
 }
 
+/*
+ * Returns QueryStat for the given query_hash. Returns empty QueryStat if
+ * no statistics is stored for the given query_hash in table aqo_query_stat.
+ * Returns NULL and executes disable_aqo_for_query if aqo_query_stat
+ * is not found.
+ */
 QueryStat *
 get_aqo_stat(int query_hash)
 {
@@ -586,6 +592,10 @@ get_aqo_stat(int query_hash)
 	return stat;
 }
 
+/*
+ * Saves given QueryStat for the given query_hash.
+ * Executes disable_aqo_for_query if aqo_query_stat is not found.
+ */
 void
 update_aqo_stat(int query_hash, QueryStat * stat)
 {
@@ -603,11 +613,11 @@ update_aqo_stat(int query_hash, QueryStat * stat)
 
 	Datum		values[9];
 	bool		nulls[9] = {false, false, false,
-							false, false, false,
-							false, false, false};
+		false, false, false,
+	false, false, false};
 	bool		do_replace[9] = {false, true, true,
-							true, true, true,
-							true, true, true};
+		true, true, true,
+	true, true, true};
 
 	TupleDesc	tuple_desc;
 
@@ -686,11 +696,11 @@ update_aqo_stat(int query_hash, QueryStat * stat)
 		else
 		{
 			/*
-			 * Ooops, somebody concurrently updated the tuple. We have to merge
-			 * our changes somehow, but now we just discard ours. We don't
-			 * believe in high probability of simultaneously finishing of two
-			 * long, complex, and important queries, so we don't loss important
-			 * data.
+			 * Ooops, somebody concurrently updated the tuple. We have to
+			 * merge our changes somehow, but now we just discard ours. We
+			 * don't believe in high probability of simultaneously finishing
+			 * of two long, complex, and important queries, so we don't loss
+			 * important data.
 			 */
 		}
 	}
@@ -750,7 +760,7 @@ deform_vector(Datum datum, double *vector, int *nelems)
 }
 
 /*
- * Froms ArrayType object for storage from simple C-array matrix.
+ * Forms ArrayType object for storage from simple C-array matrix.
  */
 ArrayType *
 form_matrix(double **matrix, int nrows, int ncols)
@@ -776,7 +786,7 @@ form_matrix(double **matrix, int nrows, int ncols)
 }
 
 /*
- * Froms ArrayType object for storage from simple C-array vector.
+ * Forms ArrayType object for storage from simple C-array vector.
  */
 ArrayType *
 form_vector(double *vector, int nrows)
@@ -799,7 +809,7 @@ form_vector(double *vector, int nrows)
 }
 
 /*
- * Return true if updated successfully, false if updated concurrently by
+ * Returns true if updated successfully, false if updated concurrently by
  * another session, error otherwise.
  */
 static bool
@@ -839,14 +849,14 @@ my_simple_heap_update(Relation relation, ItemPointer otid, HeapTuple tup)
 void
 init_deactivated_queries_storage(void)
 {
-	HASHCTL	hash_ctl;
+	HASHCTL		hash_ctl;
 
 	/* Create the hashtable proper */
 	MemSet(&hash_ctl, 0, sizeof(hash_ctl));
 	hash_ctl.keysize = sizeof(int);
 	hash_ctl.entrysize = sizeof(int);
 	deactivated_queries = hash_create("aqo_deactivated_queries",
-									  128,  /* start small and extend */
+									  128,		/* start small and extend */
 									  &hash_ctl,
 									  HASH_ELEM);
 }
@@ -863,7 +873,7 @@ fini_deactivated_queries_storage(void)
 bool
 query_is_deactivated(int query_hash)
 {
-	bool	found;
+	bool		found;
 
 	hash_search(deactivated_queries, &query_hash, HASH_FIND, &found);
 	return found;
@@ -873,7 +883,7 @@ query_is_deactivated(int query_hash)
 void
 add_deactivated_query(int query_hash)
 {
-	bool	found;
+	bool		found;
 
 	hash_search(deactivated_queries, &query_hash, HASH_ENTER, &found);
 }

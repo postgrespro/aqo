@@ -6,16 +6,16 @@
  *
  * This functions controls cardinality prediction in query optimization.
  * If use_aqo flag is false, then hooks just call default postgresql
- * cardinality estimator. Otherwise, they try to use aqo cardinality
+ * cardinality estimator. Otherwise, they try to use AQO cardinality
  * prediction engine.
  * If use_aqo flag in true, hooks generate set of all clauses and all
- * absolute relids used in the relation beeing builded and pass this
+ * absolute relids used in the relation being built and pass this
  * information to predict_for_relation function. Also these hooks compute
  * and pass to predict_for_relation marginal cardinalities for clauses.
- * If predict_for_relation returns non-negavite value, then hooks assume it
+ * If predict_for_relation returns non-negative value, then hooks assume it
  * to be true cardinality for given relation. Negative returned value means
  * refusal to predict cardinality. In this case hooks also use default
- * postgresql cardinality estimator.
+ * postgreSQL cardinality estimator.
  *
  *****************************************************************************/
 

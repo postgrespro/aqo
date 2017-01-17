@@ -120,6 +120,10 @@ _PG_fini(void)
 
 PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
 
+/*
+ * Clears the cache of deactivated queries if the user changed aqo_queries
+ * manually.
+ */
 Datum
 invalidate_deactivated_queries_cache(PG_FUNCTION_ARGS)
 {

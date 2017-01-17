@@ -2,9 +2,9 @@
 
 /*****************************************************************************
  *
- *	AUTOMATICAL QUERY TUNING
+ *	AUTOMATIC QUERY TUNING
  *
- * This module automatically implements basic strategies of tuning aqo for best
+ * This module automatically implements basic strategies of tuning AQO for best
  * PostgreSQL performance.
  *
  *****************************************************************************/
@@ -44,7 +44,7 @@ converged_cq(double *elems, int nelems)
 
 	est = get_estimation(elems, nelems - 1);
 	return (est * 1.1 > elems[nelems - 1] || est + 0.1 > elems[nelems - 1]) &&
-			(est * 0.9 < elems[nelems - 1] || est - 0.1 < elems[nelems - 1]);
+		(est * 0.9 < elems[nelems - 1] || est - 0.1 < elems[nelems - 1]);
 }
 
 /*
@@ -55,26 +55,26 @@ converged_cq(double *elems, int nelems)
  * Now the workflow is quite simlple:
  *
  * Firstly, we run a new query type auto_tuning_window_size times without our
- * method to have an execution time statistics for such type of quieries.
- * Secondly, we run the query type with both aqo usage and aqo learning enabled
+ * method to have an execution time statistics for such type of queries.
+ * Secondly, we run the query type with both AQO usage and AQO learning enabled
  * until convergence.
  *
- * If aqo provides better execution time for the query type according to
+ * If AQO provides better execution time for the query type according to
  * collected statistics, we prefer to enable it, otherwise we prefer to disable
  * it.
  * In the stable workload case we perform an exploration. That means that with
- * some probability which depends on execution time with and without using aqo
+ * some probability which depends on execution time with and without using AQO
  * we run the slower method to check whether it remains slower.
  * Cardinality statistics collection is enabled by default in this mode.
  * If we find out that cardinality quality diverged during the exploration, we
- * return to step 2 and run the query type with both aqo usage and aqo learning
+ * return to step 2 and run the query type with both AQO usage and AQO learning
  * enabled until convergence.
  * If after auto_tuning_max_iterations steps we consider that for this query
- * it is better not to use aqo, we set auto_tuning, learn_aqo and use_aqo for
+ * it is better not to use AQO, we set auto_tuning, learn_aqo and use_aqo for
  * this query to false.
  */
 void
-automatical_query_tuning(int query_hash, QueryStat *stat)
+automatical_query_tuning(int query_hash, QueryStat * stat)
 {
 	double		unstability = auto_tuning_exploration;
 	double		t_aqo,
@@ -93,12 +93,12 @@ automatical_query_tuning(int query_hash, QueryStat *stat)
 	{
 		t_aqo = get_estimation(stat->execution_time_with_aqo,
 							   stat->execution_time_with_aqo_size) +
-				get_estimation(stat->planning_time_with_aqo,
-							   stat->planning_time_with_aqo_size);
+			get_estimation(stat->planning_time_with_aqo,
+						   stat->planning_time_with_aqo_size);
 		t_not_aqo = get_estimation(stat->execution_time_without_aqo,
 								   stat->execution_time_without_aqo_size) +
-					get_estimation(stat->planning_time_without_aqo,
-								   stat->planning_time_without_aqo_size);
+			get_estimation(stat->planning_time_without_aqo,
+						   stat->planning_time_without_aqo_size);
 		p_use = t_not_aqo / (t_not_aqo + t_aqo);
 		p_use = 1 / (1 + exp((p_use - 0.5) / unstability));
 		p_use -= 1 / (1 + exp(-0.5 / unstability));

@@ -6,7 +6,7 @@
  * the execution statistics from previously executed queries is used.
  * Adaptive query optimization extends standard PostgreSQL cost-based query
  * optimization model.
- * This extension uses machine learning model builded over the collected
+ * This extension uses machine learning model built over the collected
  * statistics to improve cardinality estimations.
  *
  * The extension organized as follows.
@@ -27,29 +27,29 @@
  * Feature spaces are described by their hashes (an integer value).
  *
  * This extension presents three default modes:
- * "intelligent" mode tries to automatically tune aqo settings for the current
+ * "intelligent" mode tries to automatically tune AQO settings for the current
  * workload. It creates separate feature space for each new type of query
  * and then tries to improve the performance of such query type execution.
- * The automatical tuning may be manually deactivated for the given queries.
- * "forced" mode makes no difference between query types and use aqo for them
+ * The automatic tuning may be manually deactivated for the given queries.
+ * "forced" mode makes no difference between query types and use AQO for them
  * all in the similar way. It considers each new query type as linked to special
  * feature space called COMMON with hash 0.
- * "manual" mode ignores unknown query types. In this case aqo is completelly
- * configured manuallt by user.
+ * "manual" mode ignores unknown query types. In this case AQO is completely
+ * configured manually by user.
  * Current mode is stored in aqo.mode variable.
  *
  * User can manually set up his own feature space configuration
  * for query types by changing settings in table aqo_queries.
  *
  * Module preprocessing.c determines how to handle the given query.
- * This includes following questions: whether to use aqo for this query,
+ * This includes following questions: whether to use AQO for this query,
  * whether to use execution statistics of this query to update machine
  * learning models, to what feature space the query belongs to, and whether
  * this query allows using intelligence autotuning for three previous questions.
  * This data is stored in aqo_queries table. Also this module links
  * new query types to their feature spaces according to aqo.mode.
  *
- * If it is supposed to use aqo for given type of query, the extension hooks
+ * If it is supposed to use AQO for given type of query, the extension hooks
  * cardinality estimation functions in PostgreSQL. If the necessary statistics
  * for cardinality predictions using machine learning method is available,
  * the extension performs the prediction and returns its value. Otherwise it
@@ -59,12 +59,12 @@
  * for this part of work.
  *
  * If it is supposed to use execution statistics of given query for learning
- * models in aqo, the extension sets flag before execution to collect rows
+ * models in AQO, the extension sets flag before execution to collect rows
  * statistics. After query execution the collected statistics is proceed in
  * the extension and the update of related feature space models is performed.
  * Module postprocessing.c is responsible for this part of work.
  * Also it saves query execution time and cardinality qualities of queries
- * for further analisys by aqo and DBA.
+ * for further analysis by AQO and DBA.
  *
  * Note that extension is transaction-dependent. That means that user has to
  * commit transaction to make model updates visible for all backends.
@@ -101,7 +101,7 @@
  * Module storage.c is responsible for storage query settings and models
  * (i. e. all information which is used in extension).
  *
- * Copyright (c) 2016-2016, Postgres Professional
+ * Copyright (c) 2016-2017, Postgres Professional
  *
  * IDENTIFICATION
  *	  contrib/aqo/aqo.h
@@ -270,7 +270,7 @@ double aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 								   SpecialJoinInfo *sjinfo,
 								   List *restrict_clauses);
 
-/* Extracting path infromation utilities */
+/* Extracting path information utilities */
 List *get_selectivities(PlannerInfo *root,
 				  List *clauses,
 				  int varRelid,
@@ -284,7 +284,7 @@ double predict_for_relation(List *restrict_clauses,
 					 List *selectivities,
 					 List *relids);
 
-/* Query execution statictics collecting hooks */
+/* Query execution statistics collecting hooks */
 void		aqo_ExecutorStart(QueryDesc *queryDesc, int eflags);
 void		aqo_copy_generic_path_info(PlannerInfo *root, Plan *dest, Path *src);
 void		learn_query_stat(QueryDesc *queryDesc);
@@ -297,7 +297,7 @@ List *OkNNr_learn(int matrix_rows, int matrix_cols,
 			double **matrix, double *targets,
 			double *nw_features, double nw_target);
 
-/* Automatical query tuning */
+/* Automatic query tuning */
 void		automatical_query_tuning(int query_hash, QueryStat * stat);
 
 /* Utilities */
