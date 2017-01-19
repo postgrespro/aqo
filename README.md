@@ -28,10 +28,6 @@ and modify your postgresql.conf:
 
 shared_preload_libraries = 'aqo.so'
 
-It is essential that library is preloaded during server startup, because
-adaptive query optimization has to be enabled on per-database basis instead
-of per-connection.
-
 ## Usage
 
 Note that the extension works bad with dynamically generated views. If they
