@@ -82,7 +82,8 @@ We consider that queries belong to the same type if and only if they differ only
 in their constants.
 
 One can see an example of query corresponding to the specified query type
-in table `aqo_query_texts`.
+in table aqo_query_texts.
+
 `select * from aqo_query_texts`;
 
 That is why intelligent mode does not work for dynamically generated query
