@@ -97,7 +97,7 @@ even decrease, on the other hand it may work for dynamic workload and consumes
 less memory than the intelligent mode. That is why you may want to use it.
 
 Each query type has its own optimization settings. You can find them in table
-`aqo_queries`.
+aqo_queries.
 
 Auto_tuning setting identifies whether AQO module tries to tune other settings
 from aqo_queries for the query type on its own. If the mode is intelligent,
