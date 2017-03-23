@@ -26,16 +26,17 @@
  * degradation respectively.
  * Feature spaces are described by their hashes (an integer value).
  *
- * This extension presents three default modes:
+ * This extension presents four default modes:
  * "intelligent" mode tries to automatically tune AQO settings for the current
  * workload. It creates separate feature space for each new type of query
  * and then tries to improve the performance of such query type execution.
- * The automatic tuning may be manually deactivated for the given queries.
+ * The automatic tuning may be manually deactivated for some queries.
  * "forced" mode makes no difference between query types and use AQO for them
  * all in the similar way. It considers each new query type as linked to special
  * feature space called COMMON with hash 0.
- * "manual" mode ignores unknown query types. In this case AQO is completely
+ * "Controlled" mode ignores unknown query types. In this case AQO is completely
  * configured manually by user.
+ * "Disabled" mode ignores all queries.
  * Current mode is stored in aqo.mode variable.
  *
  * User can manually set up his own feature space configuration
@@ -116,14 +117,17 @@
 #include "access/hash.h"
 #include "access/htup_details.h"
 #include "access/xact.h"
+#include "catalog/catalog.h"
 #include "catalog/namespace.h"
 #include "catalog/index.h"
 #include "catalog/indexing.h"
 #include "catalog/pg_type.h"
 #include "catalog/pg_operator.h"
+#include "commands/explain.h"
 #include "executor/executor.h"
 #include "executor/execdesc.h"
 #include "nodes/makefuncs.h"
+#include "nodes/nodeFuncs.h"
 #include "optimizer/planmain.h"
 #include "optimizer/planner.h"
 #include "optimizer/cost.h"
@@ -147,7 +151,9 @@ typedef enum
 	/* Treats new query types as linked to the common feature space */
 	AQO_MODE_FORCED,
 	/* New query types are not linked with any feature space */
-	AQO_MODE_MANUAL,
+	AQO_MODE_CONTROLLED,
+	/* Aqo is disabled for all queries */
+	AQO_MODE_DISABLED,
 }	AQO_MODE;
 extern int	aqo_mode;
 
@@ -174,6 +180,7 @@ extern int	aqo_stat_size;
 extern int	auto_tuning_window_size;
 extern double auto_tuning_exploration;
 extern int	auto_tuning_max_iterations;
+extern int	auto_tuning_infinite_loop;
 
 /* Machine learning parameters */
 extern double object_selection_prediction_threshold;
@@ -192,6 +199,7 @@ extern bool auto_tuning;
 extern bool collect_stat;
 extern bool adding_query;
 extern bool explain_only;
+extern bool explain_aqo;
 
 /* Query execution time */
 extern instr_time query_starttime;
@@ -212,6 +220,7 @@ extern		get_parameterized_joinrel_size_hook_type
 			prev_get_parameterized_joinrel_size_hook;
 extern		copy_generic_path_info_hook_type
 			prev_copy_generic_path_info_hook;
+extern ExplainOnePlan_hook_type prev_ExplainOnePlan_hook;
 
 
 /* Hash functions */
@@ -251,6 +260,9 @@ PlannedStmt *call_default_planner(Query *parse,
 PlannedStmt *aqo_planner(Query *parse,
 			int cursorOptions,
 			ParamListInfo boundParams);
+void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
+			   ExplainState *es, const char *queryString,
+			   ParamListInfo params, const instr_time *planduration);
 void		disable_aqo_for_query(void);
 
 /* Cardinality estimation hooks */

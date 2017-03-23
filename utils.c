@@ -41,12 +41,15 @@ double_cmp(const void *a, const void *b)
 		return 0;
 }
 
+/*
+ * Compares elements for two given indexes
+ */
 int
 argsort_cmp(const void *a, const void *b)
 {
-	return (*argsort_value_cmp) ((uint8_t *) argsort_a +
+	return (*argsort_value_cmp) ((char *) argsort_a +
 								 *((int *) a) * argsort_es,
-								 (uint8_t *) argsort_a +
+								 (char *) argsort_a +
 								 *((int *) b) * argsort_es);
 }
 

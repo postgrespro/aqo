@@ -38,6 +38,7 @@ find_query(int query_hash,
 	Oid			query_index_rel_oid;
 	IndexScanDesc query_index_scan;
 	ScanKeyData key;
+	LOCKMODE	index_lock = AccessShareLock;
 
 	bool		find_ok = false;
 
@@ -51,7 +52,7 @@ find_query(int query_hash,
 	aqo_queries_table_rv = makeRangeVar("public", "aqo_queries", -1);
 	aqo_queries_heap = heap_openrv(aqo_queries_table_rv, heap_lock);
 
-	query_index_rel = index_open(query_index_rel_oid, heap_lock);
+	query_index_rel = index_open(query_index_rel_oid, index_lock);
 	query_index_scan = index_beginscan(
 									   aqo_queries_heap,
 									   query_index_rel,
@@ -76,7 +77,7 @@ find_query(int query_hash,
 						  search_values, search_nulls);
 
 	index_endscan(query_index_scan);
-	index_close(query_index_rel, heap_lock);
+	index_close(query_index_rel, index_lock);
 	heap_close(aqo_queries_heap, heap_lock);
 
 	return find_ok;
@@ -94,6 +95,7 @@ add_query(int query_hash, bool learn_aqo, bool use_aqo,
 	Relation	aqo_queries_heap;
 	HeapTuple	tuple;
 	LOCKMODE	heap_lock = RowExclusiveLock;
+	LOCKMODE	index_lock = RowExclusiveLock;
 
 	Datum		values[5];
 	bool		nulls[5] = {false, false, false, false, false};
@@ -113,7 +115,7 @@ add_query(int query_hash, bool learn_aqo, bool use_aqo,
 		disable_aqo_for_query();
 		return false;
 	}
-	query_index_rel = index_open(query_index_rel_oid, heap_lock);
+	query_index_rel = index_open(query_index_rel_oid, index_lock);
 
 	aqo_queries_table_rv = makeRangeVar("public", "aqo_queries", -1);
 	aqo_queries_heap = heap_openrv(aqo_queries_table_rv, heap_lock);
@@ -136,7 +138,7 @@ add_query(int query_hash, bool learn_aqo, bool use_aqo,
 	}
 	PG_END_TRY();
 
-	index_close(query_index_rel, heap_lock);
+	index_close(query_index_rel, index_lock);
 	heap_close(aqo_queries_heap, heap_lock);
 
 	CommandCounterIncrement();
@@ -158,6 +160,7 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 	Oid			query_index_rel_oid;
 	IndexScanDesc query_index_scan;
 	ScanKeyData key;
+	LOCKMODE	index_lock = RowExclusiveLock;
 
 	Datum		values[5];
 	bool		nulls[5] = {false, false, false, false, false};
@@ -173,7 +176,7 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 	aqo_queries_table_rv = makeRangeVar("public", "aqo_queries", -1);
 	aqo_queries_heap = heap_openrv(aqo_queries_table_rv, heap_lock);
 
-	query_index_rel = index_open(query_index_rel_oid, heap_lock);
+	query_index_rel = index_open(query_index_rel_oid, index_lock);
 	query_index_scan = index_beginscan(
 									   aqo_queries_heap,
 									   query_index_rel,
@@ -217,7 +220,7 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 	}
 
 	index_endscan(query_index_scan);
-	index_close(query_index_rel, heap_lock);
+	index_close(query_index_rel, index_lock);
 	heap_close(aqo_queries_heap, heap_lock);
 
 	CommandCounterIncrement();
@@ -236,6 +239,7 @@ add_query_text(int query_hash, const char *query_text)
 	Relation	aqo_query_texts_heap;
 	HeapTuple	tuple;
 	LOCKMODE	heap_lock = RowExclusiveLock;
+	LOCKMODE	index_lock = RowExclusiveLock;
 
 	Datum		values[2];
 	bool		nulls[2] = {false, false};
@@ -252,7 +256,7 @@ add_query_text(int query_hash, const char *query_text)
 		disable_aqo_for_query();
 		return false;
 	}
-	query_index_rel = index_open(query_index_rel_oid, heap_lock);
+	query_index_rel = index_open(query_index_rel_oid, index_lock);
 
 	aqo_query_texts_table_rv = makeRangeVar("public",
 											"aqo_query_texts",
@@ -280,7 +284,7 @@ add_query_text(int query_hash, const char *query_text)
 	PG_END_TRY();
 
 
-	index_close(query_index_rel, heap_lock);
+	index_close(query_index_rel, index_lock);
 	heap_close(aqo_query_texts_heap, heap_lock);
 
 	CommandCounterIncrement();
@@ -315,6 +319,7 @@ load_fss(int fss_hash, int ncols,
 	Oid			data_index_rel_oid;
 	IndexScanDesc data_index_scan;
 	ScanKeyData *key;
+	LOCKMODE	index_lock = AccessShareLock;
 
 	Datum		values[5];
 	bool		nulls[5];
@@ -331,7 +336,7 @@ load_fss(int fss_hash, int ncols,
 	aqo_data_table_rv = makeRangeVar("public", "aqo_data", -1);
 	aqo_data_heap = heap_openrv(aqo_data_table_rv, heap_lock);
 
-	data_index_rel = index_open(data_index_rel_oid, heap_lock);
+	data_index_rel = index_open(data_index_rel_oid, index_lock);
 	data_index_scan = index_beginscan(
 									  aqo_data_heap,
 									  data_index_rel,
@@ -380,7 +385,7 @@ load_fss(int fss_hash, int ncols,
 
 	index_endscan(data_index_scan);
 
-	index_close(data_index_rel, heap_lock);
+	index_close(data_index_rel, index_lock);
 	heap_close(aqo_data_heap, heap_lock);
 
 	pfree(key);
@@ -534,6 +539,7 @@ get_aqo_stat(int query_hash)
 	Oid			stat_index_rel_oid;
 	IndexScanDesc stat_index_scan;
 	ScanKeyData key;
+	LOCKMODE	index_lock = AccessShareLock;
 
 	Datum		values[9];
 	bool		nulls[9];
@@ -550,7 +556,7 @@ get_aqo_stat(int query_hash)
 	aqo_stat_table_rv = makeRangeVar("public", "aqo_query_stat", -1);
 	aqo_stat_heap = heap_openrv(aqo_stat_table_rv, heap_lock);
 
-	stat_index_rel = index_open(stat_index_rel_oid, heap_lock);
+	stat_index_rel = index_open(stat_index_rel_oid, index_lock);
 	stat_index_scan = index_beginscan(
 									  aqo_stat_heap,
 									  stat_index_rel,
@@ -586,7 +592,7 @@ get_aqo_stat(int query_hash)
 
 	index_endscan(stat_index_scan);
 
-	index_close(stat_index_rel, heap_lock);
+	index_close(stat_index_rel, index_lock);
 	heap_close(aqo_stat_heap, heap_lock);
 
 	return stat;
@@ -707,7 +713,7 @@ update_aqo_stat(int query_hash, QueryStat * stat)
 
 	index_endscan(stat_index_scan);
 
-	index_close(stat_index_rel, heap_lock);
+	index_close(stat_index_rel, index_lock);
 	heap_close(aqo_stat_heap, heap_lock);
 
 	CommandCounterIncrement();
@@ -728,7 +734,7 @@ deform_matrix(Datum datum, double **matrix)
 				j;
 
 	deconstruct_array(array,
-					  FLOAT8OID, 8, true, 'd',
+					  FLOAT8OID, 8, FLOAT8PASSBYVAL, 'd',
 					  &values, NULL, &nelems);
 	rows = ARR_DIMS(array)[0];
 	cols = ARR_DIMS(array)[1];
@@ -751,7 +757,7 @@ deform_vector(Datum datum, double *vector, int *nelems)
 	int			i;
 
 	deconstruct_array(array,
-					  FLOAT8OID, 8, true, 'd',
+					  FLOAT8OID, 8, FLOAT8PASSBYVAL, 'd',
 					  &values, NULL, nelems);
 	for (i = 0; i < *nelems; ++i)
 		vector[i] = DatumGetFloat8(values[i]);
@@ -780,7 +786,7 @@ form_matrix(double **matrix, int nrows, int ncols)
 		for (j = 0; j < ncols; ++j)
 			elems[i * ncols + j] = Float8GetDatum(matrix[i][j]);
 	array = construct_md_array(elems, NULL, 2, dims, lbs,
-							   FLOAT8OID, 8, true, 'd');
+							   FLOAT8OID, 8, FLOAT8PASSBYVAL, 'd');
 	pfree(elems);
 	return array;
 }
@@ -803,7 +809,7 @@ form_vector(double *vector, int nrows)
 	for (i = 0; i < nrows; ++i)
 		elems[i] = Float8GetDatum(vector[i]);
 	array = construct_md_array(elems, NULL, 1, dims, lbs,
-							   FLOAT8OID, 8, true, 'd');
+							   FLOAT8OID, 8, FLOAT8PASSBYVAL, 'd');
 	pfree(elems);
 	return array;
 }
@@ -836,6 +842,10 @@ my_simple_heap_update(Relation relation, ItemPointer otid, HeapTuple tup)
 			break;
 
 		case HeapTupleUpdated:
+			return false;
+			break;
+
+		case HeapTupleBeingUpdated:
 			return false;
 			break;
 

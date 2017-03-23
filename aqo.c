@@ -12,15 +12,19 @@ int			aqo_mode;
 static const struct config_enum_entry format_options[] = {
 	{"intelligent", AQO_MODE_INTELLIGENT, false},
 	{"forced", AQO_MODE_FORCED, false},
-	{"manual", AQO_MODE_MANUAL, false},
+	{"controlled", AQO_MODE_CONTROLLED, false},
+	{"disabled", AQO_MODE_DISABLED, false},
 	{NULL, 0, false}
 };
 
 /* Parameters of autotuning */
-int			aqo_stat_size = 10;
+int			aqo_stat_size = 20;
 int			auto_tuning_window_size = 5;
 double		auto_tuning_exploration = 0.1;
 int			auto_tuning_max_iterations = 50;
+int			auto_tuning_infinite_loop = 8;
+
+/* stat_size > infinite_loop + window_size + 3 is required for auto_tuning*/
 
 /* Machine learning parameters */
 double		object_selection_prediction_threshold = 0.3;
@@ -39,6 +43,7 @@ bool		auto_tuning;
 bool		collect_stat;
 bool		adding_query;
 bool		explain_only;
+bool		explain_aqo;
 
 /* Query execution time */
 instr_time	query_starttime;
@@ -54,6 +59,7 @@ get_parameterized_baserel_size_hook_type prev_get_parameterized_baserel_size_hoo
 set_joinrel_size_estimates_hook_type prev_set_joinrel_size_estimates_hook;
 get_parameterized_joinrel_size_hook_type prev_get_parameterized_joinrel_size_hook;
 copy_generic_path_info_hook_type prev_copy_generic_path_info_hook;
+ExplainOnePlan_hook_type prev_ExplainOnePlan_hook;
 
 /*****************************************************************************
  *
@@ -68,7 +74,7 @@ _PG_init(void)
 							 "Mode of aqo usage.",
 							 NULL,
 							 &aqo_mode,
-							 AQO_MODE_MANUAL,
+							 AQO_MODE_CONTROLLED,
 							 format_options,
 							 PGC_SUSET,
 							 0,
@@ -98,6 +104,8 @@ _PG_init(void)
 		&aqo_get_parameterized_joinrel_size;
 	prev_copy_generic_path_info_hook = copy_generic_path_info_hook;
 	copy_generic_path_info_hook = &aqo_copy_generic_path_info;
+	prev_ExplainOnePlan_hook = ExplainOnePlan_hook;
+	ExplainOnePlan_hook = print_into_explain;
 	init_deactivated_queries_storage();
 }
 
@@ -115,6 +123,7 @@ _PG_fini(void)
 	get_parameterized_joinrel_size_hook =
 		prev_get_parameterized_joinrel_size_hook;
 	copy_generic_path_info_hook = prev_copy_generic_path_info_hook;
+	ExplainOnePlan_hook = prev_ExplainOnePlan_hook;
 	fini_deactivated_queries_storage();
 }
 

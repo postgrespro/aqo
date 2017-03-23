@@ -9,9 +9,26 @@
  *
  *****************************************************************************/
 
+static double get_mean(double *elems, int nelems);
 static double get_estimation(double *elems, int nelems);
+static bool is_stable(double *elems, int nelems);
 static bool converged_cq(double *elems, int nelems);
+static bool is_in_infinite_loop_cq(double *elems, int nelems);
 
+
+/*
+ * Returns mean value of the array of doubles.
+ */
+double
+get_mean(double *elems, int nelems)
+{
+	double		sum = 0;
+	int			i;
+
+	for (i = 0; i < nelems; ++i)
+		sum += elems[i];
+	return sum / nelems;
+}
 
 /*
  * Having a time series it tries to predict its next value.
@@ -20,12 +37,27 @@ static bool converged_cq(double *elems, int nelems);
 double
 get_estimation(double *elems, int nelems)
 {
-	double		sum = 0;
-	int			i;
+	int			start;
 
-	for (i = 0; i < auto_tuning_window_size; ++i)
-		sum += elems[nelems - 1 - i];
-	return sum / auto_tuning_window_size;
+	if (nelems > auto_tuning_window_size)
+		start = nelems - auto_tuning_window_size;
+	else
+		start = 0;
+
+	return get_mean(&elems[start], nelems - start);
+}
+
+/*
+ * Checks whether the series is stable with absolute or relative error 0.1.
+ */
+bool
+is_stable(double *elems, int nelems)
+{
+	double		est;
+
+	est = get_mean(elems, nelems - 1);
+	return (est * 1.1 > elems[nelems - 1] || est + 0.1 > elems[nelems - 1]) &&
+		(est * 0.9 < elems[nelems - 1] || est - 0.1 < elems[nelems - 1]);
 }
 
 /*
@@ -37,14 +69,27 @@ get_estimation(double *elems, int nelems)
 bool
 converged_cq(double *elems, int nelems)
 {
-	double		est;
-
 	if (nelems < auto_tuning_window_size + 2)
 		return false;
 
-	est = get_estimation(elems, nelems - 1);
-	return (est * 1.1 > elems[nelems - 1] || est + 0.1 > elems[nelems - 1]) &&
-		(est * 0.9 < elems[nelems - 1] || est - 0.1 < elems[nelems - 1]);
+	return is_stable(&elems[nelems - auto_tuning_window_size - 1],
+					 auto_tuning_window_size + 1);
+}
+
+/*
+ * Tests whether cardinality qualities series is converged, i. e. learning
+ * process may be considered as finished.
+ * Now it checks whether the cardinality quality stopped decreasing with
+ * absolute or relative error 0.1.
+ */
+bool
+is_in_infinite_loop_cq(double *elems, int nelems)
+{
+	if (nelems - auto_tuning_infinite_loop < auto_tuning_window_size + 2)
+		return false;
+
+	return !converged_cq(elems, nelems) &&
+		!converged_cq(elems, nelems - auto_tuning_window_size);
 }
 
 /*
@@ -69,7 +114,7 @@ converged_cq(double *elems, int nelems)
  * If we find out that cardinality quality diverged during the exploration, we
  * return to step 2 and run the query type with both AQO usage and AQO learning
  * enabled until convergence.
- * If after auto_tuning_max_iterations steps we consider that for this query
+ * If after auto_tuning_max_iterations steps we see that for this query
  * it is better not to use AQO, we set auto_tuning, learn_aqo and use_aqo for
  * this query to false.
  */
@@ -87,7 +132,9 @@ automatical_query_tuning(int query_hash, QueryStat * stat)
 	if (stat->executions_without_aqo < auto_tuning_window_size + 1)
 		use_aqo = false;
 	else if (!converged_cq(stat->cardinality_error_with_aqo,
-						   stat->cardinality_error_with_aqo_size))
+						   stat->cardinality_error_with_aqo_size) &&
+			 !is_in_infinite_loop_cq(stat->cardinality_error_with_aqo,
+									 stat->cardinality_error_with_aqo_size))
 		use_aqo = true;
 	else
 	{
