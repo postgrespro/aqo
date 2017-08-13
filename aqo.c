@@ -13,6 +13,7 @@ static const struct config_enum_entry format_options[] = {
 	{"intelligent", AQO_MODE_INTELLIGENT, false},
 	{"forced", AQO_MODE_FORCED, false},
 	{"controlled", AQO_MODE_CONTROLLED, false},
+	{"learn", AQO_MODE_LEARN, false},
 	{"disabled", AQO_MODE_DISABLED, false},
 	{NULL, 0, false}
 };

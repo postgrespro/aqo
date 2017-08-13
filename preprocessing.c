@@ -25,8 +25,8 @@
  *		one for adaptive query optimization. One can easily implement another
  *		typing strategy by changing hash function.
  * 2. New query type proceeding. The handling policy for new query types is
- *		contained in variable 'aqo.mode'. It accepts three values:
- *		"intelligent", "forced", "controlled" and "disabled".
+ *		contained in variable 'aqo.mode'. It accepts five values:
+ *		"intelligent", "forced", "controlled", "learn" and "disabled".
  *		Intelligent linking strategy means that for each new query type the new
  *		separate feature space is created. The hash of new feature space is
  *		set the same as the hash of new query type. Auto tuning is on by
@@ -39,6 +39,9 @@
  *		new feature spaces neither interact AQO somehow. In this mode the
  *		configuration of settings for different query types lies completely on
  *		user.
+ *		Learn linking strategy is the same as intelligent one. The only
+ *		difference is the default settings for the new query type:
+ *		auto tuning is disabled.
  *		Disabled strategy means that AQO is disabled for all queries.
  * 3. For given query type we determine its query_hash, use_aqo, learn_aqo,
  *		fspace_hash and auto_tuning parameters.
@@ -153,6 +156,14 @@ aqo_planner(Query *parse,
 				learn_aqo = false;
 				use_aqo = false;
 				collect_stat = false;
+				break;
+			case AQO_MODE_LEARN:
+				adding_query = true;
+				learn_aqo = true;
+				use_aqo = true;
+				fspace_hash = query_hash;
+				auto_tuning = false;
+				collect_stat = true;
 				break;
 			case AQO_MODE_DISABLED:
 				/* Should never happen */
