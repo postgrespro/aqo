@@ -176,8 +176,8 @@ aqo_planner(Query *parse,
 		use_aqo = DatumGetBool(query_params[2]);
 		fspace_hash = DatumGetInt32(query_params[3]);
 		auto_tuning = DatumGetBool(query_params[4]);
-		collect_stat = learn_aqo || use_aqo || auto_tuning;
-		if (!collect_stat)
+		collect_stat = auto_tuning;
+		if (!learn_aqo && !use_aqo && !auto_tuning)
 			add_deactivated_query(query_hash);
 	}
 	explain_aqo = use_aqo;

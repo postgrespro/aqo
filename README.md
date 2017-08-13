@@ -123,10 +123,10 @@ what you do.
 
 ## Statistics
 
-For forced and intelligent query modes, and for all tracked queries the
-statistics is collected. The statistics is cardinality quality, planning and
-execution time. For forced mode the statistics for all untracked query types
-is not stored.
+The statistics is collected for a tracked query if auto tuning is enabled
+this query. The statistics is not collected for unknown queries.
+
+The statistics is cardinality quality, planning and execution time.
 
 One can see the collected statistics in table aqo_query_stat.
 
