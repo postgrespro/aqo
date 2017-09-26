@@ -43,6 +43,9 @@ of per-database.
 Note that the extension doesn't work with dynamically generated views. If they
 appear in workload, please use `aqo.mode='controlled'`.
 
+The extension doesn't collect statistics on replicas, because replicas are
+read-only. It may use query execution statistics from master, nevertheless.
+
 This extension has intelligent self-tuning mode. If you want to rely completely
 on it, just add line `aqo.mode = 'intelligent'` into your postgresql.conf.
 
