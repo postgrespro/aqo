@@ -146,6 +146,11 @@
 #include "utils/snapmgr.h"
 
 
+/* Check PostgreSQL version (9.6.0 contains important changes in planner) */
+#if PG_VERSION_NUM < 90600
+	#error "Cannot build aqo with PostgreSQL version lower than 9.6.0"
+#endif
+
 /* Strategy of determining feature space for new queries. */
 typedef enum
 {
