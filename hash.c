@@ -118,8 +118,9 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 	i = 0;
 	foreach(l, selectivities)
 	{
-		(*features)[inverse_idx[i]] = fmax(log_selectivity_lower_bound,
-										   log(*((double *) (lfirst(l)))));
+		(*features)[inverse_idx[i]] = log(*((double *) (lfirst(l))));
+		if ((*features)[inverse_idx[i]] < log_selectivity_lower_bound)
+			(*features)[inverse_idx[i]] = log_selectivity_lower_bound;
 		sorted_clauses[inverse_idx[i]] = clause_hashes[i];
 		i++;
 	}
