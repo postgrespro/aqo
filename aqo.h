@@ -31,12 +31,15 @@
  * workload. It creates separate feature space for each new type of query
  * and then tries to improve the performance of such query type execution.
  * The automatic tuning may be manually deactivated for some queries.
+ * "learn" mode creates separate feature space and enabled aqo learning and
+ * usage for each new type of query. In general it is similar to "intelligent"
+ * mode, but without auto_tuning setting enabled by default.
  * "forced" mode makes no difference between query types and use AQO for them
  * all in the similar way. It considers each new query type as linked to special
  * feature space called COMMON with hash 0.
- * "Controlled" mode ignores unknown query types. In this case AQO is completely
+ * "controlled" mode ignores unknown query types. In this case AQO is completely
  * configured manually by user.
- * "Disabled" mode ignores all queries.
+ * "disabled" mode ignores all queries.
  * Current mode is stored in aqo.mode variable.
  *
  * User can manually set up his own feature space configuration
@@ -143,15 +146,22 @@
 #include "utils/snapmgr.h"
 
 
+/* Check PostgreSQL version (9.6.0 contains important changes in planner) */
+#if PG_VERSION_NUM < 90600
+	#error "Cannot build aqo with PostgreSQL version lower than 9.6.0"
+#endif
+
 /* Strategy of determining feature space for new queries. */
 typedef enum
 {
-	/* Creates new feature space for each query type */
+	/* Creates new feature space for each query type with auto-tuning enabled */
 	AQO_MODE_INTELLIGENT,
 	/* Treats new query types as linked to the common feature space */
 	AQO_MODE_FORCED,
 	/* New query types are not linked with any feature space */
 	AQO_MODE_CONTROLLED,
+	/* Creates new feature space for each query type without auto-tuning */
+	AQO_MODE_LEARN,
 	/* Aqo is disabled for all queries */
 	AQO_MODE_DISABLED,
 }	AQO_MODE;

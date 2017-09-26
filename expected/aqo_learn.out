@@ -1,0 +1,441 @@
+CREATE TABLE aqo_test0(a int, b int, c int, d int);
+WITH RECURSIVE t(a, b, c, d)
+AS (
+   VALUES (0, 0, 0, 0)
+   UNION ALL
+   SELECT t.a + 1, t.b + 1, t.c + 1, t.d + 1 FROM t WHERE t.a < 2000
+) INSERT INTO aqo_test0 (SELECT * FROM t);
+CREATE INDEX aqo_test0_idx_a ON aqo_test0 (a);
+ANALYZE aqo_test0;
+CREATE TABLE aqo_test1(a int, b int);
+WITH RECURSIVE t(a, b)
+AS (
+   VALUES (1, 2)
+   UNION ALL
+   SELECT t.a + 1, t.b + 1 FROM t WHERE t.a < 20
+) INSERT INTO aqo_test1 (SELECT * FROM t);
+CREATE INDEX aqo_test1_idx_a ON aqo_test1 (a);
+ANALYZE aqo_test1;
+CREATE EXTENSION aqo;
+SET aqo.mode = 'intelligent';
+EXPLAIN SELECT * FROM aqo_test0
+WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Index Scan using aqo_test0_idx_a on aqo_test0  (cost=0.28..8.35 rows=1 width=16)
+   Index Cond: (a < 3)
+   Filter: ((b < 3) AND (c < 3) AND (d < 3))
+(3 rows)
+
+EXPLAIN SELECT * FROM aqo_test0
+WHERE a < 4 AND b < 4 AND c < 4 AND d < 4;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Index Scan using aqo_test0_idx_a on aqo_test0  (cost=0.28..8.38 rows=1 width=16)
+   Index Cond: (a < 4)
+   Filter: ((b < 4) AND (c < 4) AND (d < 4))
+(3 rows)
+
+EXPLAIN SELECT * FROM aqo_test0
+WHERE a < 5 AND b < 5 AND c < 5 AND d < 5;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Index Scan using aqo_test0_idx_a on aqo_test0  (cost=0.28..8.40 rows=1 width=16)
+   Index Cond: (a < 5)
+   Filter: ((b < 5) AND (c < 5) AND (d < 5))
+(3 rows)
+
+EXPLAIN SELECT t1.a, t2.b FROM aqo_test0 AS t1, aqo_test0 AS t2
+WHERE t1.a < 1 AND t1.b < 1 AND t2.c < 1 AND t2.d < 1;
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Nested Loop  (cost=0.28..49.32 rows=1 width=8)
+   ->  Index Scan using aqo_test0_idx_a on aqo_test0 t1  (cost=0.28..8.30 rows=1 width=4)
+         Index Cond: (a < 1)
+         Filter: (b < 1)
+   ->  Seq Scan on aqo_test0 t2  (cost=0.00..41.02 rows=1 width=4)
+         Filter: ((c < 1) AND (d < 1))
+(6 rows)
+
+EXPLAIN SELECT t1.a, t2.b FROM aqo_test1 AS t1, aqo_test0 AS t2
+WHERE t1.a < 1 AND t2.b < 1 AND t2.c < 1 AND t2.d < 1 AND t1.a = t2.a;
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Nested Loop  (cost=0.28..9.56 rows=1 width=8)
+   ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.25 rows=1 width=4)
+         Filter: (a < 1)
+   ->  Index Scan using aqo_test0_idx_a on aqo_test0 t2  (cost=0.28..8.30 rows=1 width=8)
+         Index Cond: (a = t1.a)
+         Filter: ((b < 1) AND (c < 1) AND (d < 1))
+(6 rows)
+
+EXPlAIN SELECT t1.a, t2.b, t3.c
+FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
+WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Nested Loop  (cost=0.28..50.59 rows=1 width=12)
+   Join Filter: (t1.b = t3.b)
+   ->  Nested Loop  (cost=0.28..9.56 rows=1 width=12)
+         ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.25 rows=1 width=8)
+               Filter: (a < 1)
+         ->  Index Scan using aqo_test0_idx_a on aqo_test0 t2  (cost=0.28..8.30 rows=1 width=8)
+               Index Cond: (a = t1.a)
+               Filter: (c < 1)
+   ->  Seq Scan on aqo_test0 t3  (cost=0.00..41.02 rows=1 width=8)
+         Filter: ((b < 1) AND (d < 0))
+(10 rows)
+
+EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c
+FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3
+WHERE t1.a = t2.b AND t2.a = t3.b;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Hash Join  (cost=2.90..4.65 rows=20 width=12)
+   Hash Cond: (t2.a = t3.b)
+   ->  Hash Join  (cost=1.45..2.92 rows=20 width=8)
+         Hash Cond: (t1.a = t2.b)
+         ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.20 rows=20 width=4)
+         ->  Hash  (cost=1.20..1.20 rows=20 width=8)
+               ->  Seq Scan on aqo_test1 t2  (cost=0.00..1.20 rows=20 width=8)
+   ->  Hash  (cost=1.20..1.20 rows=20 width=8)
+         ->  Seq Scan on aqo_test1 t3  (cost=0.00..1.20 rows=20 width=8)
+(9 rows)
+
+EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c, t4.a AS d
+FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
+WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Hash Join  (cost=4.35..6.37 rows=20 width=16)
+   Hash Cond: (t3.a = t4.b)
+   ->  Hash Join  (cost=2.90..4.65 rows=20 width=12)
+         Hash Cond: (t2.a = t3.b)
+         ->  Hash Join  (cost=1.45..2.92 rows=20 width=8)
+               Hash Cond: (t1.a = t2.b)
+               ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.20 rows=20 width=4)
+               ->  Hash  (cost=1.20..1.20 rows=20 width=8)
+                     ->  Seq Scan on aqo_test1 t2  (cost=0.00..1.20 rows=20 width=8)
+         ->  Hash  (cost=1.20..1.20 rows=20 width=8)
+               ->  Seq Scan on aqo_test1 t3  (cost=0.00..1.20 rows=20 width=8)
+   ->  Hash  (cost=1.20..1.20 rows=20 width=8)
+         ->  Seq Scan on aqo_test1 t4  (cost=0.00..1.20 rows=20 width=8)
+(13 rows)
+
+CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
+WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+     3
+(1 row)
+
+DROP TABLE tmp1;
+CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
+WHERE a < 4 AND b < 4 AND c < 4 AND d < 4;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+     4
+(1 row)
+
+DROP TABLE tmp1;
+CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
+WHERE a < 4 AND b < 4 AND c < 4 AND d < 4;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+     4
+(1 row)
+
+DROP TABLE tmp1;
+CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
+WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+     3
+(1 row)
+
+DROP TABLE tmp1;
+CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
+WHERE a < 5 AND b < 5 AND c < 5 AND d < 5;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+     5
+(1 row)
+
+DROP TABLE tmp1;
+CREATE TABLE tmp1 AS SELECT t1.a, t2.b FROM aqo_test0 AS t1, aqo_test0 AS t2
+WHERE t1.a < 1 AND t1.b < 1 AND t2.c < 1 AND t2.d < 1;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+     1
+(1 row)
+
+DROP TABLE tmp1;
+CREATE TABLE tmp1 AS SELECT t1.a, t2.b FROM aqo_test1 AS t1, aqo_test0 AS t2
+WHERE t1.a < 1 AND t2.b < 1 AND t2.c < 1 AND t2.d < 1 AND t1.a = t2.a;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+     0
+(1 row)
+
+DROP TABLE tmp1;
+CREATE TABLE tmp1 AS SELECT t1.a, t2.b, t3.c
+FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
+WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+     0
+(1 row)
+
+DROP TABLE tmp1;
+CREATE TABLE tmp1 AS SELECT t1.a AS a, t2.a AS b, t3.a AS c
+FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3
+WHERE t1.a = t2.b AND t2.a = t3.b;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+    18
+(1 row)
+
+DROP TABLE tmp1;
+CREATE TABLE tmp1 AS SELECT t1.a AS a, t2.a AS b, t3.a AS c, t4.a AS d
+FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
+WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+    17
+(1 row)
+
+DROP TABLE tmp1;
+SET aqo.mode = 'controlled';
+UPDATE aqo_queries SET learn_aqo = false, use_aqo = false, auto_tuning = false;
+EXPLAIN SELECT * FROM aqo_test0
+WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Index Scan using aqo_test0_idx_a on aqo_test0  (cost=0.28..8.35 rows=1 width=16)
+   Index Cond: (a < 3)
+   Filter: ((b < 3) AND (c < 3) AND (d < 3))
+(3 rows)
+
+EXPLAIN SELECT * FROM aqo_test0
+WHERE a < 4 AND b < 4 AND c < 4 AND d < 4;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Index Scan using aqo_test0_idx_a on aqo_test0  (cost=0.28..8.38 rows=1 width=16)
+   Index Cond: (a < 4)
+   Filter: ((b < 4) AND (c < 4) AND (d < 4))
+(3 rows)
+
+EXPLAIN SELECT * FROM aqo_test0
+WHERE a < 5 AND b < 5 AND c < 5 AND d < 5;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Index Scan using aqo_test0_idx_a on aqo_test0  (cost=0.28..8.40 rows=1 width=16)
+   Index Cond: (a < 5)
+   Filter: ((b < 5) AND (c < 5) AND (d < 5))
+(3 rows)
+
+EXPLAIN SELECT t1.a, t2.b FROM aqo_test0 AS t1, aqo_test0 AS t2
+WHERE t1.a < 1 AND t1.b < 1 AND t2.c < 1 AND t2.d < 1;
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Nested Loop  (cost=0.28..49.32 rows=1 width=8)
+   ->  Index Scan using aqo_test0_idx_a on aqo_test0 t1  (cost=0.28..8.30 rows=1 width=4)
+         Index Cond: (a < 1)
+         Filter: (b < 1)
+   ->  Seq Scan on aqo_test0 t2  (cost=0.00..41.02 rows=1 width=4)
+         Filter: ((c < 1) AND (d < 1))
+(6 rows)
+
+EXPLAIN SELECT t1.a, t2.b FROM aqo_test1 AS t1, aqo_test0 AS t2
+WHERE t1.a < 1 AND t2.b < 1 AND t2.c < 1 AND t2.d < 1 AND t1.a = t2.a;
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Nested Loop  (cost=0.28..9.56 rows=1 width=8)
+   ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.25 rows=1 width=4)
+         Filter: (a < 1)
+   ->  Index Scan using aqo_test0_idx_a on aqo_test0 t2  (cost=0.28..8.30 rows=1 width=8)
+         Index Cond: (a = t1.a)
+         Filter: ((b < 1) AND (c < 1) AND (d < 1))
+(6 rows)
+
+EXPlAIN SELECT t1.a, t2.b, t3.c
+FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
+WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Nested Loop  (cost=0.28..50.59 rows=1 width=12)
+   Join Filter: (t1.b = t3.b)
+   ->  Nested Loop  (cost=0.28..9.56 rows=1 width=12)
+         ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.25 rows=1 width=8)
+               Filter: (a < 1)
+         ->  Index Scan using aqo_test0_idx_a on aqo_test0 t2  (cost=0.28..8.30 rows=1 width=8)
+               Index Cond: (a = t1.a)
+               Filter: (c < 1)
+   ->  Seq Scan on aqo_test0 t3  (cost=0.00..41.02 rows=1 width=8)
+         Filter: ((b < 1) AND (d < 0))
+(10 rows)
+
+EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c
+FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3
+WHERE t1.a = t2.b AND t2.a = t3.b;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Hash Join  (cost=2.90..4.65 rows=20 width=12)
+   Hash Cond: (t2.a = t3.b)
+   ->  Hash Join  (cost=1.45..2.92 rows=20 width=8)
+         Hash Cond: (t1.a = t2.b)
+         ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.20 rows=20 width=4)
+         ->  Hash  (cost=1.20..1.20 rows=20 width=8)
+               ->  Seq Scan on aqo_test1 t2  (cost=0.00..1.20 rows=20 width=8)
+   ->  Hash  (cost=1.20..1.20 rows=20 width=8)
+         ->  Seq Scan on aqo_test1 t3  (cost=0.00..1.20 rows=20 width=8)
+(9 rows)
+
+EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c, t4.a AS d
+FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
+WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Hash Join  (cost=4.35..6.37 rows=20 width=16)
+   Hash Cond: (t3.a = t4.b)
+   ->  Hash Join  (cost=2.90..4.65 rows=20 width=12)
+         Hash Cond: (t2.a = t3.b)
+         ->  Hash Join  (cost=1.45..2.92 rows=20 width=8)
+               Hash Cond: (t1.a = t2.b)
+               ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.20 rows=20 width=4)
+               ->  Hash  (cost=1.20..1.20 rows=20 width=8)
+                     ->  Seq Scan on aqo_test1 t2  (cost=0.00..1.20 rows=20 width=8)
+         ->  Hash  (cost=1.20..1.20 rows=20 width=8)
+               ->  Seq Scan on aqo_test1 t3  (cost=0.00..1.20 rows=20 width=8)
+   ->  Hash  (cost=1.20..1.20 rows=20 width=8)
+         ->  Seq Scan on aqo_test1 t4  (cost=0.00..1.20 rows=20 width=8)
+(13 rows)
+
+UPDATE aqo_queries SET learn_aqo = false, use_aqo = true, auto_tuning = false;
+EXPLAIN SELECT * FROM aqo_test0
+WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Index Scan using aqo_test0_idx_a on aqo_test0  (cost=0.28..8.35 rows=3 width=16)
+   Index Cond: (a < 3)
+   Filter: ((b < 3) AND (c < 3) AND (d < 3))
+ Using aqo: true
+(4 rows)
+
+EXPLAIN SELECT * FROM aqo_test0
+WHERE a < 4 AND b < 4 AND c < 4 AND d < 4;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Index Scan using aqo_test0_idx_a on aqo_test0  (cost=0.28..8.38 rows=4 width=16)
+   Index Cond: (a < 4)
+   Filter: ((b < 4) AND (c < 4) AND (d < 4))
+ Using aqo: true
+(4 rows)
+
+EXPLAIN SELECT * FROM aqo_test0
+WHERE a < 5 AND b < 5 AND c < 5 AND d < 5;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Index Scan using aqo_test0_idx_a on aqo_test0  (cost=0.28..8.40 rows=5 width=16)
+   Index Cond: (a < 5)
+   Filter: ((b < 5) AND (c < 5) AND (d < 5))
+ Using aqo: true
+(4 rows)
+
+EXPLAIN SELECT t1.a, t2.b FROM aqo_test0 AS t1, aqo_test0 AS t2
+WHERE t1.a < 1 AND t1.b < 1 AND t2.c < 1 AND t2.d < 1;
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Nested Loop  (cost=0.28..49.32 rows=1 width=8)
+   ->  Index Scan using aqo_test0_idx_a on aqo_test0 t1  (cost=0.28..8.30 rows=1 width=4)
+         Index Cond: (a < 1)
+         Filter: (b < 1)
+   ->  Seq Scan on aqo_test0 t2  (cost=0.00..41.02 rows=1 width=4)
+         Filter: ((c < 1) AND (d < 1))
+ Using aqo: true
+(7 rows)
+
+EXPLAIN SELECT t1.a, t2.b FROM aqo_test1 AS t1, aqo_test0 AS t2
+WHERE t1.a < 1 AND t2.b < 1 AND t2.c < 1 AND t2.d < 1 AND t1.a = t2.a;
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Nested Loop  (cost=0.28..9.56 rows=1 width=8)
+   ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.25 rows=1 width=4)
+         Filter: (a < 1)
+   ->  Index Scan using aqo_test0_idx_a on aqo_test0 t2  (cost=0.28..8.30 rows=1 width=8)
+         Index Cond: (a = t1.a)
+         Filter: ((b < 1) AND (c < 1) AND (d < 1))
+ Using aqo: true
+(7 rows)
+
+EXPlAIN SELECT t1.a, t2.b, t3.c
+FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
+WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Nested Loop  (cost=0.28..50.59 rows=1 width=12)
+   Join Filter: (t1.b = t3.b)
+   ->  Nested Loop  (cost=0.28..9.56 rows=1 width=12)
+         ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.25 rows=1 width=8)
+               Filter: (a < 1)
+         ->  Index Scan using aqo_test0_idx_a on aqo_test0 t2  (cost=0.28..8.30 rows=1 width=8)
+               Index Cond: (a = t1.a)
+               Filter: (c < 1)
+   ->  Seq Scan on aqo_test0 t3  (cost=0.00..41.02 rows=1 width=8)
+         Filter: ((b < 1) AND (d < 0))
+ Using aqo: true
+(11 rows)
+
+EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c
+FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3
+WHERE t1.a = t2.b AND t2.a = t3.b;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Hash Join  (cost=2.90..4.65 rows=20 width=12)
+   Hash Cond: (t2.a = t3.b)
+   ->  Hash Join  (cost=1.45..2.92 rows=20 width=8)
+         Hash Cond: (t1.a = t2.b)
+         ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.20 rows=20 width=4)
+         ->  Hash  (cost=1.20..1.20 rows=20 width=8)
+               ->  Seq Scan on aqo_test1 t2  (cost=0.00..1.20 rows=20 width=8)
+   ->  Hash  (cost=1.20..1.20 rows=20 width=8)
+         ->  Seq Scan on aqo_test1 t3  (cost=0.00..1.20 rows=20 width=8)
+ Using aqo: true
+(10 rows)
+
+EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c, t4.a AS d
+FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
+WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Hash Join  (cost=4.35..6.37 rows=20 width=16)
+   Hash Cond: (t3.a = t4.b)
+   ->  Hash Join  (cost=2.90..4.65 rows=20 width=12)
+         Hash Cond: (t2.a = t3.b)
+         ->  Hash Join  (cost=1.45..2.92 rows=20 width=8)
+               Hash Cond: (t1.a = t2.b)
+               ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.20 rows=20 width=4)
+               ->  Hash  (cost=1.20..1.20 rows=20 width=8)
+                     ->  Seq Scan on aqo_test1 t2  (cost=0.00..1.20 rows=20 width=8)
+         ->  Hash  (cost=1.20..1.20 rows=20 width=8)
+               ->  Seq Scan on aqo_test1 t3  (cost=0.00..1.20 rows=20 width=8)
+   ->  Hash  (cost=1.20..1.20 rows=20 width=8)
+         ->  Seq Scan on aqo_test1 t4  (cost=0.00..1.20 rows=20 width=8)
+ Using aqo: true
+(14 rows)
+
+DROP INDEX aqo_test0_idx_a;
+DROP TABLE aqo_test0;
+DROP INDEX aqo_test1_idx_a;
+DROP TABLE aqo_test1;
+DROP EXTENSION aqo;

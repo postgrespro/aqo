@@ -40,7 +40,7 @@ of per-database.
 
 ## Usage
 
-Note that the extension works bad with dynamically generated views. If they
+Note that the extension doesn't work with dynamically generated views. If they
 appear in workload, please use `aqo.mode='controlled'`.
 
 This extension has intelligent self-tuning mode. If you want to rely completely
@@ -64,11 +64,25 @@ controlled mode `aqo.mode = 'controlled'` and
 where `file_with_sql_queries.sql` is a textfile with queries on which AQO is
 supposed to learn. Please use only `SELECT` queries in
 file_with_sql_queries.sql.
-More sophisticated and convenient tool for AQO administration is in the
-development now.
+
+Another way to use AQO for the specified query structure type is
+`aqo.mode = 'learn'`. In this mode AQO is enabled without self-tuning for all
+queries. So one can use `'controlled'` mode, then switch to `'learn'` mode,
+run a query to optimize and switch back to `'controlled'`.
+
+```
+SET aqo.mode = 'learn';
+<query to optimize>
+SET aqo.mode = 'controlled';
+```
+
+`'learn'` mode is not recommended to be used permanently for the whole cluster,
+because it enables AQO for every query type, even for those ones that don't need
+it, and that may lead to unnecessary computational overheads and performance
+degradation.
 
 If you want to freeze optimizer's behavior (i. e. disable learning under
-workload), use `UPDATE aqo_queries SET auto_tuning=false;`.
+workload), use `UPDATE aqo_queries SET learn_aqo=false, auto_tuning=false;`.
 If you want to disable AQO for all queries, you may use
 `UPDATE aqo_queries SET use_aqo=false, learn_aqo=false, auto_tuning=false;`.
 
@@ -111,7 +125,7 @@ cases in which query execution time increases after applying AQO. It happens
 sometimes because of cost models incompleteness.
 
 Learn_aqo setting shows whether AQO collects statistics for next execution of
-such query type. True value may have computational overheads, but it is
+such query type. Enabled value may have computational overheads, but it is
 essential when AQO model does not fit the data. It happens at the start of AQO
 for the new query type or when the data distribution in database is changed.
 
