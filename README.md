@@ -8,7 +8,7 @@ complicated queries.
 
 ## Installation
 
-The module works with PostgreSQL 9.6.
+The module works with PostgreSQL 9.6 and above.
 
 The module contains a patch and an extension. Patch has to be applied to the
 sources of PostgresSQL. Patch affects header files, that is why PostgreSQL
@@ -20,12 +20,14 @@ installed with `make install`.
 ```
 cd postgresql-9.6  # enter postgresql source directory
 git clone https://github.com/tigvarts/aqo.git contrib/aqo  # clone aqo into contrib
-patch -p1 < contrib/aqo/aqo.patch  # patch postgresql
+patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg9_6.patch  # patch postgresql
 make clean && make && make install   # recompile postgresql
 cd contrib/aqo  # enter aqo directory
 make && make install  # install aqo
 make check  # check whether it works correctly
 ```
+
+For PostgreSQL 10 and above use aqo_pg10rc1.patch instead of aqo_pg9_6.patch
 
 In your db:
 `CREATE EXTENSION aqo;`
