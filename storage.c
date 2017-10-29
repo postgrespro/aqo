@@ -18,6 +18,11 @@ static ArrayType *form_vector(double *vector, int nrows);
 static bool my_simple_heap_update(Relation relation,
 					  ItemPointer otid,
 					  HeapTuple tup);
+static bool my_index_insert(Relation indexRelation,
+							Datum *values, bool *isnull,
+							ItemPointer heap_t_ctid,
+							Relation heapRelation,
+							IndexUniqueCheck checkUnique);
 
 
 /*
@@ -125,11 +130,11 @@ add_query(int query_hash, bool learn_aqo, bool use_aqo,
 	PG_TRY();
 	{
 		simple_heap_insert(aqo_queries_heap, tuple);
-		index_insert(query_index_rel,
-					 values, nulls,
-					 &(tuple->t_self),
-					 aqo_queries_heap,
-					 UNIQUE_CHECK_YES);
+		my_index_insert(query_index_rel,
+						values, nulls,
+						&(tuple->t_self),
+						aqo_queries_heap,
+						UNIQUE_CHECK_YES);
 	}
 	PG_CATCH();
 	{
@@ -206,8 +211,8 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 								 values, nulls, do_replace);
 	if (my_simple_heap_update(aqo_queries_heap, &(nw_tuple->t_self), nw_tuple))
 	{
-		index_insert(query_index_rel, values, nulls, &(nw_tuple->t_self),
-					 aqo_queries_heap, UNIQUE_CHECK_YES);
+		my_index_insert(query_index_rel, values, nulls, &(nw_tuple->t_self),
+						aqo_queries_heap, UNIQUE_CHECK_YES);
 	}
 	else
 	{
@@ -270,11 +275,11 @@ add_query_text(int query_hash, const char *query_text)
 	PG_TRY();
 	{
 		simple_heap_insert(aqo_query_texts_heap, tuple);
-		index_insert(query_index_rel,
-					 values, nulls,
-					 &(tuple->t_self),
-					 aqo_query_texts_heap,
-					 UNIQUE_CHECK_YES);
+		my_index_insert(query_index_rel,
+						values, nulls,
+						&(tuple->t_self),
+						aqo_query_texts_heap,
+						UNIQUE_CHECK_YES);
 	}
 	PG_CATCH();
 	{
@@ -475,8 +480,8 @@ update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets,
 		PG_TRY();
 		{
 			simple_heap_insert(aqo_data_heap, tuple);
-			index_insert(data_index_rel, values, nulls, &(tuple->t_self),
-						 aqo_data_heap, UNIQUE_CHECK_YES);
+			my_index_insert(data_index_rel, values, nulls, &(tuple->t_self),
+							aqo_data_heap, UNIQUE_CHECK_YES);
 		}
 		PG_CATCH();
 		{
@@ -494,8 +499,8 @@ update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets,
 									 values, nulls, do_replace);
 		if (my_simple_heap_update(aqo_data_heap, &(nw_tuple->t_self), nw_tuple))
 		{
-			index_insert(data_index_rel, values, nulls, &(nw_tuple->t_self),
-						 aqo_data_heap, UNIQUE_CHECK_YES);
+			my_index_insert(data_index_rel, values, nulls, &(nw_tuple->t_self),
+							aqo_data_heap, UNIQUE_CHECK_YES);
 		}
 		else
 		{
@@ -680,8 +685,8 @@ update_aqo_stat(int query_hash, QueryStat * stat)
 		PG_TRY();
 		{
 			simple_heap_insert(aqo_stat_heap, tuple);
-			index_insert(stat_index_rel, values, nulls, &(tuple->t_self),
-						 aqo_stat_heap, UNIQUE_CHECK_YES);
+			my_index_insert(stat_index_rel, values, nulls, &(tuple->t_self),
+							aqo_stat_heap, UNIQUE_CHECK_YES);
 		}
 		PG_CATCH();
 		{
@@ -696,8 +701,8 @@ update_aqo_stat(int query_hash, QueryStat * stat)
 									 values, nulls, do_replace);
 		if (my_simple_heap_update(aqo_stat_heap, &(nw_tuple->t_self), nw_tuple))
 		{
-			index_insert(stat_index_rel, values, nulls, &(nw_tuple->t_self),
-						 aqo_stat_heap, UNIQUE_CHECK_YES);
+			my_index_insert(stat_index_rel, values, nulls, &(nw_tuple->t_self),
+							aqo_stat_heap, UNIQUE_CHECK_YES);
 		}
 		else
 		{
@@ -853,6 +858,24 @@ my_simple_heap_update(Relation relation, ItemPointer otid, HeapTuple tup)
 			elog(ERROR, "unrecognized heap_update status: %u", result);
 			break;
 	}
+}
+
+
+/* Provides correct insert in both PostgreQL 9.6.X and 10.X.X */
+static bool
+my_index_insert(Relation indexRelation,
+				Datum *values, bool *isnull,
+				ItemPointer heap_t_ctid,
+				Relation heapRelation,
+				IndexUniqueCheck checkUnique)
+{
+#if PG_VERSION_NUM < 100000
+	return index_insert(indexRelation, values, isnull, heap_t_ctid,
+						heapRelation, checkUnique);
+#else
+	return index_insert(indexRelation, values, isnull, heap_t_ctid,
+						heapRelation, checkUnique, NULL);
+#endif
 }
 
 /* Creates a storage for hashes of deactivated queries */
