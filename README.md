@@ -27,7 +27,7 @@ make && make install                                             # install aqo
 make check                                              # check whether it works correctly (optional)
 ```
 
-For PostgreSQL 10 and above use aqo_pg10rc1.patch instead of aqo_pg9_6.patch
+For PostgreSQL 10 and above use aqo_pg10.patch instead of aqo_pg9_6.patch
 
 In your database:
 
@@ -92,6 +92,7 @@ RESET aqo.mode;
 --                                      and the plan is bad
 COMMIT;
 ```
+**_Warning:_** execute query until plan stops changing!
 
 When the plan stops changing, you can often observe performance improvement:
 ```
@@ -241,6 +242,10 @@ pattern is follows
 SET aqo.mode='learn'
 <query>
 SET aqo.mode='controlled';
+<query>
+<query>
+...
+-- unitl convergence
 ```
 
 `'learn'` mode is not recommended to be used permanently for the whole cluster,
@@ -308,7 +313,7 @@ Dynamically generated constants are okay.
 
 ## License
 
-© [Postgres Professional](https://postgrespro.com/), 2016-2017. Licensed under
+© [Postgres Professional](https://postgrespro.com/), 2016-2018. Licensed under
 [The PostgreSQL License](LICENSE).
 
 ## Reference
