@@ -1,0 +1,9 @@
+results/*
+regression.diffs
+regression.out
+*.o
+*.so
+*.gcda
+*.gcno
+*.gcov
+tags
