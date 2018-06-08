@@ -127,7 +127,6 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	Oid			relid;
 	List	   *relids;
 	List	   *selectivities;
-	ListCell   *l;
 
 	if (use_aqo || learn_aqo)
 		selectivities = get_selectivities(root, rel->baserestrictinfo, 0,
@@ -136,11 +135,8 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	if (!use_aqo)
 	{
 		if (learn_aqo)
-		{
-			foreach(l, selectivities)
-				pfree(lfirst(l));
-			list_free(selectivities);
-		}
+			list_free_deep(selectivities);
+
 		call_default_set_baserel_rows_estimate(root, rel);
 		return;
 	}
@@ -207,9 +203,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	{
 		if (learn_aqo)
 		{
-			foreach(l, selectivities)
-				pfree(lfirst(l));
-			list_free(selectivities);
+			list_free_deep(selectivities);
 			list_free(allclauses);
 		}
 		return call_default_get_parameterized_baserel_size(root, rel,
@@ -248,7 +242,6 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	List	   *inner_selectivities;
 	List	   *outer_selectivities;
 	List	   *current_selectivities;
-	ListCell   *l;
 
 	if (use_aqo || learn_aqo)
 		current_selectivities = get_selectivities(root, restrictlist, 0,
@@ -257,11 +250,8 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	if (!use_aqo)
 	{
 		if (learn_aqo)
-		{
-			foreach(l, current_selectivities)
-				pfree(lfirst(l));
-			list_free(current_selectivities);
-		}
+			list_free_deep(current_selectivities);
+
 		call_default_set_joinrel_size_estimates(root, rel,
 												outer_rel,
 												inner_rel,
@@ -315,7 +305,6 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	List	   *inner_selectivities;
 	List	   *outer_selectivities;
 	List	   *current_selectivities;
-	ListCell   *l;
 
 	if (use_aqo || learn_aqo)
 		current_selectivities = get_selectivities(root, restrict_clauses, 0,
@@ -324,11 +313,8 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	if (!use_aqo)
 	{
 		if (learn_aqo)
-		{
-			foreach(l, current_selectivities)
-				pfree(lfirst(l));
-			list_free(current_selectivities);
-		}
+			list_free_deep(current_selectivities);
+
 		return call_default_get_parameterized_joinrel_size(root, rel,
 														   outer_path,
 														   inner_path,
