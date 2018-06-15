@@ -69,8 +69,9 @@ get_query_text(ParseState *pstate, Query *query)
 {
 	if (pstate)
 		query_text = pstate->p_sourcetext;
+
 	if (prev_post_parse_analyze_hook)
-		(*prev_post_parse_analyze_hook) (pstate, query);
+		prev_post_parse_analyze_hook(pstate, query);
 }
 
 /*
@@ -82,7 +83,7 @@ call_default_planner(Query *parse,
 					 ParamListInfo boundParams)
 {
 	if (prev_planner_hook)
-		return (*prev_planner_hook) (parse, cursorOptions, boundParams);
+		return prev_planner_hook(parse, cursorOptions, boundParams);
 	else
 		return standard_planner(parse, cursorOptions, boundParams);
 }

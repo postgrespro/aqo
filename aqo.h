@@ -183,8 +183,8 @@ typedef struct
 	int			planning_time_without_aqo_size;
 	int			cardinality_error_with_aqo_size;
 	int			cardinality_error_without_aqo_size;
-	long long	executions_with_aqo;
-	long long	executions_without_aqo;
+	int64		executions_with_aqo;
+	int64		executions_without_aqo;
 }	QueryStat;
 
 /* Parameters of autotuning */

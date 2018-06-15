@@ -566,7 +566,7 @@ has_consts(List *lst)
 /*
  * Returns pointer on the args list in clause or NULL.
  */
-List	  **
+List **
 get_clause_args_ptr(Expr *clause)
 {
 	switch (clause->type)
@@ -595,6 +595,7 @@ get_clause_args_ptr(Expr *clause)
 bool
 clause_is_eq_clause(Expr *clause)
 {
+	/* TODO: fix this horrible mess */
 	return (
 			clause->type == T_OpExpr ||
 			clause->type == T_DistinctExpr ||
@@ -658,5 +659,4 @@ clause_is_eq_clause(Expr *clause)
 			  ((OpExpr *) clause)->opno == 3240 ||
 			  ((OpExpr *) clause)->opno == 3240
 		);
-	/* TBD: make this less awful */
 }

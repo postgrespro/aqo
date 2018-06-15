@@ -125,7 +125,7 @@ automatical_query_tuning(int query_hash, QueryStat * stat)
 	double		t_aqo,
 				t_not_aqo;
 	double		p_use = -1;
-	long long	num_iterations;
+	int64		num_iterations;
 
 	num_iterations = stat->executions_with_aqo + stat->executions_without_aqo;
 	learn_aqo = true;
