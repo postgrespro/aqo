@@ -6,6 +6,7 @@
  *
  *****************************************************************************/
 
+/* TODO: get rid of those static vars */
 static void *argsort_a;
 static size_t argsort_es;
 static int	(*argsort_value_cmp) (const void *, const void *);
@@ -67,6 +68,8 @@ argsort(void *a, int n, size_t es, int (*cmp) (const void *, const void *))
 	argsort_value_cmp = cmp;
 	argsort_a = a;
 	argsort_es = es;
+
+	/* TODO: replace with qsort_arg() + see vars at the top */
 	qsort(idx, n, sizeof(*idx), argsort_cmp);
 
 	return idx;
