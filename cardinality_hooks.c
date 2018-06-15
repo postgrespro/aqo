@@ -45,7 +45,7 @@ void
 call_default_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 {
 	if (prev_set_baserel_rows_estimate_hook)
-		(*prev_set_baserel_rows_estimate_hook) (root, rel);
+		prev_set_baserel_rows_estimate_hook(root, rel);
 	else
 		set_baserel_rows_estimate_standard(root, rel);
 }
@@ -59,11 +59,9 @@ call_default_get_parameterized_baserel_size(PlannerInfo *root,
 											List *param_clauses)
 {
 	if (prev_get_parameterized_baserel_size_hook)
-		return (*prev_get_parameterized_baserel_size_hook) (root, rel,
-															param_clauses);
+		return prev_get_parameterized_baserel_size_hook(root, rel, param_clauses);
 	else
-		return get_parameterized_baserel_size_standard(root, rel,
-													   param_clauses);
+		return get_parameterized_baserel_size_standard(root, rel, param_clauses);
 }
 
 /*
@@ -78,11 +76,11 @@ call_default_get_parameterized_joinrel_size(PlannerInfo *root,
 											List *restrict_clauses)
 {
 	if (prev_get_parameterized_joinrel_size_hook)
-		return (*prev_get_parameterized_joinrel_size_hook) (root, rel,
-															outer_path,
-															inner_path,
-															sjinfo,
-															restrict_clauses);
+		return prev_get_parameterized_joinrel_size_hook(root, rel,
+														outer_path,
+														inner_path,
+														sjinfo,
+														restrict_clauses);
 	else
 		return get_parameterized_joinrel_size_standard(root, rel,
 													   outer_path,
@@ -102,11 +100,11 @@ call_default_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 										List *restrictlist)
 {
 	if (prev_set_joinrel_size_estimates_hook)
-		(*prev_set_joinrel_size_estimates_hook) (root, rel,
-												 outer_rel,
-												 inner_rel,
-												 sjinfo,
-												 restrictlist);
+		prev_set_joinrel_size_estimates_hook(root, rel,
+											 outer_rel,
+											 inner_rel,
+											 sjinfo,
+											 restrictlist);
 	else
 		set_joinrel_size_estimates_standard(root, rel,
 											outer_rel,
