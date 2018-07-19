@@ -7,3 +7,5 @@ regression.out
 *.gcno
 *.gcov
 tags
+
+aqo--?.?.sql
