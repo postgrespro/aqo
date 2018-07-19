@@ -2,51 +2,58 @@
 \echo Use "CREATE EXTENSION aqo" to load this file. \quit
 
 CREATE TABLE aqo_queries (
-	query_hash		int4 CONSTRAINT "aqo_queries_query_hash_idx"
-						 PRIMARY KEY,
-	learn_aqo		bool	NOT NULL,
-	use_aqo			bool	NOT NULL,
-	fspace_hash		int4	NOT NULL,
-	auto_tuning		bool	NOT NULL
+	query_hash		int PRIMARY KEY,
+	learn_aqo		boolean NOT NULL,
+	use_aqo			boolean NOT NULL,
+	fspace_hash		int NOT NULL,
+	auto_tuning		boolean NOT NULL
 );
 
 CREATE TABLE aqo_query_texts (
-	query_hash		int4 CONSTRAINT "aqo_query_texts_query_hash_idx"
-					     PRIMARY KEY REFERENCES aqo_queries ON DELETE CASCADE,
-	query_text		text	NOT NULL
+	query_hash		int PRIMARY KEY REFERENCES aqo_queries ON DELETE CASCADE,
+	query_text		varchar NOT NULL
 );
 
 CREATE TABLE aqo_query_stat (
-	query_hash		int4 CONSTRAINT "aqo_query_stat_idx"
-						 PRIMARY KEY REFERENCES aqo_queries ON DELETE CASCADE,
-	execution_time_with_aqo			float8[],
-	execution_time_without_aqo		float8[],
-	planning_time_with_aqo			float8[],
-	planning_time_without_aqo		float8[],
-	cardinality_error_with_aqo		float8[],
-	cardinality_error_without_aqo	float8[],
-	executions_with_aqo				int8,
-	executions_without_aqo			int8
+	query_hash		int PRIMARY KEY REFERENCES aqo_queries ON DELETE CASCADE,
+	execution_time_with_aqo					double precision[],
+	execution_time_without_aqo				double precision[],
+	planning_time_with_aqo					double precision[],
+	planning_time_without_aqo				double precision[],
+	cardinality_error_with_aqo				double precision[],
+	cardinality_error_without_aqo			double precision[],
+	executions_with_aqo						bigint,
+	executions_without_aqo					bigint
 );
 
 CREATE TABLE aqo_data (
-	fspace_hash		int4 NOT NULL REFERENCES aqo_queries ON DELETE CASCADE,
-	fsspace_hash	int4 NOT NULL,
-	nfeatures		int4 NOT NULL,
-	features		float8[][],
-	targets			float8[]
+	fspace_hash		int NOT NULL REFERENCES aqo_queries ON DELETE CASCADE,
+	fsspace_hash	int NOT NULL,
+	nfeatures		int NOT NULL,
+	features		double precision[][],
+	targets			double precision[],
+	UNIQUE (fspace_hash, fsspace_hash)
 );
 
-CREATE UNIQUE INDEX aqo_fss_access_idx ON aqo_data (fspace_hash, fsspace_hash);
+CREATE INDEX aqo_queries_query_hash_idx ON aqo_queries (query_hash);
+CREATE INDEX aqo_query_texts_query_hash_idx ON aqo_query_texts (query_hash);
+CREATE INDEX aqo_query_stat_idx ON aqo_query_stat (query_hash);
+CREATE INDEX aqo_fss_access_idx ON aqo_data (fspace_hash, fsspace_hash);
 
-ALTER TABLE aqo_data		ALTER COLUMN features	SET STORAGE MAIN;
-ALTER TABLE aqo_data		ALTER COLUMN targets	SET STORAGE MAIN;
-ALTER TABLE aqo_query_stat	ALTER COLUMN execution_time_with_aqo		SET STORAGE MAIN;
-ALTER TABLE aqo_query_stat	ALTER COLUMN execution_time_without_aqo		SET STORAGE MAIN;
-ALTER TABLE aqo_query_stat	ALTER COLUMN planning_time_with_aqo			SET STORAGE MAIN;
-ALTER TABLE aqo_query_stat	ALTER COLUMN planning_time_without_aqo		SET STORAGE MAIN;
-ALTER TABLE aqo_query_stat	ALTER COLUMN cardinality_error_without_aqo	SET STORAGE MAIN;
-ALTER TABLE aqo_query_stat	ALTER COLUMN cardinality_error_with_aqo		SET STORAGE MAIN;
+ALTER TABLE aqo_data ALTER COLUMN features SET STORAGE MAIN;
+ALTER TABLE aqo_data ALTER COLUMN targets SET STORAGE MAIN;
+ALTER TABLE aqo_query_stat
+ALTER COLUMN execution_time_with_aqo SET STORAGE MAIN;
+ALTER TABLE aqo_query_stat
+ALTER COLUMN execution_time_without_aqo SET STORAGE MAIN;
+ALTER TABLE aqo_query_stat
+ALTER COLUMN planning_time_with_aqo SET STORAGE MAIN;
+ALTER TABLE aqo_query_stat
+ALTER COLUMN planning_time_without_aqo SET STORAGE MAIN;
+ALTER TABLE aqo_query_stat
+ALTER COLUMN cardinality_error_without_aqo SET STORAGE MAIN;
+ALTER TABLE aqo_query_stat
+ALTER COLUMN cardinality_error_with_aqo SET STORAGE MAIN;
 
 INSERT INTO aqo_queries VALUES (0, false, false, 0, false);
 INSERT INTO aqo_query_texts VALUES (0, 'COMMON feature space (do not delete!)');
