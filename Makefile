@@ -28,4 +28,4 @@ endif
 
 
 $(DATA_built): $(DATA)
-	cat $(DATA) > $(DATA_built)
+	cat $+ > $@
