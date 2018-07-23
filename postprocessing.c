@@ -36,7 +36,7 @@ static void update_query_stat_row(double *et, int *et_size,
 					  double planning_time,
 					  double execution_time,
 					  double cardinality_error,
-					  long long *n_exec);
+					  int64 *n_exec);
 
 
 /*
@@ -264,7 +264,7 @@ update_query_stat_row(double *et, int *et_size,
 					  double planning_time,
 					  double execution_time,
 					  double cardinality_error,
-					  long long *n_exec)
+					  int64 *n_exec)
 {
 	int			i;
 
@@ -313,7 +313,7 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 		queryDesc->instrument_options |= INSTRUMENT_ROWS;
 
 	if (prev_ExecutorStart_hook)
-		(*prev_ExecutorStart_hook) (queryDesc, eflags);
+		prev_ExecutorStart_hook(queryDesc, eflags);
 	else
 		standard_ExecutorStart(queryDesc, eflags);
 }
@@ -348,7 +348,7 @@ aqo_copy_generic_path_info(PlannerInfo *root, Plan *dest, Path *src)
 	dest->was_parametrized = (src->param_info != NULL);
 
 	if (prev_copy_generic_path_info_hook)
-		(*prev_copy_generic_path_info_hook) (root, dest, src);
+		prev_copy_generic_path_info_hook(root, dest, src);
 }
 
 /*
@@ -439,7 +439,7 @@ learn_query_stat(QueryDesc *queryDesc)
 	disable_aqo_for_query();
 
 	if (prev_ExecutorEnd_hook)
-		(*prev_ExecutorEnd_hook) (queryDesc);
+		prev_ExecutorEnd_hook(queryDesc);
 	else
 		standard_ExecutorEnd(queryDesc);
 }
