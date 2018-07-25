@@ -2,8 +2,8 @@
 
 PG_MODULE_MAGIC;
 
-void		_PG_init(void);
-void		_PG_fini(void);
+void _PG_init(void);
+
 
 /* Strategy of determining feature space for new queries. */
 int			aqo_mode;
@@ -13,6 +13,7 @@ static const struct config_enum_entry format_options[] = {
 	{"intelligent", AQO_MODE_INTELLIGENT, false},
 	{"forced", AQO_MODE_FORCED, false},
 	{"controlled", AQO_MODE_CONTROLLED, false},
+	{"learn", AQO_MODE_LEARN, false},
 	{"disabled", AQO_MODE_DISABLED, false},
 	{NULL, 0, false}
 };
@@ -49,17 +50,17 @@ bool		explain_aqo;
 instr_time	query_starttime;
 double		query_planning_time;
 
-/* Saved hook values in case of unload */
-post_parse_analyze_hook_type prev_post_parse_analyze_hook;
-planner_hook_type prev_planner_hook;
-ExecutorStart_hook_type prev_ExecutorStart_hook;
-ExecutorEnd_hook_type prev_ExecutorEnd_hook;
-set_baserel_rows_estimate_hook_type prev_set_baserel_rows_estimate_hook;
-get_parameterized_baserel_size_hook_type prev_get_parameterized_baserel_size_hook;
-set_joinrel_size_estimates_hook_type prev_set_joinrel_size_estimates_hook;
-get_parameterized_joinrel_size_hook_type prev_get_parameterized_joinrel_size_hook;
-copy_generic_path_info_hook_type prev_copy_generic_path_info_hook;
-ExplainOnePlan_hook_type prev_ExplainOnePlan_hook;
+/* Saved hook values */
+post_parse_analyze_hook_type				prev_post_parse_analyze_hook;
+planner_hook_type							prev_planner_hook;
+ExecutorStart_hook_type						prev_ExecutorStart_hook;
+ExecutorEnd_hook_type						prev_ExecutorEnd_hook;
+set_baserel_rows_estimate_hook_type			prev_set_baserel_rows_estimate_hook;
+get_parameterized_baserel_size_hook_type	prev_get_parameterized_baserel_size_hook;
+set_joinrel_size_estimates_hook_type		prev_set_joinrel_size_estimates_hook;
+get_parameterized_joinrel_size_hook_type	prev_get_parameterized_joinrel_size_hook;
+copy_generic_path_info_hook_type			prev_copy_generic_path_info_hook;
+ExplainOnePlan_hook_type					prev_ExplainOnePlan_hook;
 
 /*****************************************************************************
  *
@@ -82,49 +83,28 @@ _PG_init(void)
 							 NULL,
 							 NULL);
 
-	prev_planner_hook = planner_hook;
-	planner_hook = &aqo_planner;
-	prev_post_parse_analyze_hook = post_parse_analyze_hook;
-	post_parse_analyze_hook = &get_query_text;
-	prev_ExecutorStart_hook = ExecutorStart_hook;
-	ExecutorStart_hook = &aqo_ExecutorStart;
-	prev_ExecutorEnd_hook = ExecutorEnd_hook;
-	ExecutorEnd_hook = &learn_query_stat;
-	prev_set_baserel_rows_estimate_hook = set_baserel_rows_estimate_hook;
-	set_baserel_rows_estimate_hook = &aqo_set_baserel_rows_estimate;
-	prev_get_parameterized_baserel_size_hook =
-		get_parameterized_baserel_size_hook;
-	get_parameterized_baserel_size_hook =
-		&aqo_get_parameterized_baserel_size;
-	prev_set_joinrel_size_estimates_hook = set_joinrel_size_estimates_hook;
-	set_joinrel_size_estimates_hook = &aqo_set_joinrel_size_estimates;
-	prev_get_parameterized_joinrel_size_hook =
-		get_parameterized_joinrel_size_hook;
-	get_parameterized_joinrel_size_hook =
-		&aqo_get_parameterized_joinrel_size;
-	prev_copy_generic_path_info_hook = copy_generic_path_info_hook;
-	copy_generic_path_info_hook = &aqo_copy_generic_path_info;
-	prev_ExplainOnePlan_hook = ExplainOnePlan_hook;
-	ExplainOnePlan_hook = print_into_explain;
-	init_deactivated_queries_storage();
-}
+	prev_planner_hook							= planner_hook;
+	planner_hook								= aqo_planner;
+	prev_post_parse_analyze_hook				= post_parse_analyze_hook;
+	post_parse_analyze_hook						= get_query_text;
+	prev_ExecutorStart_hook						= ExecutorStart_hook;
+	ExecutorStart_hook							= aqo_ExecutorStart;
+	prev_ExecutorEnd_hook						= ExecutorEnd_hook;
+	ExecutorEnd_hook							= learn_query_stat;
+	prev_set_baserel_rows_estimate_hook			= set_baserel_rows_estimate_hook;
+	set_baserel_rows_estimate_hook				= aqo_set_baserel_rows_estimate;
+	prev_get_parameterized_baserel_size_hook	= get_parameterized_baserel_size_hook;
+	get_parameterized_baserel_size_hook			= aqo_get_parameterized_baserel_size;
+	prev_set_joinrel_size_estimates_hook		= set_joinrel_size_estimates_hook;
+	set_joinrel_size_estimates_hook				= aqo_set_joinrel_size_estimates;
+	prev_get_parameterized_joinrel_size_hook	= get_parameterized_joinrel_size_hook;
+	get_parameterized_joinrel_size_hook			= aqo_get_parameterized_joinrel_size;
+	prev_copy_generic_path_info_hook			= copy_generic_path_info_hook;
+	copy_generic_path_info_hook					= aqo_copy_generic_path_info;
+	prev_ExplainOnePlan_hook					= ExplainOnePlan_hook;
+	ExplainOnePlan_hook							= print_into_explain;
 
-void
-_PG_fini(void)
-{
-	planner_hook = prev_planner_hook;
-	post_parse_analyze_hook = prev_post_parse_analyze_hook;
-	ExecutorStart_hook = prev_ExecutorStart_hook;
-	ExecutorEnd_hook = prev_ExecutorEnd_hook;
-	set_baserel_rows_estimate_hook = prev_set_baserel_rows_estimate_hook;
-	get_parameterized_baserel_size_hook =
-		prev_get_parameterized_baserel_size_hook;
-	set_joinrel_size_estimates_hook = prev_set_joinrel_size_estimates_hook;
-	get_parameterized_joinrel_size_hook =
-		prev_get_parameterized_joinrel_size_hook;
-	copy_generic_path_info_hook = prev_copy_generic_path_info_hook;
-	ExplainOnePlan_hook = prev_ExplainOnePlan_hook;
-	fini_deactivated_queries_storage();
+	init_deactivated_queries_storage();
 }
 
 PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);

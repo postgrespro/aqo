@@ -23,7 +23,6 @@ predict_for_relation(List *restrict_clauses, List *selectivities, List *relids)
 	double		result;
 	int			rows;
 	int			i;
-	ListCell   *l;
 
 	get_fss_for_object(restrict_clauses, selectivities, relids,
 					   &nfeatures, &fss_hash, &features);
@@ -43,10 +42,8 @@ predict_for_relation(List *restrict_clauses, List *selectivities, List *relids)
 		pfree(matrix[i]);
 	pfree(matrix);
 	pfree(target);
+	list_free_deep(selectivities);
 	list_free(restrict_clauses);
-	foreach(l, selectivities)
-		pfree(lfirst(l));
-	list_free(selectivities);
 	list_free(relids);
 
 	if (result < 0)

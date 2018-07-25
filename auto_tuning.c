@@ -22,8 +22,10 @@ static bool is_in_infinite_loop_cq(double *elems, int nelems);
 double
 get_mean(double *elems, int nelems)
 {
-	double		sum = 0;
-	int			i;
+	double	sum = 0;
+	int		i;
+
+	AssertArg(nelems > 0);
 
 	for (i = 0; i < nelems; ++i)
 		sum += elems[i];
@@ -37,7 +39,9 @@ get_mean(double *elems, int nelems)
 double
 get_estimation(double *elems, int nelems)
 {
-	int			start;
+	int start;
+
+	AssertArg(nelems > 0);
 
 	if (nelems > auto_tuning_window_size)
 		start = nelems - auto_tuning_window_size;
@@ -53,11 +57,16 @@ get_estimation(double *elems, int nelems)
 bool
 is_stable(double *elems, int nelems)
 {
-	double		est;
+	double	est,
+			last;
+
+	AssertArg(nelems > 1);
 
 	est = get_mean(elems, nelems - 1);
-	return (est * 1.1 > elems[nelems - 1] || est + 0.1 > elems[nelems - 1]) &&
-		(est * 0.9 < elems[nelems - 1] || est - 0.1 < elems[nelems - 1]);
+	last = elems[nelems - 1];
+
+	return (est * 1.1 > last || est + 0.1 > last) &&
+		   (est * 0.9 < last || est - 0.1 < last);
 }
 
 /*
@@ -89,7 +98,7 @@ is_in_infinite_loop_cq(double *elems, int nelems)
 		return false;
 
 	return !converged_cq(elems, nelems) &&
-		!converged_cq(elems, nelems - auto_tuning_window_size);
+		   !converged_cq(elems, nelems - auto_tuning_window_size);
 }
 
 /*
@@ -125,7 +134,7 @@ automatical_query_tuning(int query_hash, QueryStat * stat)
 	double		t_aqo,
 				t_not_aqo;
 	double		p_use = -1;
-	long long	num_iterations;
+	int64		num_iterations;
 
 	num_iterations = stat->executions_with_aqo + stat->executions_without_aqo;
 	learn_aqo = true;
@@ -142,16 +151,19 @@ automatical_query_tuning(int query_hash, QueryStat * stat)
 							   stat->execution_time_with_aqo_size) +
 			get_estimation(stat->planning_time_with_aqo,
 						   stat->planning_time_with_aqo_size);
+
 		t_not_aqo = get_estimation(stat->execution_time_without_aqo,
 								   stat->execution_time_without_aqo_size) +
 			get_estimation(stat->planning_time_without_aqo,
 						   stat->planning_time_without_aqo_size);
+
 		p_use = t_not_aqo / (t_not_aqo + t_aqo);
 		p_use = 1 / (1 + exp((p_use - 0.5) / unstability));
 		p_use -= 1 / (1 + exp(-0.5 / unstability));
 		p_use /= 1 - 2 / (1 + exp(-0.5 / unstability));
 
-		use_aqo = ((double) rand() / RAND_MAX < p_use);
+		/* borrowed from drandom() in float.c */
+		use_aqo = (random() / ((double) MAX_RANDOM_VALUE + 1)) < p_use;
 		learn_aqo = use_aqo;
 	}
 

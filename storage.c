@@ -9,15 +9,28 @@
  *
  *****************************************************************************/
 
-HTAB	   *deactivated_queries = NULL;
+HTAB *deactivated_queries = NULL;
 
-static void deform_matrix(Datum datum, double **matrix);
-static void deform_vector(Datum datum, double *vector, int *nelems);
 static ArrayType *form_matrix(double **matrix, int nrows, int ncols);
+static void deform_matrix(Datum datum, double **matrix);
+
 static ArrayType *form_vector(double *vector, int nrows);
+static void deform_vector(Datum datum, double *vector, int *nelems);
+
+#define FormVectorSz(v_name)			(form_vector((v_name), (v_name ## _size)))
+#define DeformVectorSz(datum, v_name)	(deform_vector((datum), (v_name), &(v_name ## _size)))
+
+
 static bool my_simple_heap_update(Relation relation,
-					  ItemPointer otid,
-					  HeapTuple tup);
+								  ItemPointer otid,
+								  HeapTuple tup);
+
+static bool my_index_insert(Relation indexRelation,
+							Datum *values,
+							bool *isnull,
+							ItemPointer heap_t_ctid,
+							Relation heapRelation,
+							IndexUniqueCheck checkUnique);
 
 
 /*
@@ -32,13 +45,13 @@ find_query(int query_hash,
 	RangeVar   *aqo_queries_table_rv;
 	Relation	aqo_queries_heap;
 	HeapTuple	tuple;
-	LOCKMODE	heap_lock = AccessShareLock;
+
+	LOCKMODE	lockmode = AccessShareLock;
 
 	Relation	query_index_rel;
 	Oid			query_index_rel_oid;
 	IndexScanDesc query_index_scan;
 	ScanKeyData key;
-	LOCKMODE	index_lock = AccessShareLock;
 
 	bool		find_ok = false;
 
@@ -50,22 +63,20 @@ find_query(int query_hash,
 	}
 
 	aqo_queries_table_rv = makeRangeVar("public", "aqo_queries", -1);
-	aqo_queries_heap = heap_openrv(aqo_queries_table_rv, heap_lock);
+	aqo_queries_heap = heap_openrv(aqo_queries_table_rv, lockmode);
 
-	query_index_rel = index_open(query_index_rel_oid, index_lock);
-	query_index_scan = index_beginscan(
-									   aqo_queries_heap,
+	query_index_rel = index_open(query_index_rel_oid, lockmode);
+	query_index_scan = index_beginscan(aqo_queries_heap,
 									   query_index_rel,
 									   SnapshotSelf,
 									   1,
-									   0
-		);
+									   0);
+
 	ScanKeyInit(&key,
 				1,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
-				Int32GetDatum(query_hash)
-		);
+				Int32GetDatum(query_hash));
 
 	index_rescan(query_index_scan, &key, 1, NULL, 0);
 	tuple = index_getnext(query_index_scan, ForwardScanDirection);
@@ -77,8 +88,8 @@ find_query(int query_hash,
 						  search_values, search_nulls);
 
 	index_endscan(query_index_scan);
-	index_close(query_index_rel, index_lock);
-	heap_close(aqo_queries_heap, heap_lock);
+	index_close(query_index_rel, lockmode);
+	heap_close(aqo_queries_heap, lockmode);
 
 	return find_ok;
 }
@@ -94,8 +105,8 @@ add_query(int query_hash, bool learn_aqo, bool use_aqo,
 	RangeVar   *aqo_queries_table_rv;
 	Relation	aqo_queries_heap;
 	HeapTuple	tuple;
-	LOCKMODE	heap_lock = RowExclusiveLock;
-	LOCKMODE	index_lock = RowExclusiveLock;
+
+	LOCKMODE	lockmode = RowExclusiveLock;
 
 	Datum		values[5];
 	bool		nulls[5] = {false, false, false, false, false};
@@ -115,21 +126,21 @@ add_query(int query_hash, bool learn_aqo, bool use_aqo,
 		disable_aqo_for_query();
 		return false;
 	}
-	query_index_rel = index_open(query_index_rel_oid, index_lock);
+	query_index_rel = index_open(query_index_rel_oid, lockmode);
 
 	aqo_queries_table_rv = makeRangeVar("public", "aqo_queries", -1);
-	aqo_queries_heap = heap_openrv(aqo_queries_table_rv, heap_lock);
+	aqo_queries_heap = heap_openrv(aqo_queries_table_rv, lockmode);
 
 	tuple = heap_form_tuple(RelationGetDescr(aqo_queries_heap),
 							values, nulls);
 	PG_TRY();
 	{
 		simple_heap_insert(aqo_queries_heap, tuple);
-		index_insert(query_index_rel,
-					 values, nulls,
-					 &(tuple->t_self),
-					 aqo_queries_heap,
-					 UNIQUE_CHECK_YES);
+		my_index_insert(query_index_rel,
+						values, nulls,
+						&(tuple->t_self),
+						aqo_queries_heap,
+						UNIQUE_CHECK_YES);
 	}
 	PG_CATCH();
 	{
@@ -138,8 +149,8 @@ add_query(int query_hash, bool learn_aqo, bool use_aqo,
 	}
 	PG_END_TRY();
 
-	index_close(query_index_rel, index_lock);
-	heap_close(aqo_queries_heap, heap_lock);
+	index_close(query_index_rel, lockmode);
+	heap_close(aqo_queries_heap, lockmode);
 
 	CommandCounterIncrement();
 
@@ -154,17 +165,17 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 	Relation	aqo_queries_heap;
 	HeapTuple	tuple,
 				nw_tuple;
-	LOCKMODE	heap_lock = RowExclusiveLock;
+
+	LOCKMODE	lockmode = RowExclusiveLock;
 
 	Relation	query_index_rel;
 	Oid			query_index_rel_oid;
 	IndexScanDesc query_index_scan;
 	ScanKeyData key;
-	LOCKMODE	index_lock = RowExclusiveLock;
 
 	Datum		values[5];
-	bool		nulls[5] = {false, false, false, false, false};
-	bool		do_replace[5] = {false, true, true, true, true};
+	bool		isnull[5] = { false, false, false, false, false };
+	bool		replace[5] = { false, true, true, true, true };
 
 	query_index_rel_oid = RelnameGetRelid("aqo_queries_query_hash_idx");
 	if (!OidIsValid(query_index_rel_oid))
@@ -174,28 +185,26 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 	}
 
 	aqo_queries_table_rv = makeRangeVar("public", "aqo_queries", -1);
-	aqo_queries_heap = heap_openrv(aqo_queries_table_rv, heap_lock);
+	aqo_queries_heap = heap_openrv(aqo_queries_table_rv, lockmode);
 
-	query_index_rel = index_open(query_index_rel_oid, index_lock);
-	query_index_scan = index_beginscan(
-									   aqo_queries_heap,
+	query_index_rel = index_open(query_index_rel_oid, lockmode);
+	query_index_scan = index_beginscan(aqo_queries_heap,
 									   query_index_rel,
 									   SnapshotSelf,
 									   1,
-									   0
-		);
+									   0);
+
 	ScanKeyInit(&key,
 				1,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
-				Int32GetDatum(query_hash)
-		);
+				Int32GetDatum(query_hash));
 
 	index_rescan(query_index_scan, &key, 1, NULL, 0);
 	tuple = index_getnext(query_index_scan, ForwardScanDirection);
 
 	heap_deform_tuple(tuple, aqo_queries_heap->rd_att,
-					  values, nulls);
+					  values, isnull);
 
 	values[1] = BoolGetDatum(learn_aqo);
 	values[2] = BoolGetDatum(use_aqo);
@@ -203,11 +212,11 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 	values[4] = BoolGetDatum(auto_tuning);
 
 	nw_tuple = heap_modify_tuple(tuple, aqo_queries_heap->rd_att,
-								 values, nulls, do_replace);
+								 values, isnull, replace);
 	if (my_simple_heap_update(aqo_queries_heap, &(nw_tuple->t_self), nw_tuple))
 	{
-		index_insert(query_index_rel, values, nulls, &(nw_tuple->t_self),
-					 aqo_queries_heap, UNIQUE_CHECK_YES);
+		my_index_insert(query_index_rel, values, isnull, &(nw_tuple->t_self),
+						aqo_queries_heap, UNIQUE_CHECK_YES);
 	}
 	else
 	{
@@ -220,8 +229,8 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 	}
 
 	index_endscan(query_index_scan);
-	index_close(query_index_rel, index_lock);
-	heap_close(aqo_queries_heap, heap_lock);
+	index_close(query_index_rel, lockmode);
+	heap_close(aqo_queries_heap, lockmode);
 
 	CommandCounterIncrement();
 
@@ -238,11 +247,11 @@ add_query_text(int query_hash, const char *query_text)
 	RangeVar   *aqo_query_texts_table_rv;
 	Relation	aqo_query_texts_heap;
 	HeapTuple	tuple;
-	LOCKMODE	heap_lock = RowExclusiveLock;
-	LOCKMODE	index_lock = RowExclusiveLock;
+
+	LOCKMODE	lockmode = RowExclusiveLock;
 
 	Datum		values[2];
-	bool		nulls[2] = {false, false};
+	bool		isnull[2] = {false, false};
 
 	Relation	query_index_rel;
 	Oid			query_index_rel_oid;
@@ -256,25 +265,25 @@ add_query_text(int query_hash, const char *query_text)
 		disable_aqo_for_query();
 		return false;
 	}
-	query_index_rel = index_open(query_index_rel_oid, index_lock);
+	query_index_rel = index_open(query_index_rel_oid, lockmode);
 
 	aqo_query_texts_table_rv = makeRangeVar("public",
 											"aqo_query_texts",
 											-1);
 	aqo_query_texts_heap = heap_openrv(aqo_query_texts_table_rv,
-									   heap_lock);
+									   lockmode);
 
 	tuple = heap_form_tuple(RelationGetDescr(aqo_query_texts_heap),
-							values, nulls);
+							values, isnull);
 
 	PG_TRY();
 	{
 		simple_heap_insert(aqo_query_texts_heap, tuple);
-		index_insert(query_index_rel,
-					 values, nulls,
-					 &(tuple->t_self),
-					 aqo_query_texts_heap,
-					 UNIQUE_CHECK_YES);
+		my_index_insert(query_index_rel,
+						values, isnull,
+						&(tuple->t_self),
+						aqo_query_texts_heap,
+						UNIQUE_CHECK_YES);
 	}
 	PG_CATCH();
 	{
@@ -283,9 +292,8 @@ add_query_text(int query_hash, const char *query_text)
 	}
 	PG_END_TRY();
 
-
-	index_close(query_index_rel, index_lock);
-	heap_close(aqo_query_texts_heap, heap_lock);
+	index_close(query_index_rel, lockmode);
+	heap_close(aqo_query_texts_heap, lockmode);
 
 	CommandCounterIncrement();
 
@@ -313,16 +321,16 @@ load_fss(int fss_hash, int ncols,
 	RangeVar   *aqo_data_table_rv;
 	Relation	aqo_data_heap;
 	HeapTuple	tuple;
-	LOCKMODE	heap_lock = AccessShareLock;
 
 	Relation	data_index_rel;
 	Oid			data_index_rel_oid;
 	IndexScanDesc data_index_scan;
-	ScanKeyData *key;
-	LOCKMODE	index_lock = AccessShareLock;
+	ScanKeyData	key[2];
+
+	LOCKMODE	lockmode = AccessShareLock;
 
 	Datum		values[5];
-	bool		nulls[5];
+	bool		isnull[5];
 
 	bool		success = true;
 
@@ -334,38 +342,34 @@ load_fss(int fss_hash, int ncols,
 	}
 
 	aqo_data_table_rv = makeRangeVar("public", "aqo_data", -1);
-	aqo_data_heap = heap_openrv(aqo_data_table_rv, heap_lock);
+	aqo_data_heap = heap_openrv(aqo_data_table_rv, lockmode);
 
-	data_index_rel = index_open(data_index_rel_oid, index_lock);
-	data_index_scan = index_beginscan(
-									  aqo_data_heap,
+	data_index_rel = index_open(data_index_rel_oid, lockmode);
+	data_index_scan = index_beginscan(aqo_data_heap,
 									  data_index_rel,
 									  SnapshotSelf,
 									  2,
-									  0
-		);
+									  0);
 
-	key = palloc(sizeof(*key) * 2);
 	ScanKeyInit(&key[0],
 				1,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
-				Int32GetDatum(fspace_hash)
-		);
+				Int32GetDatum(fspace_hash));
+
 	ScanKeyInit(&key[1],
 				2,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
-				Int32GetDatum(fss_hash)
-		);
+				Int32GetDatum(fss_hash));
 
 	index_rescan(data_index_scan, key, 2, NULL, 0);
 
 	tuple = index_getnext(data_index_scan, ForwardScanDirection);
 
-	if (tuple != NULL)
+	if (tuple)
 	{
-		heap_deform_tuple(tuple, aqo_data_heap->rd_att, values, nulls);
+		heap_deform_tuple(tuple, aqo_data_heap->rd_att, values, isnull);
 
 		if (DatumGetInt32(values[2]) == ncols)
 		{
@@ -385,10 +389,8 @@ load_fss(int fss_hash, int ncols,
 
 	index_endscan(data_index_scan);
 
-	index_close(data_index_rel, index_lock);
-	heap_close(aqo_data_heap, heap_lock);
-
-	pfree(key);
+	index_close(data_index_rel, lockmode);
+	heap_close(aqo_data_heap, lockmode);
 
 	return success;
 }
@@ -404,26 +406,26 @@ load_fss(int fss_hash, int ncols,
  * 'changed_rows' is an integer list of changed lines
  */
 bool
-update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets,
+update_fss(int fss_hash, int nrows, int ncols,
+		   double **matrix, double *targets,
 		   int old_nrows, List *changed_rows)
 {
 	RangeVar   *aqo_data_table_rv;
 	Relation	aqo_data_heap;
+	TupleDesc	tuple_desc;
 	HeapTuple	tuple,
 				nw_tuple;
-	LOCKMODE	heap_lock = RowExclusiveLock;
 
 	Relation	data_index_rel;
 	Oid			data_index_rel_oid;
-	ScanKeyData *key;
 	IndexScanDesc data_index_scan;
-	LOCKMODE	index_lock = RowExclusiveLock;
+	ScanKeyData	key[2];
+
+	LOCKMODE	lockmode = RowExclusiveLock;
 
 	Datum		values[5];
-	bool		nulls[5] = {false, false, false, false, false};
-	bool		do_replace[5] = {false, false, false, true, true};
-
-	TupleDesc	tuple_desc;
+	bool		isnull[5] = { false, false, false, false, false };
+	bool		replace[5] = { false, false, false, true, true };
 
 	data_index_rel_oid = RelnameGetRelid("aqo_fss_access_idx");
 	if (!OidIsValid(data_index_rel_oid))
@@ -433,50 +435,46 @@ update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets,
 	}
 
 	aqo_data_table_rv = makeRangeVar("public", "aqo_data", -1);
-	aqo_data_heap = heap_openrv(aqo_data_table_rv, heap_lock);
+	aqo_data_heap = heap_openrv(aqo_data_table_rv, lockmode);
 
 	tuple_desc = RelationGetDescr(aqo_data_heap);
 
-	data_index_rel = index_open(data_index_rel_oid, index_lock);
-	data_index_scan = index_beginscan(
-									  aqo_data_heap,
+	data_index_rel = index_open(data_index_rel_oid, lockmode);
+	data_index_scan = index_beginscan(aqo_data_heap,
 									  data_index_rel,
 									  SnapshotSelf,
 									  2,
-									  0
-		);
+									  0);
 
-	key = palloc(sizeof(*key) * 2);
 	ScanKeyInit(&key[0],
 				1,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
-				Int32GetDatum(fspace_hash)
-		);
+				Int32GetDatum(fspace_hash));
+
 	ScanKeyInit(&key[1],
 				2,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
-				Int32GetDatum(fss_hash)
-		);
+				Int32GetDatum(fss_hash));
 
 	index_rescan(data_index_scan, key, 2, NULL, 0);
 
 	tuple = index_getnext(data_index_scan, ForwardScanDirection);
 
-	if (tuple == NULL)
+	if (!tuple)
 	{
 		values[0] = Int32GetDatum(fspace_hash);
 		values[1] = Int32GetDatum(fss_hash);
 		values[2] = Int32GetDatum(ncols);
 		values[3] = PointerGetDatum(form_matrix(matrix, nrows, ncols));
 		values[4] = PointerGetDatum(form_vector(targets, nrows));
-		tuple = heap_form_tuple(tuple_desc, values, nulls);
+		tuple = heap_form_tuple(tuple_desc, values, isnull);
 		PG_TRY();
 		{
 			simple_heap_insert(aqo_data_heap, tuple);
-			index_insert(data_index_rel, values, nulls, &(tuple->t_self),
-						 aqo_data_heap, UNIQUE_CHECK_YES);
+			my_index_insert(data_index_rel, values, isnull, &(tuple->t_self),
+							aqo_data_heap, UNIQUE_CHECK_YES);
 		}
 		PG_CATCH();
 		{
@@ -487,15 +485,15 @@ update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets,
 	}
 	else
 	{
-		heap_deform_tuple(tuple, aqo_data_heap->rd_att, values, nulls);
+		heap_deform_tuple(tuple, aqo_data_heap->rd_att, values, isnull);
 		values[3] = PointerGetDatum(form_matrix(matrix, nrows, ncols));
 		values[4] = PointerGetDatum(form_vector(targets, nrows));
 		nw_tuple = heap_modify_tuple(tuple, tuple_desc,
-									 values, nulls, do_replace);
+									 values, isnull, replace);
 		if (my_simple_heap_update(aqo_data_heap, &(nw_tuple->t_self), nw_tuple))
 		{
-			index_insert(data_index_rel, values, nulls, &(nw_tuple->t_self),
-						 aqo_data_heap, UNIQUE_CHECK_YES);
+			my_index_insert(data_index_rel, values, isnull, &(nw_tuple->t_self),
+							aqo_data_heap, UNIQUE_CHECK_YES);
 		}
 		else
 		{
@@ -511,10 +509,8 @@ update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets,
 
 	index_endscan(data_index_scan);
 
-	index_close(data_index_rel, index_lock);
-	heap_close(aqo_data_heap, heap_lock);
-
-	pfree(key);
+	index_close(data_index_rel, lockmode);
+	heap_close(aqo_data_heap, lockmode);
 
 	CommandCounterIncrement();
 
@@ -557,35 +553,33 @@ get_aqo_stat(int query_hash)
 	aqo_stat_heap = heap_openrv(aqo_stat_table_rv, heap_lock);
 
 	stat_index_rel = index_open(stat_index_rel_oid, index_lock);
-	stat_index_scan = index_beginscan(
-									  aqo_stat_heap,
+	stat_index_scan = index_beginscan(aqo_stat_heap,
 									  stat_index_rel,
 									  SnapshotSelf,
 									  1,
-									  0
-		);
+									  0);
 
 	ScanKeyInit(&key,
 				1,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
-				Int32GetDatum(query_hash)
-		);
+				Int32GetDatum(query_hash));
 
 	index_rescan(stat_index_scan, &key, 1, NULL, 0);
 
 	tuple = index_getnext(stat_index_scan, ForwardScanDirection);
 
-	if (tuple != NULL)
+	if (tuple)
 	{
 		heap_deform_tuple(tuple, aqo_stat_heap->rd_att, values, nulls);
 
-		deform_vector(values[1], stat->execution_time_with_aqo, &stat->execution_time_with_aqo_size);
-		deform_vector(values[2], stat->execution_time_without_aqo, &stat->execution_time_without_aqo_size);
-		deform_vector(values[3], stat->planning_time_with_aqo, &stat->planning_time_with_aqo_size);
-		deform_vector(values[4], stat->planning_time_without_aqo, &stat->planning_time_without_aqo_size);
-		deform_vector(values[5], stat->cardinality_error_with_aqo, &stat->cardinality_error_with_aqo_size);
-		deform_vector(values[6], stat->cardinality_error_without_aqo, &stat->cardinality_error_without_aqo_size);
+		DeformVectorSz(values[1], stat->execution_time_with_aqo);
+		DeformVectorSz(values[2], stat->execution_time_without_aqo);
+		DeformVectorSz(values[3], stat->planning_time_with_aqo);
+		DeformVectorSz(values[4], stat->planning_time_without_aqo);
+		DeformVectorSz(values[5], stat->cardinality_error_with_aqo);
+		DeformVectorSz(values[6], stat->cardinality_error_without_aqo);
+
 		stat->executions_with_aqo = DatumGetInt64(values[7]);
 		stat->executions_without_aqo = DatumGetInt64(values[8]);
 	}
@@ -603,30 +597,27 @@ get_aqo_stat(int query_hash)
  * Executes disable_aqo_for_query if aqo_query_stat is not found.
  */
 void
-update_aqo_stat(int query_hash, QueryStat * stat)
+update_aqo_stat(int query_hash, QueryStat *stat)
 {
 	RangeVar   *aqo_stat_table_rv;
 	Relation	aqo_stat_heap;
 	HeapTuple	tuple,
 				nw_tuple;
-	LOCKMODE	heap_lock = RowExclusiveLock;
+	TupleDesc	tuple_desc;
 
 	Relation	stat_index_rel;
 	Oid			stat_index_rel_oid;
 	IndexScanDesc stat_index_scan;
-	ScanKeyData key;
-	LOCKMODE	index_lock = RowExclusiveLock;
+	ScanKeyData	key;
+
+	LOCKMODE	lockmode = RowExclusiveLock;
 
 	Datum		values[9];
-	bool		nulls[9] = {false, false, false,
-		false, false, false,
-	false, false, false};
-	bool		do_replace[9] = {false, true, true,
-		true, true, true,
-	true, true, true};
+	bool		isnull[9] = { false };
+	bool		replace[9] = { true };
 
-	TupleDesc	tuple_desc;
-
+	/* don't replace first column */
+	replace[0] = false;
 
 	stat_index_rel_oid = RelnameGetRelid("aqo_query_stat_idx");
 	if (!OidIsValid(stat_index_rel_oid))
@@ -636,52 +627,49 @@ update_aqo_stat(int query_hash, QueryStat * stat)
 	}
 
 	aqo_stat_table_rv = makeRangeVar("public", "aqo_query_stat", -1);
-	aqo_stat_heap = heap_openrv(aqo_stat_table_rv, heap_lock);
+	aqo_stat_heap = heap_openrv(aqo_stat_table_rv, lockmode);
 
 	tuple_desc = RelationGetDescr(aqo_stat_heap);
 
-	stat_index_rel = index_open(stat_index_rel_oid, index_lock);
-	stat_index_scan = index_beginscan(
-									  aqo_stat_heap,
+	stat_index_rel = index_open(stat_index_rel_oid, lockmode);
+	stat_index_scan = index_beginscan(aqo_stat_heap,
 									  stat_index_rel,
 									  SnapshotSelf,
 									  1,
-									  0
-		);
+									  0);
 
 	ScanKeyInit(&key,
 				1,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
-				Int32GetDatum(query_hash)
-		);
+				Int32GetDatum(query_hash));
 
 	index_rescan(stat_index_scan, &key, 1, NULL, 0);
 
 	tuple = index_getnext(stat_index_scan, ForwardScanDirection);
 
-	if (tuple == NULL)
-		values[0] = Int32GetDatum(query_hash);
-	else
-		heap_deform_tuple(tuple, aqo_stat_heap->rd_att, values, nulls);
+	values[0] = tuple == NULL ?
+					Int32GetDatum(query_hash) :
+					heap_getattr(tuple, 1, RelationGetDescr(aqo_stat_heap), &isnull[0]);
 
-	values[1] = PointerGetDatum(form_vector(stat->execution_time_with_aqo, stat->execution_time_with_aqo_size));
-	values[2] = PointerGetDatum(form_vector(stat->execution_time_without_aqo, stat->execution_time_without_aqo_size));
-	values[3] = PointerGetDatum(form_vector(stat->planning_time_with_aqo, stat->planning_time_with_aqo_size));
-	values[4] = PointerGetDatum(form_vector(stat->planning_time_without_aqo, stat->planning_time_without_aqo_size));
-	values[5] = PointerGetDatum(form_vector(stat->cardinality_error_with_aqo, stat->cardinality_error_with_aqo_size));
-	values[6] = PointerGetDatum(form_vector(stat->cardinality_error_without_aqo, stat->cardinality_error_without_aqo_size));
+	values[1] = PointerGetDatum(FormVectorSz(stat->execution_time_with_aqo));
+	values[2] = PointerGetDatum(FormVectorSz(stat->execution_time_without_aqo));
+	values[3] = PointerGetDatum(FormVectorSz(stat->planning_time_with_aqo));
+	values[4] = PointerGetDatum(FormVectorSz(stat->planning_time_without_aqo));
+	values[5] = PointerGetDatum(FormVectorSz(stat->cardinality_error_with_aqo));
+	values[6] = PointerGetDatum(FormVectorSz(stat->cardinality_error_without_aqo));
+
 	values[7] = Int64GetDatum(stat->executions_with_aqo);
 	values[8] = Int64GetDatum(stat->executions_without_aqo);
 
-	if (tuple == NULL)
+	if (!tuple)
 	{
-		tuple = heap_form_tuple(tuple_desc, values, nulls);
+		tuple = heap_form_tuple(tuple_desc, values, isnull);
 		PG_TRY();
 		{
 			simple_heap_insert(aqo_stat_heap, tuple);
-			index_insert(stat_index_rel, values, nulls, &(tuple->t_self),
-						 aqo_stat_heap, UNIQUE_CHECK_YES);
+			my_index_insert(stat_index_rel, values, isnull, &(tuple->t_self),
+							aqo_stat_heap, UNIQUE_CHECK_YES);
 		}
 		PG_CATCH();
 		{
@@ -693,11 +681,12 @@ update_aqo_stat(int query_hash, QueryStat * stat)
 	else
 	{
 		nw_tuple = heap_modify_tuple(tuple, tuple_desc,
-									 values, nulls, do_replace);
+									 values, isnull, replace);
 		if (my_simple_heap_update(aqo_stat_heap, &(nw_tuple->t_self), nw_tuple))
 		{
-			index_insert(stat_index_rel, values, nulls, &(nw_tuple->t_self),
-						 aqo_stat_heap, UNIQUE_CHECK_YES);
+			/* NOTE: insert index tuple iff heap update succeeded! */
+			my_index_insert(stat_index_rel, values, isnull, &(nw_tuple->t_self),
+							aqo_stat_heap, UNIQUE_CHECK_YES);
 		}
 		else
 		{
@@ -713,8 +702,8 @@ update_aqo_stat(int query_hash, QueryStat * stat)
 
 	index_endscan(stat_index_scan);
 
-	index_close(stat_index_rel, index_lock);
-	heap_close(aqo_stat_heap, heap_lock);
+	index_close(stat_index_rel, lockmode);
+	heap_close(aqo_stat_heap, lockmode);
 
 	CommandCounterIncrement();
 }
@@ -855,6 +844,28 @@ my_simple_heap_update(Relation relation, ItemPointer otid, HeapTuple tup)
 	}
 }
 
+
+/* Provides correct insert in both PostgreQL 9.6.X and 10.X.X */
+static bool
+my_index_insert(Relation indexRelation,
+				Datum *values, bool *isnull,
+				ItemPointer heap_t_ctid,
+				Relation heapRelation,
+				IndexUniqueCheck checkUnique)
+{
+	/* Index must be UNIQUE to support uniqueness checks */
+	Assert(checkUnique == UNIQUE_CHECK_NO ||
+		   indexRelation->rd_index->indisunique);
+
+#if PG_VERSION_NUM < 100000
+	return index_insert(indexRelation, values, isnull, heap_t_ctid,
+						heapRelation, checkUnique);
+#else
+	return index_insert(indexRelation, values, isnull, heap_t_ctid,
+						heapRelation, checkUnique, NULL);
+#endif
+}
+
 /* Creates a storage for hashes of deactivated queries */
 void
 init_deactivated_queries_storage(void)
@@ -865,11 +876,10 @@ init_deactivated_queries_storage(void)
 	MemSet(&hash_ctl, 0, sizeof(hash_ctl));
 	hash_ctl.keysize = sizeof(int);
 	hash_ctl.entrysize = sizeof(int);
-	hash_ctl.hash = uint32_hash;
 	deactivated_queries = hash_create("aqo_deactivated_queries",
 									  128,		/* start small and extend */
 									  &hash_ctl,
-									  HASH_ELEM | HASH_FUNCTION);
+									  HASH_ELEM | HASH_BLOBS);
 }
 
 /* Destroys the storage for hash of deactivated queries */
@@ -894,7 +904,5 @@ query_is_deactivated(int query_hash)
 void
 add_deactivated_query(int query_hash)
 {
-	bool		found;
-
-	hash_search(deactivated_queries, &query_hash, HASH_ENTER, &found);
+	hash_search(deactivated_queries, &query_hash, HASH_ENTER, NULL);
 }

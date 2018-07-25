@@ -26,16 +26,20 @@
  * degradation respectively.
  * Feature spaces are described by their hashes (an integer value).
  *
- * This extension presents three default modes:
+ * This extension presents four default modes:
  * "intelligent" mode tries to automatically tune AQO settings for the current
  * workload. It creates separate feature space for each new type of query
  * and then tries to improve the performance of such query type execution.
  * The automatic tuning may be manually deactivated for some queries.
+ * "learn" mode creates separate feature space and enabled aqo learning and
+ * usage for each new type of query. In general it is similar to "intelligent"
+ * mode, but without auto_tuning setting enabled by default.
  * "forced" mode makes no difference between query types and use AQO for them
  * all in the similar way. It considers each new query type as linked to special
  * feature space called COMMON with hash 0.
- * "Controlled" mode ignores unknown query types. In this case AQO is completely
+ * "controlled" mode ignores unknown query types. In this case AQO is completely
  * configured manually by user.
+ * "disabled" mode ignores all queries.
  * Current mode is stored in aqo.mode variable.
  *
  * User can manually set up his own feature space configuration
@@ -108,7 +112,9 @@
  */
 #ifndef __ML_CARD_H__
 #define __ML_CARD_H__
+
 #include <math.h>
+
 #include "postgres.h"
 
 #include "fmgr.h"
@@ -142,15 +148,22 @@
 #include "utils/snapmgr.h"
 
 
+/* Check PostgreSQL version (9.6.0 contains important changes in planner) */
+#if PG_VERSION_NUM < 90600
+	#error "Cannot build aqo with PostgreSQL version lower than 9.6.0"
+#endif
+
 /* Strategy of determining feature space for new queries. */
 typedef enum
 {
-	/* Creates new feature space for each query type */
+	/* Creates new feature space for each query type with auto-tuning enabled */
 	AQO_MODE_INTELLIGENT,
 	/* Treats new query types as linked to the common feature space */
 	AQO_MODE_FORCED,
 	/* New query types are not linked with any feature space */
 	AQO_MODE_CONTROLLED,
+	/* Creates new feature space for each query type without auto-tuning */
+	AQO_MODE_LEARN,
 	/* Aqo is disabled for all queries */
 	AQO_MODE_DISABLED,
 }	AQO_MODE;
@@ -170,8 +183,8 @@ typedef struct
 	int			planning_time_without_aqo_size;
 	int			cardinality_error_with_aqo_size;
 	int			cardinality_error_without_aqo_size;
-	long long	executions_with_aqo;
-	long long	executions_without_aqo;
+	int64		executions_with_aqo;
+	int64		executions_without_aqo;
 }	QueryStat;
 
 /* Parameters of autotuning */
