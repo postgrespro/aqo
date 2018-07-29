@@ -613,11 +613,12 @@ update_aqo_stat(int query_hash, QueryStat *stat)
 	LOCKMODE	lockmode = RowExclusiveLock;
 
 	Datum		values[9];
-	bool		isnull[9] = { false };
-	bool		replace[9] = { true };
-
-	/* don't replace first column */
-	replace[0] = false;
+	bool		isnull[9] = { false, false, false,
+							  false, false, false,
+							  false, false, false };
+	bool		replace[9] = { false, true, true,
+							    true, true, true,
+								true, true, true };
 
 	stat_index_rel_oid = RelnameGetRelid("aqo_query_stat_idx");
 	if (!OidIsValid(stat_index_rel_oid))
