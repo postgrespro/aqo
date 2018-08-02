@@ -888,10 +888,11 @@ init_deactivated_queries_storage(void)
 	MemSet(&hash_ctl, 0, sizeof(hash_ctl));
 	hash_ctl.keysize = sizeof(int);
 	hash_ctl.entrysize = sizeof(int);
+	hash_ctl.hash = uint32_hash;
 	deactivated_queries = hash_create("aqo_deactivated_queries",
 									  128,		/* start small and extend */
 									  &hash_ctl,
-									  HASH_ELEM);
+									  HASH_ELEM | HASH_FUNCTION);
 }
 
 /* Destroys the storage for hash of deactivated queries */
