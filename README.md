@@ -51,7 +51,7 @@ estimnation.
 
 Example:
 ```
-                                                                             QUERY PLAN                                                                             
+                                                                             QUERY PLAN
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Aggregate  (cost=15028.15..15028.16 rows=1 width=96) (actual time=8168.188..8168.189 rows=1 loops=1)
    ->  Nested Loop  (cost=8.21..15028.14 rows=1 width=48) (actual time=199.500..8167.708 rows=88 loops=1)
@@ -96,7 +96,7 @@ COMMIT;
 
 When the plan stops changing, you can often observe performance improvement:
 ```
-                                                                              QUERY PLAN                                                                               
+                                                                              QUERY PLAN
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Aggregate  (cost=112883.89..112883.90 rows=1 width=96) (actual time=738.731..738.731 rows=1 loops=1)
    ->  Nested Loop  (cost=1.85..112883.23 rows=88 width=48) (actual time=73.826..738.618 rows=88 loops=1)
@@ -139,7 +139,7 @@ query hash and query text is stored in aqo_query_texts table:
 SELECT * FROM aqo_query_texts;
 ```
 ```
- query_hash  |                                query_text                                  
+ query_hash  |                                query_text
 -------------+----------------------------------------------------------------------------
            0 | COMMON feature space (do not delete!)
  -1104999304 | SELECT                                                                    +
