@@ -56,7 +56,7 @@
 "SELECT 1 FROM ONLY \"public\".\"aqo_queries\" x WHERE \"query_hash\"\
  OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x"
 
-static const char *query_text;
+static char *query_text = NULL;
 static bool isQueryUsingSystemRelation(Query *query);
 static bool isQueryUsingSystemRelation_walker(Node *node, void *context);
 
@@ -68,7 +68,7 @@ void
 get_query_text(ParseState *pstate, Query *query)
 {
 	if (pstate)
-		query_text = pstate->p_sourcetext;
+		Assert((query_text = strdup(pstate->p_sourcetext)) != NULL);
 
 	if (prev_post_parse_analyze_hook)
 		prev_post_parse_analyze_hook(pstate, query);
