@@ -12,7 +12,7 @@ REGRESS = aqo_disabled aqo_controlled aqo_intelligent aqo_forced aqo_learn
 EXTRA_REGRESS_OPTS=--temp-config=$(top_srcdir)/$(subdir)/conf.add
 
 DATA = aqo--1.0.sql aqo--1.0--1.1.sql
-DATA_built = aqo--$(EXTVERSION).sql
+DATA_built = aqo--1.1.sql
 
 MODULE_big = aqo
 ifdef USE_PGXS
@@ -28,4 +28,4 @@ endif
 
 
 $(DATA_built): $(DATA)
-	cat $(DATA) > $(DATA_built)
+	cat $+ > $@
