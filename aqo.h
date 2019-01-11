@@ -142,6 +142,7 @@
 #include "utils/builtins.h"
 #include "utils/guc.h"
 #include "utils/hsearch.h"
+#include "utils/memutils.h"
 #include "utils/rel.h"
 #include "utils/tqual.h"
 #include "utils/fmgroids.h"
@@ -216,6 +217,9 @@ extern bool explain_aqo;
 /* Query execution time */
 extern instr_time query_starttime;
 extern double query_planning_time;
+
+/* Memory context for long-live data */
+extern MemoryContext AQOMemoryContext;
 
 /* Saved hook values in case of unload */
 extern post_parse_analyze_hook_type prev_post_parse_analyze_hook;
