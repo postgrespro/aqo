@@ -124,7 +124,7 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	double		predicted;
 	Oid			relid;
 	List	   *relids;
-	List	   *selectivities;
+	List	   *selectivities = NULL;
 
 	if (use_aqo || learn_aqo)
 		selectivities = get_selectivities(root, rel->baserestrictinfo, 0,
@@ -163,10 +163,10 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 								   List *param_clauses)
 {
 	double		predicted;
-	Oid			relid;
-	List	   *relids;
-	List	   *allclauses;
-	List	   *selectivities;
+	Oid			relid = InvalidOid;
+	List	   *relids = NULL;
+	List	   *allclauses = NULL;
+	List	   *selectivities = NULL;
 	ListCell   *l;
 	ListCell   *l2;
 	int			nargs;
@@ -239,7 +239,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	List	   *selectivities;
 	List	   *inner_selectivities;
 	List	   *outer_selectivities;
-	List	   *current_selectivities;
+	List	   *current_selectivities = NULL;
 
 	if (use_aqo || learn_aqo)
 		current_selectivities = get_selectivities(root, restrictlist, 0,
@@ -302,7 +302,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	List	   *selectivities;
 	List	   *inner_selectivities;
 	List	   *outer_selectivities;
-	List	   *current_selectivities;
+	List	   *current_selectivities = NULL;
 
 	if (use_aqo || learn_aqo)
 		current_selectivities = get_selectivities(root, restrict_clauses, 0,
