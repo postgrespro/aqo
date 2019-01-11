@@ -50,6 +50,12 @@ bool		explain_aqo;
 instr_time	query_starttime;
 double		query_planning_time;
 
+/*
+ * Currently we use it only to store query_text string which is initialized
+ * after a query parsing and is used during the query planning.
+ */
+MemoryContext AQOMemoryContext;
+
 /* Saved hook values */
 post_parse_analyze_hook_type				prev_post_parse_analyze_hook;
 planner_hook_type							prev_planner_hook;
@@ -105,6 +111,8 @@ _PG_init(void)
 	ExplainOnePlan_hook							= print_into_explain;
 
 	init_deactivated_queries_storage();
+
+	AQOMemoryContext = AllocSetContextCreate(TopMemoryContext, "AQOMemoryContext", ALLOCSET_DEFAULT_SIZES);
 }
 
 PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
