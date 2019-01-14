@@ -114,7 +114,7 @@ aqo_planner(Query *parse,
 	bool		query_nulls[5] = {false, false, false, false, false};
 
 	selectivity_cache_clear();
-	explain_aqo = false;
+	query_context.explain_aqo = false;
 
 	if ((parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT &&
 	 parse->commandType != CMD_UPDATE && parse->commandType != CMD_DELETE) ||
@@ -128,51 +128,52 @@ aqo_planner(Query *parse,
 		return call_default_planner(parse, cursorOptions, boundParams);
 	}
 
-	INSTR_TIME_SET_CURRENT(query_starttime);
+	INSTR_TIME_SET_CURRENT(query_context.query_starttime);
 
-	query_hash = get_query_hash(parse, query_text);
+	query_context.query_hash = get_query_hash(parse, query_text);
 
-	if (query_is_deactivated(query_hash))
+	if (query_is_deactivated(query_context.query_hash))
 	{
 		disable_aqo_for_query();
 		return call_default_planner(parse, cursorOptions, boundParams);
 	}
 
-	query_is_stored = find_query(query_hash, &query_params[0], &query_nulls[0]);
+	query_is_stored = find_query(query_context.query_hash, &query_params[0],
+															&query_nulls[0]);
 
 	if (!query_is_stored)
 	{
 		switch (aqo_mode)
 		{
 			case AQO_MODE_INTELLIGENT:
-				adding_query = true;
-				learn_aqo = true;
-				use_aqo = false;
-				fspace_hash = query_hash;
-				auto_tuning = true;
-				collect_stat = true;
+				query_context.adding_query = true;
+				query_context.learn_aqo = true;
+				query_context.use_aqo = false;
+				query_context.fspace_hash = query_context.query_hash;
+				query_context.auto_tuning = true;
+				query_context.collect_stat = true;
 				break;
 			case AQO_MODE_FORCED:
-				adding_query = false;
-				learn_aqo = true;
-				use_aqo = true;
-				auto_tuning = false;
-				fspace_hash = 0;
-				collect_stat = false;
+				query_context.adding_query = false;
+				query_context.learn_aqo = true;
+				query_context.use_aqo = true;
+				query_context.auto_tuning = false;
+				query_context.fspace_hash = 0;
+				query_context.collect_stat = false;
 				break;
 			case AQO_MODE_CONTROLLED:
-				adding_query = false;
-				learn_aqo = false;
-				use_aqo = false;
-				collect_stat = false;
+				query_context.adding_query = false;
+				query_context.learn_aqo = false;
+				query_context.use_aqo = false;
+				query_context.collect_stat = false;
 				break;
 			case AQO_MODE_LEARN:
-				adding_query = true;
-				learn_aqo = true;
-				use_aqo = true;
-				fspace_hash = query_hash;
-				auto_tuning = false;
-				collect_stat = true;
+				query_context.adding_query = true;
+				query_context.learn_aqo = true;
+				query_context.use_aqo = true;
+				query_context.fspace_hash = query_context.query_hash;
+				query_context.auto_tuning = false;
+				query_context.collect_stat = true;
 				break;
 			case AQO_MODE_DISABLED:
 				/* Should never happen */
@@ -187,10 +188,10 @@ aqo_planner(Query *parse,
 		{
 			if (aqo_mode == AQO_MODE_FORCED)
 			{
-				adding_query = false;
-				learn_aqo = false;
-				auto_tuning = false;
-				collect_stat = false;
+				query_context.adding_query = false;
+				query_context.learn_aqo = false;
+				query_context.auto_tuning = false;
+				query_context.collect_stat = false;
 			}
 			else
 			{
@@ -198,30 +199,30 @@ aqo_planner(Query *parse,
 				return call_default_planner(parse, cursorOptions, boundParams);
 			}
 		}
-		if (adding_query)
+		if (query_context.adding_query)
 		{
-			add_query(query_hash, learn_aqo, use_aqo, fspace_hash, auto_tuning);
-			add_query_text(query_hash, query_text);
+			add_query(query_context.query_hash, query_context.learn_aqo, query_context.use_aqo, query_context.fspace_hash, query_context.auto_tuning);
+			add_query_text(query_context.query_hash, query_text);
 		}
 	}
 	else
 	{
-		adding_query = false;
-		learn_aqo = DatumGetBool(query_params[1]);
-		use_aqo = DatumGetBool(query_params[2]);
-		fspace_hash = DatumGetInt32(query_params[3]);
-		auto_tuning = DatumGetBool(query_params[4]);
-		collect_stat = auto_tuning;
-		if (!learn_aqo && !use_aqo && !auto_tuning)
-			add_deactivated_query(query_hash);
+		query_context.adding_query = false;
+		query_context.learn_aqo = DatumGetBool(query_params[1]);
+		query_context.use_aqo = DatumGetBool(query_params[2]);
+		query_context.fspace_hash = DatumGetInt32(query_params[3]);
+		query_context.auto_tuning = DatumGetBool(query_params[4]);
+		query_context.collect_stat = query_context.auto_tuning;
+		if (!query_context.learn_aqo && !query_context.use_aqo && !query_context.auto_tuning)
+			add_deactivated_query(query_context.query_hash);
 		if (RecoveryInProgress())
 		{
-			learn_aqo = false;
-			auto_tuning = false;
-			collect_stat = false;
+			query_context.learn_aqo = false;
+			query_context.auto_tuning = false;
+			query_context.collect_stat = false;
 		}
 	}
-	explain_aqo = use_aqo;
+	query_context.explain_aqo = query_context.use_aqo;
 
 	return call_default_planner(parse, cursorOptions, boundParams);
 }
@@ -236,10 +237,10 @@ void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 	if (prev_ExplainOnePlan_hook)
 		prev_ExplainOnePlan_hook(plannedstmt, into, es, queryString,
 								params, planduration);
-	if (explain_aqo)
+	if (query_context.explain_aqo)
 	{
 		ExplainPropertyBool("Using aqo", true, es);
-		explain_aqo = false;
+		query_context.explain_aqo = false;
 	}
 }
 
@@ -249,11 +250,11 @@ void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 void
 disable_aqo_for_query(void)
 {
-	adding_query = false;
-	learn_aqo = false;
-	use_aqo = false;
-	auto_tuning = false;
-	collect_stat = false;
+	query_context.adding_query = false;
+	query_context.learn_aqo = false;
+	query_context.use_aqo = false;
+	query_context.auto_tuning = false;
+	query_context.collect_stat = false;
 }
 
 /*

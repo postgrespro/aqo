@@ -355,7 +355,7 @@ load_fss(int fss_hash, int ncols,
 				1,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
-				Int32GetDatum(fspace_hash));
+				Int32GetDatum(query_context.fspace_hash));
 
 	ScanKeyInit(&key[1],
 				2,
@@ -379,8 +379,9 @@ load_fss(int fss_hash, int ncols,
 		else
 		{
 			elog(WARNING, "unexpected number of features for hash (%d, %d):\
-						   expected %d features, obtained %d", fspace_hash,
-				 fss_hash, ncols, DatumGetInt32(values[2]));
+						   expected %d features, obtained %d",
+						   query_context.fspace_hash,
+						   fss_hash, ncols, DatumGetInt32(values[2]));
 			success = false;
 		}
 	}
@@ -450,7 +451,7 @@ update_fss(int fss_hash, int nrows, int ncols,
 				1,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
-				Int32GetDatum(fspace_hash));
+				Int32GetDatum(query_context.fspace_hash));
 
 	ScanKeyInit(&key[1],
 				2,
@@ -464,7 +465,7 @@ update_fss(int fss_hash, int nrows, int ncols,
 
 	if (!tuple)
 	{
-		values[0] = Int32GetDatum(fspace_hash);
+		values[0] = Int32GetDatum(query_context.fspace_hash);
 		values[1] = Int32GetDatum(fss_hash);
 		values[2] = Int32GetDatum(ncols);
 		values[3] = PointerGetDatum(form_matrix(matrix, nrows, ncols));
@@ -775,6 +776,7 @@ form_matrix(double **matrix, int nrows, int ncols)
 	for (i = 0; i < nrows; ++i)
 		for (j = 0; j < ncols; ++j)
 			elems[i * ncols + j] = Float8GetDatum(matrix[i][j]);
+
 	array = construct_md_array(elems, NULL, 2, dims, lbs,
 							   FLOAT8OID, 8, FLOAT8PASSBYVAL, 'd');
 	pfree(elems);

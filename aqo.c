@@ -35,26 +35,12 @@ int			aqo_k = 3;
 int			aqo_K = 30;
 double		log_selectivity_lower_bound = -30;
 
-/* Parameters for current query */
-int			query_hash;
-bool		learn_aqo;
-bool		use_aqo;
-int			fspace_hash;
-bool		auto_tuning;
-bool		collect_stat;
-bool		adding_query;
-bool		explain_only;
-bool		explain_aqo;
-
-/* Query execution time */
-instr_time	query_starttime;
-double		query_planning_time;
-
 /*
  * Currently we use it only to store query_text string which is initialized
  * after a query parsing and is used during the query planning.
  */
 MemoryContext AQOMemoryContext;
+QueryContextData query_context;
 
 /* Saved hook values */
 post_parse_analyze_hook_type				prev_post_parse_analyze_hook;

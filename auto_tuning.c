@@ -137,14 +137,14 @@ automatical_query_tuning(int query_hash, QueryStat * stat)
 	int64		num_iterations;
 
 	num_iterations = stat->executions_with_aqo + stat->executions_without_aqo;
-	learn_aqo = true;
+	query_context.learn_aqo = true;
 	if (stat->executions_without_aqo < auto_tuning_window_size + 1)
-		use_aqo = false;
+		query_context.use_aqo = false;
 	else if (!converged_cq(stat->cardinality_error_with_aqo,
 						   stat->cardinality_error_with_aqo_size) &&
 			 !is_in_infinite_loop_cq(stat->cardinality_error_with_aqo,
 									 stat->cardinality_error_with_aqo_size))
-		use_aqo = true;
+		query_context.use_aqo = true;
 	else
 	{
 		t_aqo = get_estimation(stat->execution_time_with_aqo,
@@ -163,12 +163,12 @@ automatical_query_tuning(int query_hash, QueryStat * stat)
 		p_use /= 1 - 2 / (1 + exp(-0.5 / unstability));
 
 		/* borrowed from drandom() in float.c */
-		use_aqo = (random() / ((double) MAX_RANDOM_VALUE + 1)) < p_use;
-		learn_aqo = use_aqo;
+		query_context.use_aqo = (random() / ((double) MAX_RANDOM_VALUE + 1)) < p_use;
+		query_context.learn_aqo = query_context.use_aqo;
 	}
 
 	if (num_iterations <= auto_tuning_max_iterations || p_use > 0.5)
-		update_query(query_hash, learn_aqo, use_aqo, fspace_hash, true);
+		update_query(query_hash, query_context.learn_aqo, query_context.use_aqo, query_context.fspace_hash, true);
 	else
-		update_query(query_hash, false, false, fspace_hash, false);
+		update_query(query_hash, false, false, query_context.fspace_hash, false);
 }

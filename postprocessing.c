@@ -1,4 +1,5 @@
 #include "aqo.h"
+#include "utils/queryenvironment.h"
 
 /*****************************************************************************
  *
@@ -37,7 +38,8 @@ static void update_query_stat_row(double *et, int *et_size,
 					  double execution_time,
 					  double cardinality_error,
 					  int64 *n_exec);
-
+static void StoreToQueryContext(QueryDesc *queryDesc);
+static void ExtractFromQueryContext(QueryDesc *queryDesc);
 
 /*
  * This is the critical section: only one runner is allowed to be inside this
@@ -100,21 +102,26 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 	get_fss_for_object(clauselist, selectivities, relidslist,
 					   &matrix_cols, &fss_hash, &features);
 
-	matrix = palloc(sizeof(*matrix) * aqo_K);
-	for (i = 0; i < aqo_K; ++i)
-		matrix[i] = palloc0(sizeof(**matrix) * matrix_cols);
-	targets = palloc0(sizeof(*targets) * aqo_K);
+	/* In the case of zero matrix we not need to learn */
+	if (matrix_cols > 0)
+	{
+		matrix = palloc(sizeof(*matrix) * aqo_K);
+		for (i = 0; i < aqo_K; ++i)
+			matrix[i] = palloc0(sizeof(**matrix) * matrix_cols);
+		targets = palloc0(sizeof(*targets) * aqo_K);
 
-	/* Here should be critical section */
-	atomic_fss_learn_step(fss_hash, matrix_cols, matrix, targets,
-						  features, target);
-	/* Here should be the end of critical section */
+		/* Here should be critical section */
+		atomic_fss_learn_step(fss_hash, matrix_cols, matrix, targets,
+															features, target);
+		/* Here should be the end of critical section */
 
-	for (i = 0; i < aqo_K; ++i)
-		pfree(matrix[i]);
-	pfree(matrix);
+		for (i = 0; i < aqo_K; ++i)
+			pfree(matrix[i]);
+		pfree(matrix);
+		pfree(targets);
+	}
+
 	pfree(features);
-	pfree(targets);
 }
 
 /*
@@ -304,13 +311,16 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 	instr_time	current_time;
 
 	INSTR_TIME_SET_CURRENT(current_time);
-	INSTR_TIME_SUBTRACT(current_time, query_starttime);
-	query_planning_time = INSTR_TIME_GET_DOUBLE(current_time);
+	INSTR_TIME_SUBTRACT(current_time, query_context.query_starttime);
+	query_context.query_planning_time = INSTR_TIME_GET_DOUBLE(current_time);
 
-	explain_only = ((eflags & EXEC_FLAG_EXPLAIN_ONLY) != 0);
+	query_context.explain_only = ((eflags & EXEC_FLAG_EXPLAIN_ONLY) != 0);
 
-	if (learn_aqo && !explain_only)
+	if (query_context.learn_aqo && !query_context.explain_only)
 		queryDesc->instrument_options |= INSTRUMENT_ROWS;
+
+	/* Save all query-related parameters into the query context. */
+	StoreToQueryContext(queryDesc);
 
 	if (prev_ExecutorStart_hook)
 		prev_ExecutorStart_hook(queryDesc, eflags);
@@ -369,13 +379,15 @@ learn_query_stat(QueryDesc *queryDesc)
 	QueryStat  *stat;
 	instr_time	endtime;
 
-	if (explain_only)
+	ExtractFromQueryContext(queryDesc);
+
+	if (query_context.explain_only)
 	{
-		learn_aqo = false;
-		collect_stat = false;
+		query_context.learn_aqo = false;
+		query_context.collect_stat = false;
 	}
 
-	if (learn_aqo)
+	if (query_context.learn_aqo)
 	{
 		cardinality_sum_errors = 0;
 		cardinality_num_objects = 0;
@@ -392,29 +404,29 @@ learn_query_stat(QueryDesc *queryDesc)
 		}
 	}
 
-	if (collect_stat)
+	if (query_context.collect_stat)
 	{
 		INSTR_TIME_SET_CURRENT(endtime);
-		INSTR_TIME_SUBTRACT(endtime, query_starttime);
+		INSTR_TIME_SUBTRACT(endtime, query_context.query_starttime);
 		totaltime = INSTR_TIME_GET_DOUBLE(endtime);
-		if (learn_aqo && cardinality_num_objects)
+		if (query_context.learn_aqo && cardinality_num_objects)
 			cardinality_error = cardinality_sum_errors /
 				cardinality_num_objects;
 		else
 			cardinality_error = -1;
 
-		stat = get_aqo_stat(fspace_hash);
+		stat = get_aqo_stat(query_context.fspace_hash);
 		if (stat != NULL)
 		{
-			if (use_aqo)
+			if (query_context.use_aqo)
 				update_query_stat_row(stat->execution_time_with_aqo,
 									  &stat->execution_time_with_aqo_size,
 									  stat->planning_time_with_aqo,
 									  &stat->planning_time_with_aqo_size,
 									  stat->cardinality_error_with_aqo,
 									  &stat->cardinality_error_with_aqo_size,
-									  query_planning_time,
-									  totaltime - query_planning_time,
+									  query_context.query_planning_time,
+									  totaltime - query_context.query_planning_time,
 									  cardinality_error,
 									  &stat->executions_with_aqo);
 			else
@@ -424,13 +436,14 @@ learn_query_stat(QueryDesc *queryDesc)
 									  &stat->planning_time_without_aqo_size,
 									  stat->cardinality_error_without_aqo,
 									  &stat->cardinality_error_without_aqo_size,
-									  query_planning_time,
-									  totaltime - query_planning_time,
+									  query_context.query_planning_time,
+									  totaltime - query_context.query_planning_time,
 									  cardinality_error,
 									  &stat->executions_without_aqo);
-			if (!adding_query && auto_tuning)
-				automatical_query_tuning(query_hash, stat);
-			update_aqo_stat(fspace_hash, stat);
+			if (!query_context.adding_query && query_context.auto_tuning)
+				automatical_query_tuning(query_context.query_hash, stat);
+
+			update_aqo_stat(query_context.fspace_hash, stat);
 			pfree_query_stat(stat);
 		}
 	}
@@ -442,4 +455,37 @@ learn_query_stat(QueryDesc *queryDesc)
 		prev_ExecutorEnd_hook(queryDesc);
 	else
 		standard_ExecutorEnd(queryDesc);
+}
+
+static char *AQOPrivateData = "AQOPrivateData";
+
+static void
+StoreToQueryContext(QueryDesc *queryDesc)
+{
+	EphemeralNamedRelation	enr = palloc(sizeof(EphemeralNamedRelationData));
+
+	if (queryDesc->queryEnv == NULL)
+		queryDesc->queryEnv = create_queryEnv();
+
+	enr->md.name = AQOPrivateData;
+	enr->md.enrtuples = 0;
+	enr->md.enrtype = 0;
+	enr->md.reliddesc = InvalidOid;
+	enr->md.tupdesc = NULL;
+	enr->reldata = MemoryContextAlloc(AQOMemoryContext, sizeof(QueryContextData));
+	memcpy(enr->reldata, &query_context, sizeof(QueryContextData));
+	register_ENR(queryDesc->queryEnv, enr);
+}
+
+static void
+ExtractFromQueryContext(QueryDesc *queryDesc)
+{
+	EphemeralNamedRelation	enr;
+
+	Assert(queryDesc->queryEnv != NULL);
+
+	enr = get_ENR(queryDesc->queryEnv, AQOPrivateData);
+	memcpy(&query_context, enr->reldata, sizeof(QueryContextData));
+	unregister_ENR(queryDesc->queryEnv, AQOPrivateData);
+	pfree(enr);
 }

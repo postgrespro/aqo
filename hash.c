@@ -144,6 +144,7 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 			  sizeof(**features), double_cmp);
 		i = j;
 	}
+
 	*nfeatures = n - sh;
 	(*features) = repalloc(*features, (*nfeatures) * sizeof(**features));
 

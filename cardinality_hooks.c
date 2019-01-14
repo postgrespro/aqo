@@ -126,13 +126,13 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	List	   *relids;
 	List	   *selectivities = NULL;
 
-	if (use_aqo || learn_aqo)
+	if (query_context.use_aqo || query_context.learn_aqo)
 		selectivities = get_selectivities(root, rel->baserestrictinfo, 0,
 										  JOIN_INNER, NULL);
 
-	if (!use_aqo)
+	if (!query_context.use_aqo)
 	{
-		if (learn_aqo)
+		if (query_context.learn_aqo)
 			list_free_deep(selectivities);
 
 		call_default_set_baserel_rows_estimate(root, rel);
@@ -174,7 +174,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	int		   *eclass_hash;
 	int			current_hash;
 
-	if (use_aqo || learn_aqo)
+	if (query_context.use_aqo || query_context.learn_aqo)
 	{
 		allclauses = list_concat(list_copy(param_clauses),
 								 list_copy(rel->baserestrictinfo));
@@ -197,9 +197,9 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 		pfree(eclass_hash);
 	}
 
-	if (!use_aqo)
+	if (!query_context.use_aqo)
 	{
-		if (learn_aqo)
+		if (query_context.learn_aqo)
 		{
 			list_free_deep(selectivities);
 			list_free(allclauses);
@@ -241,13 +241,13 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	List	   *outer_selectivities;
 	List	   *current_selectivities = NULL;
 
-	if (use_aqo || learn_aqo)
+	if (query_context.use_aqo || query_context.learn_aqo)
 		current_selectivities = get_selectivities(root, restrictlist, 0,
 												  sjinfo->jointype, sjinfo);
 
-	if (!use_aqo)
+	if (!query_context.use_aqo)
 	{
-		if (learn_aqo)
+		if (query_context.learn_aqo)
 			list_free_deep(current_selectivities);
 
 		call_default_set_joinrel_size_estimates(root, rel,
@@ -304,13 +304,13 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	List	   *outer_selectivities;
 	List	   *current_selectivities = NULL;
 
-	if (use_aqo || learn_aqo)
+	if (query_context.use_aqo || query_context.learn_aqo)
 		current_selectivities = get_selectivities(root, restrict_clauses, 0,
 												  sjinfo->jointype, sjinfo);
 
-	if (!use_aqo)
+	if (!query_context.use_aqo)
 	{
-		if (learn_aqo)
+		if (query_context.learn_aqo)
 			list_free_deep(current_selectivities);
 
 		return call_default_get_parameterized_joinrel_size(root, rel,

@@ -188,6 +188,23 @@ typedef struct
 	int64		executions_without_aqo;
 }	QueryStat;
 
+/* Parameters for current query */
+typedef struct QueryContextData
+{
+	int			query_hash;
+	bool		learn_aqo;
+	bool		use_aqo;
+	int			fspace_hash;
+	bool		auto_tuning;
+	bool		collect_stat;
+	bool		adding_query;
+	bool		explain_only;
+	bool		explain_aqo;
+	/* Query execution time */
+	instr_time	query_starttime;
+	double		query_planning_time;
+} QueryContextData;
+
 /* Parameters of autotuning */
 extern int	aqo_stat_size;
 extern int	auto_tuning_window_size;
@@ -204,19 +221,7 @@ extern int	aqo_K;
 extern double log_selectivity_lower_bound;
 
 /* Parameters for current query */
-extern int	query_hash;
-extern int	fspace_hash;
-extern bool learn_aqo;
-extern bool use_aqo;
-extern bool auto_tuning;
-extern bool collect_stat;
-extern bool adding_query;
-extern bool explain_only;
-extern bool explain_aqo;
-
-/* Query execution time */
-extern instr_time query_starttime;
-extern double query_planning_time;
+extern QueryContextData query_context;
 
 /* Memory context for long-live data */
 extern MemoryContext AQOMemoryContext;
