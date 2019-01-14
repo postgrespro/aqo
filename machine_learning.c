@@ -116,16 +116,17 @@ OkNNr_predict(int matrix_rows, int matrix_cols,
 		if (idx[i] != -1)
 			result += targets[idx[i]] * w[i] / w_sum;
 
-	/* this should never happen */
-	if (idx[0] == -1)
-		return -1;
-
-	pfree(distances);
-	pfree(idx);
-	pfree(w);
-
 	if (result < 0)
 		result = 0;
+
+	/* this should never happen */
+	if (idx[0] == -1)
+		result = -1;
+
+	pfree(w);
+	pfree(distances);
+	pfree(idx);
+
 	return result;
 }
 

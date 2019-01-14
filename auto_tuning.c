@@ -106,7 +106,7 @@ is_in_infinite_loop_cq(double *elems, int nelems)
  * we cannot execute queries on our own wish, so the tuning now is in setting
  * use_aqo and learn_aqo parameters for the query type.
  *
- * Now the workflow is quite simlple:
+ * Now the workflow is quite simple:
  *
  * Firstly, we run a new query type auto_tuning_window_size times without our
  * method to have an execution time statistics for such type of queries.

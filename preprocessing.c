@@ -67,8 +67,16 @@ static bool isQueryUsingSystemRelation_walker(Node *node, void *context);
 void
 get_query_text(ParseState *pstate, Query *query)
 {
+	MemoryContext	oldCxt;
+
+	/*
+	 * Duplicate query string into private AQO memory context for guard
+	 * from possible memory context switching.
+	 */
+	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
 	if (pstate)
-		Assert((query_text = strdup(pstate->p_sourcetext)) != NULL);
+		query_text = pstrdup(pstate->p_sourcetext);
+	MemoryContextSwitchTo(oldCxt);
 
 	if (prev_post_parse_analyze_hook)
 		prev_post_parse_analyze_hook(pstate, query);
