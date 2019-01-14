@@ -8,7 +8,13 @@ OBJS = aqo.o auto_tuning.o cardinality_estimation.o cardinality_hooks.o \
 hash.o machine_learning.o path_utils.o postprocessing.o preprocessing.o \
 selectivity_cache.o storage.o utils.o $(WIN32RES)
 
-REGRESS = aqo_disabled aqo_controlled aqo_intelligent aqo_forced aqo_learn
+REGRESS =	aqo_disabled \
+			aqo_controlled \
+			aqo_intelligent \
+			aqo_forced \
+			aqo_learn \
+			schema
+
 EXTRA_REGRESS_OPTS=--temp-config=$(top_srcdir)/$(subdir)/conf.add
 
 DATA = aqo--1.0.sql aqo--1.0--1.1.sql

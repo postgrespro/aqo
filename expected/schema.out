@@ -1,0 +1,46 @@
+DROP EXTENSION IF EXISTS aqo CASCADE;
+NOTICE:  extension "aqo" does not exist, skipping
+DROP SCHEMA IF EXISTS test CASCADE;
+NOTICE:  schema "test" does not exist, skipping
+-- Check Zero-schema path behaviour
+CREATE SCHEMA IF NOT EXISTS test;
+SET search_path TO test;
+DROP SCHEMA IF EXISTS test CASCADE;
+CREATE EXTENSION aqo;  -- fail
+ERROR:  no schema has been selected to create in
+-- Check default schema switching after AQO initialization
+CREATE SCHEMA IF NOT EXISTS test1;
+SET search_path TO test1, public;
+CREATE EXTENSION aqo;
+SET aqo.mode = 'intelligent';
+CREATE TABLE test (id SERIAL, data TEXT);
+INSERT INTO test (data) VALUES ('string');
+SELECT * FROM test;
+ id |  data  
+----+--------
+  1 | string
+(1 row)
+
+SELECT * FROM public.aqo_query_texts;
+ query_hash |                 query_text                 
+------------+--------------------------------------------
+          0 | COMMON feature space (do not delete!)
+ 1136691690 | INSERT INTO test (data) VALUES ('string');
+  868705076 | SELECT * FROM test;
+  826229959 | SELECT * FROM public.aqo_query_texts;
+(4 rows)
+
+SELECT * FROM public.aqo_queries;
+ query_hash | learn_aqo | use_aqo | fspace_hash | auto_tuning 
+------------+-----------+---------+-------------+-------------
+          0 | f         | f       |           0 | f
+ 1136691690 | t         | f       |  1136691690 | t
+  868705076 | t         | f       |   868705076 | t
+  826229959 | t         | f       |   826229959 | t
+ 2145866904 | t         | f       |  2145866904 | t
+(5 rows)
+
+DROP SCHEMA IF EXISTS test1 CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to extension aqo
+drop cascades to table test
