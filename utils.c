@@ -95,14 +95,25 @@ inverse_permutation(int *idx, int n)
 QueryStat *
 palloc_query_stat(void)
 {
-	QueryStat  *res = palloc0(sizeof(*res));
+	QueryStat  		*res;
+	MemoryContext	oldCxt;
 
-	res->execution_time_with_aqo = palloc(aqo_stat_size * sizeof(res->execution_time_with_aqo[0]));
-	res->execution_time_without_aqo = palloc(aqo_stat_size * sizeof(res->execution_time_without_aqo[0]));
-	res->planning_time_with_aqo = palloc(aqo_stat_size * sizeof(res->planning_time_with_aqo[0]));
-	res->planning_time_without_aqo = palloc(aqo_stat_size * sizeof(res->planning_time_without_aqo[0]));
-	res->cardinality_error_with_aqo = palloc(aqo_stat_size * sizeof(res->cardinality_error_with_aqo[0]));
-	res->cardinality_error_without_aqo = palloc(aqo_stat_size * sizeof(res->cardinality_error_without_aqo[0]));
+	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
+	res = palloc0(sizeof(*res));
+	res->execution_time_with_aqo = palloc(aqo_stat_size *
+								sizeof(res->execution_time_with_aqo[0]));
+	res->execution_time_without_aqo = palloc(aqo_stat_size *
+								sizeof(res->execution_time_without_aqo[0]));
+	res->planning_time_with_aqo = palloc(aqo_stat_size *
+								sizeof(res->planning_time_with_aqo[0]));
+	res->planning_time_without_aqo = palloc(aqo_stat_size *
+								sizeof(res->planning_time_without_aqo[0]));
+	res->cardinality_error_with_aqo = palloc(aqo_stat_size *
+								sizeof(res->cardinality_error_with_aqo[0]));
+	res->cardinality_error_without_aqo = palloc(aqo_stat_size *
+								sizeof(res->cardinality_error_without_aqo[0]));
+	MemoryContextSwitchTo(oldCxt);
+
 	return res;
 }
 

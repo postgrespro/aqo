@@ -39,8 +39,9 @@ double		log_selectivity_lower_bound = -30;
  * Currently we use it only to store query_text string which is initialized
  * after a query parsing and is used during the query planning.
  */
-MemoryContext AQOMemoryContext;
-QueryContextData query_context;
+MemoryContext		AQOMemoryContext;
+QueryContextData	query_context;
+char				*query_text = NULL;
 
 /* Saved hook values */
 post_parse_analyze_hook_type				prev_post_parse_analyze_hook;

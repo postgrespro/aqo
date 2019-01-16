@@ -40,21 +40,6 @@ CREATE INDEX aqo_query_texts_query_hash_idx ON public.aqo_query_texts (query_has
 CREATE INDEX aqo_query_stat_idx ON public.aqo_query_stat (query_hash);
 CREATE INDEX aqo_fss_access_idx ON public.aqo_data (fspace_hash, fsspace_hash);
 
-ALTER TABLE public.aqo_data ALTER COLUMN features SET STORAGE MAIN;
-ALTER TABLE public.aqo_data ALTER COLUMN targets SET STORAGE MAIN;
-ALTER TABLE public.aqo_query_stat
-ALTER COLUMN execution_time_with_aqo SET STORAGE MAIN;
-ALTER TABLE public.aqo_query_stat
-ALTER COLUMN execution_time_without_aqo SET STORAGE MAIN;
-ALTER TABLE public.aqo_query_stat
-ALTER COLUMN planning_time_with_aqo SET STORAGE MAIN;
-ALTER TABLE public.aqo_query_stat
-ALTER COLUMN planning_time_without_aqo SET STORAGE MAIN;
-ALTER TABLE public.aqo_query_stat
-ALTER COLUMN cardinality_error_without_aqo SET STORAGE MAIN;
-ALTER TABLE public.aqo_query_stat
-ALTER COLUMN cardinality_error_with_aqo SET STORAGE MAIN;
-
 INSERT INTO public.aqo_queries VALUES (0, false, false, 0, false);
 INSERT INTO public.aqo_query_texts VALUES (0, 'COMMON feature space (do not delete!)');
 -- a virtual query for COMMON feature space

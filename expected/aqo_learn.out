@@ -329,8 +329,7 @@ WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
  Index Scan using aqo_test0_idx_a on aqo_test0  (cost=0.28..8.35 rows=3 width=16)
    Index Cond: (a < 3)
    Filter: ((b < 3) AND (c < 3) AND (d < 3))
- Using aqo: true
-(4 rows)
+(3 rows)
 
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 4 AND b < 4 AND c < 4 AND d < 4;
@@ -339,8 +338,7 @@ WHERE a < 4 AND b < 4 AND c < 4 AND d < 4;
  Index Scan using aqo_test0_idx_a on aqo_test0  (cost=0.28..8.38 rows=4 width=16)
    Index Cond: (a < 4)
    Filter: ((b < 4) AND (c < 4) AND (d < 4))
- Using aqo: true
-(4 rows)
+(3 rows)
 
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 5 AND b < 5 AND c < 5 AND d < 5;
@@ -349,8 +347,7 @@ WHERE a < 5 AND b < 5 AND c < 5 AND d < 5;
  Index Scan using aqo_test0_idx_a on aqo_test0  (cost=0.28..8.40 rows=5 width=16)
    Index Cond: (a < 5)
    Filter: ((b < 5) AND (c < 5) AND (d < 5))
- Using aqo: true
-(4 rows)
+(3 rows)
 
 EXPLAIN SELECT t1.a, t2.b FROM aqo_test0 AS t1, aqo_test0 AS t2
 WHERE t1.a < 1 AND t1.b < 1 AND t2.c < 1 AND t2.d < 1;
@@ -362,8 +359,7 @@ WHERE t1.a < 1 AND t1.b < 1 AND t2.c < 1 AND t2.d < 1;
          Filter: (b < 1)
    ->  Seq Scan on aqo_test0 t2  (cost=0.00..41.02 rows=1 width=4)
          Filter: ((c < 1) AND (d < 1))
- Using aqo: true
-(7 rows)
+(6 rows)
 
 EXPLAIN SELECT t1.a, t2.b FROM aqo_test1 AS t1, aqo_test0 AS t2
 WHERE t1.a < 1 AND t2.b < 1 AND t2.c < 1 AND t2.d < 1 AND t1.a = t2.a;
@@ -375,8 +371,7 @@ WHERE t1.a < 1 AND t2.b < 1 AND t2.c < 1 AND t2.d < 1 AND t1.a = t2.a;
    ->  Index Scan using aqo_test0_idx_a on aqo_test0 t2  (cost=0.28..8.30 rows=1 width=8)
          Index Cond: (a = t1.a)
          Filter: ((b < 1) AND (c < 1) AND (d < 1))
- Using aqo: true
-(7 rows)
+(6 rows)
 
 EXPlAIN SELECT t1.a, t2.b, t3.c
 FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
@@ -393,8 +388,7 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
                Filter: (c < 1)
    ->  Seq Scan on aqo_test0 t3  (cost=0.00..41.02 rows=1 width=8)
          Filter: ((b < 1) AND (d < 0))
- Using aqo: true
-(11 rows)
+(10 rows)
 
 EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c
 FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3
@@ -410,8 +404,7 @@ WHERE t1.a = t2.b AND t2.a = t3.b;
                ->  Seq Scan on aqo_test1 t2  (cost=0.00..1.20 rows=20 width=8)
    ->  Hash  (cost=1.20..1.20 rows=20 width=8)
          ->  Seq Scan on aqo_test1 t3  (cost=0.00..1.20 rows=20 width=8)
- Using aqo: true
-(10 rows)
+(9 rows)
 
 EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c, t4.a AS d
 FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
@@ -431,8 +424,7 @@ WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
                ->  Seq Scan on aqo_test1 t3  (cost=0.00..1.20 rows=20 width=8)
    ->  Hash  (cost=1.20..1.20 rows=20 width=8)
          ->  Seq Scan on aqo_test1 t4  (cost=0.00..1.20 rows=20 width=8)
- Using aqo: true
-(14 rows)
+(13 rows)
 
 DROP INDEX aqo_test0_idx_a;
 DROP TABLE aqo_test0;

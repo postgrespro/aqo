@@ -15,8 +15,11 @@ SET aqo.mode = 'intelligent';
 
 CREATE TABLE test (id SERIAL, data TEXT);
 INSERT INTO test (data) VALUES ('string');
-
 SELECT * FROM test;
-SELECT * FROM public.aqo_query_texts;
-SELECT * FROM public.aqo_queries;
+
+-- Check AQO service relations state after some manipulations
+-- Exclude fields with hash values from the queries. Hash is depend on
+-- nodefuncs code which is highly PostgreSQL version specific.
+SELECT query_text FROM public.aqo_query_texts;
+SELECT learn_aqo, use_aqo, auto_tuning FROM public.aqo_queries;
 DROP SCHEMA IF EXISTS test1 CASCADE;

@@ -14,6 +14,12 @@
 static double cardinality_sum_errors;
 static int	cardinality_num_objects;
 
+/* It is needed to recognize stored Query-related aqo data in the query
+ * environment field.
+ */
+static char *AQOPrivateData = "AQOPrivateData";
+
+
 /* Query execution statistics collecting utilities */
 static void atomic_fss_learn_step(int fss_hash, int matrix_cols,
 					  double **matrix, double *targets,
@@ -40,6 +46,7 @@ static void update_query_stat_row(double *et, int *et_size,
 					  int64 *n_exec);
 static void StoreToQueryContext(QueryDesc *queryDesc);
 static void ExtractFromQueryContext(QueryDesc *queryDesc);
+static void RemoveFromQueryContext(QueryDesc *queryDesc);
 
 /*
  * This is the critical section: only one runner is allowed to be inside this
@@ -194,6 +201,10 @@ restore_selectivities(List *clauselist,
  *
  * Returns clauselist, selectivities and relids.
  * Store observed subPlans into other_plans list.
+ *
+ * We use list_copy() of p->plan->path_clauses and p->plan->path_relids
+ * because the plan may be stored in the cache after this. Operation
+ * list_concat() changes input lists and may destruct cached plan.
  */
 void
 collect_planstat(PlanState *p, List **other_plans,
@@ -206,7 +217,7 @@ collect_planstat(PlanState *p, List **other_plans,
 	ListCell   *l;
 
 	foreach(l, p->subPlan)
-		* other_plans = lappend(*other_plans, lfirst(l));
+		*other_plans = lappend(*other_plans, lfirst(l));
 
 	if (p->lefttree == NULL && p->righttree != NULL)
 	{
@@ -234,9 +245,14 @@ collect_planstat(PlanState *p, List **other_plans,
 												  p->plan->path_jointype,
 												  p->plan->was_parametrized);
 
-		(*clauselist) = list_concat(p->plan->path_clauses, (*clauselist));
+		(*clauselist) = list_concat(list_copy(p->plan->path_clauses), (*clauselist));
 		if (p->plan->path_relids != NIL)
-			(*relidslist) = p->plan->path_relids;
+			/*
+			 * This plan can be stored as cached plan. In the case we will have
+			 * bogus path_relids field (changed by list_concat routine) at the
+			 * next usage (and aqo-learn) of this plan.
+			 */
+			(*relidslist) = list_copy(p->plan->path_relids);
 		(*selectivities) = list_concat(cur_selectivities, (*selectivities));
 		if (p->instrument && (p->righttree != NULL ||
 							  p->lefttree == NULL ||
@@ -376,7 +392,7 @@ learn_query_stat(QueryDesc *queryDesc)
 	List	   *tmp_selectivities = NIL;
 	double		totaltime;
 	double		cardinality_error;
-	QueryStat  *stat;
+	QueryStat  *stat = NULL;
 	instr_time	endtime;
 
 	ExtractFromQueryContext(queryDesc);
@@ -440,30 +456,47 @@ learn_query_stat(QueryDesc *queryDesc)
 									  totaltime - query_context.query_planning_time,
 									  cardinality_error,
 									  &stat->executions_without_aqo);
-			if (!query_context.adding_query && query_context.auto_tuning)
-				automatical_query_tuning(query_context.query_hash, stat);
-
-			update_aqo_stat(query_context.fspace_hash, stat);
-			pfree_query_stat(stat);
 		}
 	}
 	selectivity_cache_clear();
-
-	disable_aqo_for_query();
 
 	if (prev_ExecutorEnd_hook)
 		prev_ExecutorEnd_hook(queryDesc);
 	else
 		standard_ExecutorEnd(queryDesc);
+
+	ExtractFromQueryContext(queryDesc);
+
+	/*
+	 * Store all learn data into the AQO service relations.
+	 * We postpone this operation to avoid an invalidation recurse induced by
+	 * CommandCounterIncrement.
+	 */
+	if ((query_context.collect_stat) && (stat != NULL))
+	{
+		if (!query_context.adding_query && query_context.auto_tuning)
+			automatical_query_tuning(query_context.query_hash, stat);
+
+		update_aqo_stat(query_context.fspace_hash, stat);
+		pfree_query_stat(stat);
+	}
+	RemoveFromQueryContext(queryDesc);
 }
 
-static char *AQOPrivateData = "AQOPrivateData";
-
+/*
+ * Store into query environment field AQO data related to the query.
+ * We introduce this machinery to avoid problems with subqueries, induced by
+ * top-level query.
+ */
 static void
 StoreToQueryContext(QueryDesc *queryDesc)
 {
-	EphemeralNamedRelation	enr = palloc(sizeof(EphemeralNamedRelationData));
+	EphemeralNamedRelation	enr;
+	int	qcsize = sizeof(QueryContextData);
+	MemoryContext	oldCxt;
 
+	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
+	enr = palloc0(sizeof(EphemeralNamedRelationData));
 	if (queryDesc->queryEnv == NULL)
 		queryDesc->queryEnv = create_queryEnv();
 
@@ -472,20 +505,52 @@ StoreToQueryContext(QueryDesc *queryDesc)
 	enr->md.enrtype = 0;
 	enr->md.reliddesc = InvalidOid;
 	enr->md.tupdesc = NULL;
-	enr->reldata = MemoryContextAlloc(AQOMemoryContext, sizeof(QueryContextData));
-	memcpy(enr->reldata, &query_context, sizeof(QueryContextData));
+
+	if (query_context.adding_query)
+	{
+		Assert(query_text != NULL);
+		enr->reldata = palloc0(qcsize + strlen(query_text) + 1);
+		memcpy(enr->reldata, &query_context, qcsize);
+		memcpy((char *)(enr->reldata) + qcsize, query_text, strlen(query_text) + 1);
+	}
+	else
+	{
+		enr->reldata = palloc0(qcsize);
+		memcpy(enr->reldata, &query_context, qcsize);
+	}
+
 	register_ENR(queryDesc->queryEnv, enr);
+	MemoryContextSwitchTo(oldCxt);
 }
 
+/*
+ * Restore AQO data, related to the query.
+ */
 static void
 ExtractFromQueryContext(QueryDesc *queryDesc)
 {
 	EphemeralNamedRelation	enr;
+	int	qcsize = sizeof(QueryContextData);
+	MemoryContext	oldCxt;
 
 	Assert(queryDesc->queryEnv != NULL);
 
+	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
 	enr = get_ENR(queryDesc->queryEnv, AQOPrivateData);
-	memcpy(&query_context, enr->reldata, sizeof(QueryContextData));
+	memcpy(&query_context, enr->reldata, qcsize);
+
+	if (query_context.adding_query)
+		query_text = pstrdup((char *)(enr->reldata) + qcsize);
+
+	MemoryContextSwitchTo(oldCxt);
+}
+
+static void
+RemoveFromQueryContext(QueryDesc *queryDesc)
+{
+	EphemeralNamedRelation	enr = get_ENR(queryDesc->queryEnv, AQOPrivateData);
 	unregister_ENR(queryDesc->queryEnv, AQOPrivateData);
+	pfree(enr->reldata);
 	pfree(enr);
+
 }

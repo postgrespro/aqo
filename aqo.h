@@ -222,6 +222,7 @@ extern double log_selectivity_lower_bound;
 
 /* Parameters for current query */
 extern QueryContextData query_context;
+extern char				*query_text;
 
 /* Memory context for long-live data */
 extern MemoryContext AQOMemoryContext;

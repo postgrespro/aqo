@@ -1,4 +1,5 @@
 #include "aqo.h"
+#include "access/parallel.h"
 
 /*****************************************************************************
  *
@@ -56,7 +57,6 @@
 "SELECT 1 FROM ONLY \"public\".\"aqo_queries\" x WHERE \"query_hash\"\
  OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x"
 
-static char *query_text = NULL;
 static bool isQueryUsingSystemRelation(Query *query);
 static bool isQueryUsingSystemRelation_walker(Node *node, void *context);
 
@@ -116,12 +116,18 @@ aqo_planner(Query *parse,
 	selectivity_cache_clear();
 	query_context.explain_aqo = false;
 
+	 /*
+	  * We do not work inside an parallel worker now by reason of insert into
+	  * heap during planning. Transactions is synchronized between parallel
+	  * section. See GetCurrentCommandId() comments also.
+	  */
 	if ((parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT &&
 	 parse->commandType != CMD_UPDATE && parse->commandType != CMD_DELETE) ||
 		strncmp(query_text, CREATE_EXTENSION_STARTSTRING_0,
 				strlen(CREATE_EXTENSION_STARTSTRING_0)) == 0 ||
 		strncmp(query_text, CREATE_EXTENSION_STARTSTRING_1,
 				strlen(CREATE_EXTENSION_STARTSTRING_1)) == 0 ||
+		IsInParallelMode() || IsParallelWorker() ||
 		aqo_mode == AQO_MODE_DISABLED || isQueryUsingSystemRelation(parse))
 	{
 		disable_aqo_for_query();
@@ -239,7 +245,9 @@ void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 								params, planduration);
 	if (query_context.explain_aqo)
 	{
-		ExplainPropertyBool("Using aqo", true, es);
+		/* Report to user about aqo state only in verbose mode */
+		if (es->verbose)
+			ExplainPropertyBool("Using aqo", true, es);
 		query_context.explain_aqo = false;
 	}
 }
