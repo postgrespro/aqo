@@ -891,7 +891,7 @@ init_deactivated_queries_storage(void)
 	deactivated_queries = hash_create("aqo_deactivated_queries",
 									  128,		/* start small and extend */
 									  &hash_ctl,
-									  HASH_ELEM | HASH_BLOBS);
+									  HASH_ELEM);
 }
 
 /* Destroys the storage for hash of deactivated queries */
