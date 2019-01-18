@@ -506,18 +506,8 @@ StoreToQueryContext(QueryDesc *queryDesc)
 	enr->md.reliddesc = InvalidOid;
 	enr->md.tupdesc = NULL;
 
-	if (query_context.adding_query)
-	{
-		Assert(query_text != NULL);
-		enr->reldata = palloc0(qcsize + strlen(query_text) + 1);
-		memcpy(enr->reldata, &query_context, qcsize);
-		memcpy((char *)(enr->reldata) + qcsize, query_text, strlen(query_text) + 1);
-	}
-	else
-	{
-		enr->reldata = palloc0(qcsize);
-		memcpy(enr->reldata, &query_context, qcsize);
-	}
+	enr->reldata = palloc0(qcsize);
+	memcpy(enr->reldata, &query_context, qcsize);
 
 	register_ENR(queryDesc->queryEnv, enr);
 	MemoryContextSwitchTo(oldCxt);
@@ -538,9 +528,6 @@ ExtractFromQueryContext(QueryDesc *queryDesc)
 	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
 	enr = get_ENR(queryDesc->queryEnv, AQOPrivateData);
 	memcpy(&query_context, enr->reldata, qcsize);
-
-	if (query_context.adding_query)
-		query_text = pstrdup((char *)(enr->reldata) + qcsize);
 
 	MemoryContextSwitchTo(oldCxt);
 }
