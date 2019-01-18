@@ -199,8 +199,7 @@ WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
  Index Scan using aqo_test0_idx_a on aqo_test0
    Index Cond: (a < 3)
    Filter: ((b < 3) AND (c < 3) AND (d < 3))
- Using aqo: true
-(4 rows)
+(3 rows)
 
 EXPLAIN (COSTS FALSE)
 SELECT * FROM aqo_test0
@@ -210,8 +209,7 @@ WHERE a < 5 AND b < 5 AND c < 5 AND d < 5;
  Index Scan using aqo_test0_idx_a on aqo_test0
    Index Cond: (a < 5)
    Filter: ((b < 5) AND (c < 5) AND (d < 5))
- Using aqo: true
-(4 rows)
+(3 rows)
 
 EXPLAIN (COSTS FALSE)
 SELECT t1.a, t2.b FROM aqo_test0 AS t1, aqo_test0 AS t2
@@ -224,8 +222,7 @@ WHERE t1.a < 1 AND t1.b < 1 AND t2.c < 1 AND t2.d < 1;
          Filter: (b < 1)
    ->  Seq Scan on aqo_test0 t2
          Filter: ((c < 1) AND (d < 1))
- Using aqo: true
-(7 rows)
+(6 rows)
 
 EXPLAIN (COSTS FALSE)
 SELECT t1.a, t2.b FROM aqo_test1 AS t1, aqo_test0 AS t2
@@ -256,8 +253,7 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
                Filter: (c < 1)
    ->  Seq Scan on aqo_test0 t3
          Filter: ((b < 1) AND (d < 0))
- Using aqo: true
-(11 rows)
+(10 rows)
 
 EXPLAIN (COSTS FALSE)
 SELECT t1.a AS a, t2.a AS b, t3.a AS c
@@ -274,8 +270,7 @@ WHERE t1.a = t2.b AND t2.a = t3.b;
                ->  Seq Scan on aqo_test1 t2
    ->  Hash
          ->  Seq Scan on aqo_test1 t3
- Using aqo: true
-(10 rows)
+(9 rows)
 
 EXPLAIN (COSTS FALSE)
 SELECT t1.a AS a, t2.a AS b, t3.a AS c

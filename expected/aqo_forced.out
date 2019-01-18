@@ -65,8 +65,7 @@ WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
  Index Scan using aqo_test0_idx_a on aqo_test0
    Index Cond: (a < 3)
    Filter: ((b < 3) AND (c < 3) AND (d < 3))
- Using aqo: true
-(4 rows)
+(3 rows)
 
 EXPLAIN (COSTS FALSE)
 SELECT * FROM aqo_test0
@@ -76,8 +75,7 @@ WHERE a < 5 AND b < 5 AND c < 5 AND d < 5;
  Index Scan using aqo_test0_idx_a on aqo_test0
    Index Cond: (a < 5)
    Filter: ((b < 5) AND (c < 5) AND (d < 5))
- Using aqo: true
-(4 rows)
+(3 rows)
 
 DROP INDEX aqo_test0_idx_a;
 DROP TABLE aqo_test0;

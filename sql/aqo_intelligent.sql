@@ -207,6 +207,10 @@ EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c, t4.a AS d
 FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
 WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
 
+EXPLAIN verbose SELECT t1.a AS a, t2.a AS b, t3.a AS c, t4.a AS d
+FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
+WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
+
 DROP INDEX aqo_test0_idx_a;
 DROP TABLE aqo_test0;
 

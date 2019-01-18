@@ -92,8 +92,7 @@ WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
  Index Scan using aqo_test0_idx_a on aqo_test0  (cost=0.28..8.35 rows=3 width=16)
    Index Cond: (a < 3)
    Filter: ((b < 3) AND (c < 3) AND (d < 3))
- Using aqo: true
-(4 rows)
+(3 rows)
 
 EXPLAIN SELECT t1.a, t2.b, t3.c
 FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
@@ -110,8 +109,7 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
                Filter: (c < 1)
    ->  Seq Scan on aqo_test0 t3  (cost=0.00..41.02 rows=1 width=8)
          Filter: ((b < 1) AND (d < 0))
- Using aqo: true
-(11 rows)
+(10 rows)
 
 SET aqo.mode = 'disabled';
 EXPLAIN SELECT * FROM aqo_test0
