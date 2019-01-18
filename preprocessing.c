@@ -122,6 +122,7 @@ aqo_planner(Query *parse,
 				strlen(CREATE_EXTENSION_STARTSTRING_0)) == 0 ||
 		strncmp(query_text, CREATE_EXTENSION_STARTSTRING_1,
 				strlen(CREATE_EXTENSION_STARTSTRING_1)) == 0 ||
+		IsInParallelMode() ||
 		aqo_mode == AQO_MODE_DISABLED || isQueryUsingSystemRelation(parse))
 	{
 		disable_aqo_for_query();

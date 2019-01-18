@@ -146,6 +146,7 @@ add_query(int query_hash, bool learn_aqo, bool use_aqo,
 	{
 		CommandCounterIncrement();
 		simple_heap_delete(aqo_queries_heap, &(tuple->t_self));
+		PG_RE_THROW();
 	}
 	PG_END_TRY();
 
@@ -289,6 +290,7 @@ add_query_text(int query_hash, const char *query_text)
 	{
 		CommandCounterIncrement();
 		simple_heap_delete(aqo_query_texts_heap, &(tuple->t_self));
+		PG_RE_THROW();
 	}
 	PG_END_TRY();
 
@@ -480,6 +482,7 @@ update_fss(int fss_hash, int nrows, int ncols,
 		{
 			CommandCounterIncrement();
 			simple_heap_delete(aqo_data_heap, &(tuple->t_self));
+			PG_RE_THROW();
 		}
 		PG_END_TRY();
 	}
@@ -676,6 +679,7 @@ update_aqo_stat(int query_hash, QueryStat *stat)
 		{
 			CommandCounterIncrement();
 			simple_heap_delete(aqo_stat_heap, &(tuple->t_self));
+			PG_RE_THROW();
 		}
 		PG_END_TRY();
 	}
