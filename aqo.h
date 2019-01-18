@@ -105,7 +105,7 @@
  * Module storage.c is responsible for storage query settings and models
  * (i. e. all information which is used in extension).
  *
- * Copyright (c) 2016-2018, Postgres Professional
+ * Copyright (c) 2016-2019, Postgres Professional
  *
  * IDENTIFICATION
  *	  contrib/aqo/aqo.h

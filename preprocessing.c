@@ -239,7 +239,9 @@ void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 								params, planduration);
 	if (explain_aqo)
 	{
-		ExplainPropertyBool("Using aqo", true, es);
+		/* Report to user about aqo state only in verbose mode */
+		if (es->verbose)
+			ExplainPropertyBool("Using aqo", true, es);
 		explain_aqo = false;
 	}
 }
