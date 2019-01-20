@@ -326,10 +326,26 @@ aqo_copy_generic_path_info(PlannerInfo *root, Plan *dest, Path *src)
 {
 	bool		is_join_path;
 
+	if (prev_copy_generic_path_info_hook)
+		prev_copy_generic_path_info_hook(root, dest, src);
+
 	is_join_path = (src->type == T_NestPath || src->type == T_MergePath ||
 					src->type == T_HashPath);
 
-	dest->had_path = true;
+	if (dest->had_path)
+	{
+		/*
+		 * The convention is that any extension that sets had_path is also
+		 * responsible for setting path_clauses, path_jointype, path_relids,
+		 * path_parallel_workers, and was_parameterized.
+		 */
+		Assert(dest->path_clauses && dest->path_jointype &&
+			   dest->path_relids && dest->path_parallel_workers);
+		return;
+	}
+	else
+		dest->had_path = true;
+
 	if (is_join_path)
 	{
 		dest->path_clauses = ((JoinPath *) src)->joinrestrictinfo;
@@ -343,12 +359,10 @@ aqo_copy_generic_path_info(PlannerInfo *root, Plan *dest, Path *src)
 			);
 		dest->path_jointype = JOIN_INNER;
 	}
+
 	dest->path_relids = get_list_of_relids(root, src->parent->relids);
 	dest->path_parallel_workers = src->parallel_workers;
 	dest->was_parametrized = (src->param_info != NULL);
-
-	if (prev_copy_generic_path_info_hook)
-		prev_copy_generic_path_info_hook(root, dest, src);
 }
 
 /*
@@ -442,4 +456,9 @@ learn_query_stat(QueryDesc *queryDesc)
 		prev_ExecutorEnd_hook(queryDesc);
 	else
 		standard_ExecutorEnd(queryDesc);
+
+	/*
+	 * standard_ExecutorEnd clears the queryDesc->planstate. After this point no
+	 * one operation with the plan can be made.
+	 */
 }
