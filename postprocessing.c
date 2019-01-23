@@ -45,7 +45,7 @@ static void update_query_stat_row(double *et, int *et_size,
 					  double cardinality_error,
 					  int64 *n_exec);
 static void StoreToQueryContext(QueryDesc *queryDesc);
-static void ExtractFromQueryContext(QueryDesc *queryDesc);
+static bool ExtractFromQueryContext(QueryDesc *queryDesc);
 static void RemoveFromQueryContext(QueryDesc *queryDesc);
 
 /*
@@ -408,7 +408,8 @@ learn_query_stat(QueryDesc *queryDesc)
 	QueryStat  *stat = NULL;
 	instr_time	endtime;
 
-	ExtractFromQueryContext(queryDesc);
+	if (!ExtractFromQueryContext(queryDesc))
+		goto end;
 
 	if (query_context.explain_only)
 	{
@@ -486,6 +487,7 @@ learn_query_stat(QueryDesc *queryDesc)
 	}
 	RemoveFromQueryContext(queryDesc);
 
+end:
 	if (prev_ExecutorEnd_hook)
 		prev_ExecutorEnd_hook(queryDesc);
 	else
@@ -495,7 +497,6 @@ learn_query_stat(QueryDesc *queryDesc)
 	 * standard_ExecutorEnd clears the queryDesc->planstate. After this point no
 	 * one operation with the plan can be made.
 	 */
-//	ExtractFromQueryContext(queryDesc);
 }
 
 /*
@@ -531,20 +532,27 @@ StoreToQueryContext(QueryDesc *queryDesc)
 /*
  * Restore AQO data, related to the query.
  */
-static void
+static bool
 ExtractFromQueryContext(QueryDesc *queryDesc)
 {
 	EphemeralNamedRelation	enr;
-	int	qcsize = sizeof(QueryContextData);
-	MemoryContext	oldCxt;
 
-	Assert(queryDesc->queryEnv != NULL);
+	/* This is a very rare case when we don't load aqo as shared library during
+	 * startup perform 'CREATE EXTENSION aqo' command in the backend and first
+	 * query in any another backend is 'UPDATE aqo_queries...'. In this case
+	 * ExecutorEnd hook will be executed without ExecutorStart hook.
+	 */
+	if (queryDesc->queryEnv == NULL)
+		return false;
 
-	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
 	enr = get_ENR(queryDesc->queryEnv, AQOPrivateData);
-	memcpy(&query_context, enr->reldata, qcsize);
 
-	MemoryContextSwitchTo(oldCxt);
+	if (enr == NULL)
+		return false;
+
+	memcpy(&query_context, enr->reldata, sizeof(QueryContextData));
+
+	return true;
 }
 
 static void

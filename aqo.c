@@ -98,7 +98,6 @@ _PG_init(void)
 	ExplainOnePlan_hook							= print_into_explain;
 
 	init_deactivated_queries_storage();
-
 	AQOMemoryContext = AllocSetContextCreate(TopMemoryContext, "AQOMemoryContext", ALLOCSET_DEFAULT_SIZES);
 }
 
