@@ -723,7 +723,7 @@ update_aqo_stat(int query_hash, QueryStat *stat)
 void
 deform_matrix(Datum datum, double **matrix)
 {
-	ArrayType  *array = DatumGetArrayTypePCopy(datum);
+	ArrayType  *array = DatumGetArrayTypePCopy(PG_DETOAST_DATUM(datum));
 	int			nelems;
 	Datum	   *values;
 	int			rows;
@@ -734,11 +734,14 @@ deform_matrix(Datum datum, double **matrix)
 	deconstruct_array(array,
 					  FLOAT8OID, 8, FLOAT8PASSBYVAL, 'd',
 					  &values, NULL, &nelems);
-	rows = ARR_DIMS(array)[0];
-	cols = ARR_DIMS(array)[1];
-	for (i = 0; i < rows; ++i)
-		for (j = 0; j < cols; ++j)
-			matrix[i][j] = DatumGetFloat8(values[i * cols + j]);
+	if (nelems != 0)
+	{
+		rows = ARR_DIMS(array)[0];
+		cols = ARR_DIMS(array)[1];
+		for (i = 0; i < rows; ++i)
+			for (j = 0; j < cols; ++j)
+				matrix[i][j] = DatumGetFloat8(values[i * cols + j]);
+	}
 	pfree(values);
 	pfree(array);
 }
@@ -750,7 +753,7 @@ deform_matrix(Datum datum, double **matrix)
 void
 deform_vector(Datum datum, double *vector, int *nelems)
 {
-	ArrayType  *array = DatumGetArrayTypePCopy(datum);
+	ArrayType  *array = DatumGetArrayTypePCopy(PG_DETOAST_DATUM(datum));
 	Datum	   *values;
 	int			i;
 
