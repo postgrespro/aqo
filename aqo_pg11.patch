@@ -375,15 +375,6 @@ index 4debdad76f..03f1909bd0 100644
  
  	/* use parallel mode for parallel plans. */
  	root->glob->parallelModeNeeded = true;
-@@ -1574,7 +1576,7 @@ create_gather_merge_plan(PlannerInfo *root, GatherMergePath *best_path)
- 	gm_plan = makeNode(GatherMerge);
- 	gm_plan->plan.targetlist = tlist;
- 	gm_plan->num_workers = best_path->num_workers;
--	copy_generic_path_info(&gm_plan->plan, &best_path->path);
-+	copy_generic_path_info(root, &gm_plan->plan, &best_path->path);
- 
- 	/* Assign the rescan Param. */
- 	gm_plan->rescan_param = SS_assign_special_param(root);
 @@ -1702,7 +1704,7 @@ create_projection_plan(PlannerInfo *root, ProjectionPath *best_path, int flags)
  		/* We need a Result node */
  		plan = (Plan *) make_result(tlist, NULL, subplan);

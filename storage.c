@@ -855,6 +855,7 @@ my_simple_heap_update(Relation relation, ItemPointer otid, HeapTuple tup)
 			elog(ERROR, "unrecognized heap_update status: %u", result);
 			break;
 	}
+	return false;
 }
 
 
