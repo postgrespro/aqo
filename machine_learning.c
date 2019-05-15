@@ -15,8 +15,7 @@
 
 static double fs_distance(double *a, double *b, int len);
 static double fs_similarity(double dist);
-static void OkNNr_compute_weights(double *distances, int matrix_rows,
-					  double **w, double *w_sum, int **idx);
+static double compute_weights(double *distances, int nrows, double *w, int *idx);
 
 
 /*
@@ -51,40 +50,40 @@ fs_similarity(double dist)
  * Appeared as a separate function because of "don't repeat your code"
  * principle.
  */
-void
-OkNNr_compute_weights(double *distances, int matrix_rows,
-					  double **w, double *w_sum, int **idx)
+double
+compute_weights(double *distances, int nrows, double *w, int *idx)
 {
-	int			i,
-				j;
-	int			to_insert,
-				tmp;
+	int		i,
+			j;
+	int		to_insert,
+			tmp;
+	double	w_sum = 0;
 
-	*w_sum = 0;
-
-	*idx = palloc0(sizeof(**idx) * aqo_k);
 	for (i = 0; i < aqo_k; ++i)
-		(*idx)[i] = -1;
-	(*w) = palloc0(sizeof(**w) * aqo_k);
+		idx[i] = -1;
 
-	for (i = 0; i < matrix_rows; ++i)
+	/* Choose from all neighbors only several nearest objects */
+	for (i = 0; i < nrows; ++i)
 		for (j = 0; j < aqo_k; ++j)
-			if ((*idx)[j] == -1 || distances[i] < distances[(*idx)[j]])
+			if (idx[j] == -1 || distances[i] < distances[idx[j]])
 			{
 				to_insert = i;
 				for (; j < aqo_k; ++j)
 				{
-					tmp = (*idx)[j];
-					(*idx)[j] = to_insert;
+					tmp = idx[j];
+					idx[j] = to_insert;
 					to_insert = tmp;
 				}
 				break;
 			}
-	for (i = 0; i < aqo_k && (*idx)[i] != -1; ++i)
+
+	/* Compute weights by the nearest neighbors distances */
+	for (j = 0; j < aqo_k && idx[j] != -1; ++j)
 	{
-		(*w)[i] = fs_similarity(distances[(*idx)[i]]);
-		*w_sum += (*w)[i];
+		w[j] = fs_similarity(distances[idx[j]]);
+		w_sum += w[j];
 	}
+	return w_sum;
 }
 
 /*
@@ -94,23 +93,20 @@ OkNNr_compute_weights(double *distances, int matrix_rows,
  * positive targets are assumed.
  */
 double
-OkNNr_predict(int matrix_rows, int matrix_cols,
-			  double **matrix, double *targets,
-			  double *nw_features)
+OkNNr_predict(int nrows, int ncols, double **matrix, const double *targets,
+			  double *features)
 {
-	double	   *distances;
+	double	   distances[aqo_K];
 	int			i;
-	int		   *idx;
-	double	   *w;
+	int		   idx[aqo_K]; /* indexes of nearest neighbors */
+	double	   w[aqo_K];
 	double		w_sum;
 	double		result = 0;
 
-	distances = palloc0(sizeof(*distances) * matrix_rows);
+	for (i = 0; i < nrows; ++i)
+		distances[i] = fs_distance(matrix[i], features, ncols);
 
-	for (i = 0; i < matrix_rows; ++i)
-		distances[i] = fs_distance(matrix[i], nw_features, matrix_cols);
-
-	OkNNr_compute_weights(distances, matrix_rows, &w, &w_sum, &idx);
+	w_sum = compute_weights(distances, nrows, w, idx);
 
 	for (i = 0; i < aqo_k; ++i)
 		if (idx[i] != -1)
@@ -123,10 +119,6 @@ OkNNr_predict(int matrix_rows, int matrix_cols,
 	if (idx[0] == -1)
 		result = -1;
 
-	pfree(w);
-	pfree(distances);
-	pfree(idx);
-
 	return result;
 }
 
@@ -138,80 +130,102 @@ OkNNr_predict(int matrix_rows, int matrix_cols,
  * It is supposed that indexes of new lines are consequent numbers
  * starting from matrix_rows.
  */
-List *
-OkNNr_learn(int matrix_rows, int matrix_cols,
-			double **matrix, double *targets,
-			double *nw_features, double nw_target)
+int
+OkNNr_learn(int nrows, int nfeatures, double **matrix, double *targets,
+			double *features, double target)
 {
-	List	   *lst = NIL;
-	double	   *distances;
+	double	   distances[aqo_K];
 	int			i,
 				j;
-	int			min_distance_id = 0;
-	int		   *idx;
-	double	   *w;
-	double		w_sum;
-	double	   *cur_row;
-	double		coef1,
-				coef2;
-	double		result = 0;
+	int			mid = 0; /* index of row with minimum distance value */
+	int		   idx[aqo_K];
 
-	distances = palloc0(sizeof(*distances) * matrix_rows);
-
-	for (i = 0; i < matrix_rows; ++i)
+	/*
+	 * For each neighbor compute distance and search for nearest object.
+	 */
+	for (i = 0; i < nrows; ++i)
 	{
-		distances[i] = fs_distance(matrix[i], nw_features, matrix_cols);
-		if (distances[i] < distances[min_distance_id])
-			min_distance_id = i;
+		distances[i] = fs_distance(matrix[i], features, nfeatures);
+		if (distances[i] < distances[mid])
+			mid = i;
 	}
-	if (matrix_rows < aqo_K)
+
+	/*
+	 * We do not want to add new very similar neighbor. And we can't
+	 * replace data for the neighbor to avoid some fluctuations.
+	 * We will change it's row with linear smoothing by learning_rate.
+	 */
+	if (nrows != 0 && distances[mid] < object_selection_threshold)
 	{
-		if (matrix_rows != 0 && distances[min_distance_id] <
-			object_selection_object_threshold)
-		{
-			for (j = 0; j < matrix_cols; ++j)
-				matrix[min_distance_id][j] += learning_rate *
-					(nw_features[j] - matrix[min_distance_id][j]);
-			targets[min_distance_id] += learning_rate *
-				(nw_target - targets[min_distance_id]);
-			lst = lappend_int(lst, min_distance_id);
-		}
-		else
-		{
-			for (j = 0; j < matrix_cols; ++j)
-				matrix[matrix_rows][j] = nw_features[j];
-			targets[matrix_rows] = nw_target;
-			lst = lappend_int(lst, matrix_rows);
-		}
+		for (j = 0; j < nfeatures; ++j)
+			matrix[mid][j] += learning_rate * (features[j] - matrix[mid][j]);
+		targets[mid] += learning_rate * (target - targets[mid]);
+
+		return nrows;
+	}
+
+	if (nrows < aqo_K)
+	{
+		/* We can't reached limit of stored neighbors */
+
+		/*
+		 * Add new line into the matrix. We can do this because matrix_rows
+		 * is not the boundary of matrix. Matrix has aqo_K free lines
+		 */
+		for (j = 0; j < nfeatures; ++j)
+			matrix[nrows][j] = features[j];
+		targets[nrows] = target;
+
+		return nrows+1;
 	}
 	else
 	{
-		OkNNr_compute_weights(distances, matrix_rows, &w, &w_sum, &idx);
+		double	*feature;
+		double	avg_target = 0;
+		double	tc_coef; /* Target correction coefficient */
+		double	fc_coef; /* Feature correction coefficient */
+		double	w[aqo_K];
+		double	w_sum;
 
+		/*
+		 * We reaches limit of stored neighbors and can't simply add new line
+		 * at the matrix. Also, we can't simply delete one of the stored
+		 * neighbors.
+		 */
+
+		/*
+		 * Select nearest neighbors for the new object. store its indexes in
+		 * idx array. Compute weight for each nearest neighbor and total weight
+		 * of all nearest neighbor.
+		 */
+		w_sum = compute_weights(distances, nrows, w, idx);
+
+		/*
+		 * Compute average value for target by nearest neighbors. We need to
+		 * check idx[i] != -1 because we may have smaller value of nearest
+		 * neighbors than aqo_k.
+		 * Semantics of coef1: it is defined distance between new object and
+		 * this superposition value (with linear smoothing).
+		 * */
 		for (i = 0; i < aqo_k && idx[i] != -1; ++i)
-			result += targets[idx[i]] * w[i] / w_sum;
-		coef1 = learning_rate * (result - nw_target);
+			avg_target += targets[idx[i]] * w[i] / w_sum;
+		tc_coef = learning_rate * (avg_target - target);
 
+		/* Modify targets and features of each nearest neighbor row. */
 		for (i = 0; i < aqo_k && idx[i] != -1; ++i)
 		{
-			coef2 = coef1 * (targets[idx[i]] - result) * w[i] * w[i] /
-				sqrt(matrix_cols) / w_sum;
+			fc_coef = tc_coef * (targets[idx[i]] - avg_target) * w[i] * w[i] /
+				sqrt(nfeatures) / w_sum;
 
-			targets[idx[i]] -= coef1 * w[i] / w_sum;
-			for (j = 0; j < matrix_cols; ++j)
+			targets[idx[i]] -= tc_coef * w[i] / w_sum;
+			for (j = 0; j < nfeatures; ++j)
 			{
-				cur_row = matrix[idx[i]];
-				cur_row[j] -= coef2 * (nw_features[j] - cur_row[j]) /
+				feature = matrix[idx[i]];
+				feature[j] -= fc_coef * (features[j] - feature[j]) /
 					distances[idx[i]];
 			}
-
-			lst = lappend_int(lst, idx[i]);
 		}
-
-		pfree(w);
-		pfree(idx);
 	}
 
-	pfree(distances);
-	return lst;
+	return nrows;
 }

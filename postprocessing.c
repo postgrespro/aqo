@@ -1,4 +1,5 @@
 #include "aqo.h"
+#include "access/parallel.h"
 #include "utils/queryenvironment.h"
 
 /*****************************************************************************
@@ -11,6 +12,13 @@
  *
  *****************************************************************************/
 
+typedef struct
+{
+	List *clauselist;
+	List *selectivities;
+	List *relidslist;
+} aqo_obj_stat;
+
 static double cardinality_sum_errors;
 static int	cardinality_num_objects;
 
@@ -21,7 +29,7 @@ static char *AQOPrivateData = "AQOPrivateData";
 
 
 /* Query execution statistics collecting utilities */
-static void atomic_fss_learn_step(int fss_hash, int matrix_cols,
+static void atomic_fss_learn_step(int fss_hash, int ncols,
 					  double **matrix, double *targets,
 					  double *features, double target);
 static void learn_sample(List *clauselist,
@@ -33,10 +41,6 @@ static List *restore_selectivities(List *clauselist,
 					  List *relidslist,
 					  JoinType join_type,
 					  bool was_parametrized);
-static void collect_planstat(PlanState *p, List **other_plans,
-				 List **clauselist,
-				 List **selectivities,
-				 List **relidslist);
 static void update_query_stat_row(double *et, int *et_size,
 					  double *pt, int *pt_size,
 					  double *ce, int *ce_size,
@@ -53,45 +57,32 @@ static void RemoveFromQueryContext(QueryDesc *queryDesc);
  * function for one feature subspace.
  * matrix and targets are just preallocated memory for computations.
  */
-void
-atomic_fss_learn_step(int fss_hash, int matrix_cols,
+static void
+atomic_fss_learn_step(int fss_hash, int ncols,
 					  double **matrix, double *targets,
 					  double *features, double target)
 {
-	int			matrix_rows;
-	int			new_matrix_rows;
-	List	   *changed_lines = NIL;
-	ListCell   *l;
+	int	nrows;
 
-	if (!load_fss(fss_hash, matrix_cols, matrix, targets, &matrix_rows))
-		matrix_rows = 0;
+	if (!load_fss(fss_hash, ncols, matrix, targets, &nrows))
+		nrows = 0;
 
-	changed_lines = OkNNr_learn(matrix_rows, matrix_cols,
-								matrix, targets,
-								features, target);
-
-	new_matrix_rows = matrix_rows;
-	foreach(l, changed_lines)
-	{
-		if (lfirst_int(l) >= new_matrix_rows)
-			new_matrix_rows = lfirst_int(l) + 1;
-	}
-	update_fss(fss_hash, new_matrix_rows, matrix_cols, matrix, targets,
-			   matrix_rows, changed_lines);
+	nrows = OkNNr_learn(nrows, ncols, matrix, targets, features, target);
+	update_fss(fss_hash, nrows, ncols, matrix, targets);
 }
 
 /*
  * For given object (i. e. clauselist, selectivities, relidslist, predicted and
  * true cardinalities) performs learning procedure.
  */
-void
+static void
 learn_sample(List *clauselist, List *selectivities, List *relidslist,
 			 double true_cardinality, double predicted_cardinality)
 {
 	int			fss_hash;
-	int			matrix_cols;
-	double	  **matrix;
-	double	   *targets;
+	int			nfeatures;
+	double	  *matrix[aqo_K];
+	double	   targets[aqo_K];
 	double	   *features;
 	double		target;
 	int			i;
@@ -99,34 +90,32 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 	cardinality_sum_errors += fabs(log(predicted_cardinality) -
 								   log(true_cardinality));
 	cardinality_num_objects += 1;
-
+/*
+ * Suppress the optimization for debug purposes.
 	if (fabs(log(predicted_cardinality) - log(true_cardinality)) <
 		object_selection_prediction_threshold)
+	{
 		return;
-
+	}
+*/
 	target = log(true_cardinality);
 
-	get_fss_for_object(clauselist, selectivities, relidslist,
-					   &matrix_cols, &fss_hash, &features);
+	fss_hash = get_fss_for_object(clauselist, selectivities, relidslist,
+					   &nfeatures, &features);
 
 	/* In the case of zero matrix we not need to learn */
-	if (matrix_cols > 0)
-	{
-		matrix = palloc(sizeof(*matrix) * aqo_K);
+
+	if (nfeatures > 0)
 		for (i = 0; i < aqo_K; ++i)
-			matrix[i] = palloc0(sizeof(**matrix) * matrix_cols);
-		targets = palloc0(sizeof(*targets) * aqo_K);
+			matrix[i] = palloc(sizeof(double) * nfeatures);
 
-		/* Here should be critical section */
-		atomic_fss_learn_step(fss_hash, matrix_cols, matrix, targets,
-															features, target);
-		/* Here should be the end of critical section */
+	/* Here should be critical section */
+	atomic_fss_learn_step(fss_hash, nfeatures, matrix, targets, features, target);
+	/* Here should be the end of critical section */
 
+	if (nfeatures > 0)
 		for (i = 0; i < aqo_K; ++i)
 			pfree(matrix[i]);
-		pfree(matrix);
-		pfree(targets);
-	}
 
 	pfree(features);
 }
@@ -197,7 +186,7 @@ restore_selectivities(List *clauselist,
 
 /*
  * Walks over obtained PlanState tree, collects relation objects with their
- * clauses, selectivivties and relids and passes each object to learn_sample.
+ * clauses, selectivities and relids and passes each object to learn_sample.
  *
  * Returns clauselist, selectivities and relids.
  * Store observed subPlans into other_plans list.
@@ -206,75 +195,77 @@ restore_selectivities(List *clauselist,
  * because the plan may be stored in the cache after this. Operation
  * list_concat() changes input lists and may destruct cached plan.
  */
-void
-collect_planstat(PlanState *p, List **other_plans,
-				 List **clauselist, List **selectivities, List **relidslist)
+static bool
+learnOnPlanState(PlanState *p, void *context)
 {
-	double		learn_rows;
-	List	   *cur_clauselist = NIL;
-	List	   *cur_relidslist = NIL;
-	List	   *cur_selectivities = NIL;
-	ListCell   *l;
+	aqo_obj_stat *ctx = (aqo_obj_stat *) context;
 
-	foreach(l, p->subPlan)
-		*other_plans = lappend(*other_plans, lfirst(l));
+	planstate_tree_walker(p, learnOnPlanState, context);
 
-	if (p->lefttree == NULL && p->righttree != NULL)
-	{
-		elog(WARNING, "failed to parse planstat");
-		return;
-	}
-	if (p->lefttree != NULL && p->righttree == NULL)
-		collect_planstat(p->lefttree, other_plans,
-						 clauselist, selectivities, relidslist);
-	if (p->lefttree != NULL && p->righttree != NULL)
-	{
-		collect_planstat(p->lefttree, other_plans,
-						 clauselist, selectivities, relidslist);
-		collect_planstat(p->righttree, other_plans,
-					   &cur_clauselist, &cur_selectivities, &cur_relidslist);
-		(*clauselist) = list_concat(cur_clauselist, (*clauselist));
-		(*relidslist) = list_concat(cur_relidslist, (*relidslist));
-		(*selectivities) = list_concat(cur_selectivities, (*selectivities));
-	}
-
+	/*
+	 * Some nodes inserts after planning step (See T_Hash node type).
+	 * In this case we have'nt AQO prediction and fss record.
+	 */
 	if (p->plan->had_path)
 	{
+		List *cur_selectivities;
+
 		cur_selectivities = restore_selectivities(p->plan->path_clauses,
 												  p->plan->path_relids,
 												  p->plan->path_jointype,
 												  p->plan->was_parametrized);
-
-		(*clauselist) = list_concat(list_copy(p->plan->path_clauses), (*clauselist));
+		ctx->selectivities = list_concat(ctx->selectivities, cur_selectivities);
+		ctx->clauselist = list_concat(ctx->clauselist,
+											list_copy(p->plan->path_clauses));
 		if (p->plan->path_relids != NIL)
 			/*
 			 * This plan can be stored as cached plan. In the case we will have
 			 * bogus path_relids field (changed by list_concat routine) at the
 			 * next usage (and aqo-learn) of this plan.
 			 */
-			(*relidslist) = list_copy(p->plan->path_relids);
-		(*selectivities) = list_concat(cur_selectivities, (*selectivities));
-		if (p->instrument && (p->righttree != NULL ||
-							  p->lefttree == NULL ||
+			ctx->relidslist = list_copy(p->plan->path_relids);
+
+		if (p->instrument && (p->righttree != NULL || p->lefttree == NULL ||
 							  p->plan->path_clauses != NIL))
 		{
+			double learn_rows;
+
 			InstrEndLoop(p->instrument);
-			if (p->instrument->nloops >= 0.5)
+			if (p->instrument->nloops > 0)
 			{
 				learn_rows = p->instrument->ntuples / p->instrument->nloops;
-				if (p->plan->path_parallel_workers > 0 && p->lefttree == NULL && p->righttree == NULL)
+
+				if (p->plan->parallel_aware || (p->plan->path_parallel_workers > 0 &&
+					(nodeTag(p->plan) == T_HashJoin ||
+					nodeTag(p->plan) == T_MergeJoin ||
+					nodeTag(p->plan) == T_NestLoop)))
 					learn_rows *= (p->plan->path_parallel_workers + 1);
-				if (learn_rows < 1)
-					learn_rows = 1;
+
+				/* It is needed for correct exp(result) calculation. */
+				if (learn_rows < 1.)
+					learn_rows = 1.;
 			}
 			else
-				learn_rows = 1;
+			{
+				/*
+				 * LAV: I found only one case for this code: if query returns
+				 * with error. May be we will process this case and not learn
+				 * AQO on the query?
+				 */
+				learn_rows = 1.;
+			}
 
-			if (!(p->instrument->ntuples == 0 && p->instrument->nloops == 0))
-				learn_sample(*clauselist, *selectivities, *relidslist,
+			/*
+			 * Some execution logic optimizations can lead to the situation
+			 * than a subtree will never be visited.
+			 */
+			if (!(p->instrument->ntuples <= 0. && p->instrument->nloops <= 0.))
+				learn_sample(ctx->clauselist, ctx->selectivities, ctx->relidslist,
 							 learn_rows, p->plan->plan_rows);
 		}
 	}
+
+	return false;
 }
 
 /*
@@ -299,14 +290,18 @@ update_query_stat_row(double *et, int *et_size,
 		*ce_size = (*ce_size >= aqo_stat_size) ? aqo_stat_size : (*ce_size + 1);
 		ce[*ce_size - 1] = cardinality_error;
 	}
+
 	if (*et_size >= aqo_stat_size)
 		for (i = 1; i < aqo_stat_size; ++i)
 			et[i - 1] = et[i];
+
 	*et_size = (*et_size >= aqo_stat_size) ? aqo_stat_size : (*et_size + 1);
 	et[*et_size - 1] = execution_time;
+
 	if (*pt_size >= aqo_stat_size)
 		for (i = 1; i < aqo_stat_size; ++i)
 			pt[i - 1] = pt[i];
+
 	*pt_size = (*pt_size >= aqo_stat_size) ? aqo_stat_size : (*pt_size + 1);
 	pt[*pt_size - 1] = planning_time;
 	(*n_exec)++;
@@ -326,17 +321,20 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 {
 	instr_time	current_time;
 
-	INSTR_TIME_SET_CURRENT(current_time);
-	INSTR_TIME_SUBTRACT(current_time, query_context.query_starttime);
-	query_context.query_planning_time = INSTR_TIME_GET_DOUBLE(current_time);
+	if (query_context.use_aqo || query_context.learn_aqo)
+	{
+		INSTR_TIME_SET_CURRENT(current_time);
+		INSTR_TIME_SUBTRACT(current_time, query_context.query_starttime);
+		query_context.query_planning_time = INSTR_TIME_GET_DOUBLE(current_time);
 
-	query_context.explain_only = ((eflags & EXEC_FLAG_EXPLAIN_ONLY) != 0);
+		query_context.explain_only = ((eflags & EXEC_FLAG_EXPLAIN_ONLY) != 0);
 
-	if (query_context.learn_aqo && !query_context.explain_only)
-		queryDesc->instrument_options |= INSTRUMENT_ROWS;
+		if (query_context.learn_aqo && !query_context.explain_only)
+			queryDesc->instrument_options |= INSTRUMENT_ROWS;
 
-	/* Save all query-related parameters into the query context. */
-	StoreToQueryContext(queryDesc);
+		/* Save all query-related parameters into the query context. */
+		StoreToQueryContext(queryDesc);
+	}
 
 	if (prev_ExecutorStart_hook)
 		prev_ExecutorStart_hook(queryDesc, eflags);
@@ -345,71 +343,28 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 }
 
 /*
- * Converts path info into plan node for collecting it after query execution.
- */
-void
-aqo_copy_generic_path_info(PlannerInfo *root, Plan *dest, Path *src)
-{
-	bool		is_join_path;
-
-	if (prev_copy_generic_path_info_hook)
-		prev_copy_generic_path_info_hook(root, dest, src);
-
-	is_join_path = (src->type == T_NestPath || src->type == T_MergePath ||
-					src->type == T_HashPath);
-
-	if (dest->had_path)
-	{
-		/*
-		 * The convention is that any extension that sets had_path is also
-		 * responsible for setting path_clauses, path_jointype, path_relids,
-		 * path_parallel_workers, and was_parameterized.
-		 */
-		Assert(dest->path_clauses && dest->path_jointype &&
-			   dest->path_relids && dest->path_parallel_workers);
-		return;
-	}
-	else
-		dest->had_path = true;
-
-	if (is_join_path)
-	{
-		dest->path_clauses = ((JoinPath *) src)->joinrestrictinfo;
-		dest->path_jointype = ((JoinPath *) src)->jointype;
-	}
-	else
-	{
-		dest->path_clauses = list_concat(
-									list_copy(src->parent->baserestrictinfo),
-						 src->param_info ? src->param_info->ppi_clauses : NIL
-			);
-		dest->path_jointype = JOIN_INNER;
-	}
-	dest->path_relids = get_list_of_relids(root, src->parent->relids);
-	dest->path_parallel_workers = src->parallel_workers;
-	dest->was_parametrized = (src->param_info != NULL);
-}
-
-/*
  * General hook which runs before ExecutorEnd and collects query execution
  * cardinality statistics.
  * Also it updates query execution statistics in aqo_query_stat.
  */
 void
-learn_query_stat(QueryDesc *queryDesc)
+aqo_ExecutorEnd(QueryDesc *queryDesc)
 {
-	List	   *other_plans = NIL;
-	PlanState  *to_walk;
-	List	   *tmp_clauselist = NIL;
-	List	   *tmp_relidslist = NIL;
-	List	   *tmp_selectivities = NIL;
 	double		totaltime;
 	double		cardinality_error;
 	QueryStat  *stat = NULL;
 	instr_time	endtime;
 
 	if (!ExtractFromQueryContext(queryDesc))
+		/* AQO keep all query-related preferences at the query context.
+		 * It is needed to prevent from possible recursive changes, at
+		 * preprocessing stage of subqueries.
+		 * If context not exist we assume AQO was disabled at preprocessing
+		 * stage for this query.
+		 */
 		goto end;
+
+	Assert(!IsParallelWorker());
 
 	if (query_context.explain_only)
 	{
@@ -419,19 +374,12 @@ learn_query_stat(QueryDesc *queryDesc)
 
 	if (query_context.learn_aqo)
 	{
-		cardinality_sum_errors = 0;
-		cardinality_num_objects = 0;
+		aqo_obj_stat ctx = {NIL, NIL, NIL};
 
-		other_plans = lappend(other_plans, queryDesc->planstate);
-		while (list_length(other_plans) != 0)
-		{
-			to_walk = lfirst(list_head(other_plans));
-			if (to_walk->type == T_SubPlanState)
-				to_walk = ((SubPlanState *) to_walk)->planstate;
-			collect_planstat(to_walk, &other_plans, &tmp_clauselist,
-							 &tmp_selectivities, &tmp_relidslist);
-			other_plans = list_delete_first(other_plans);
-		}
+		cardinality_sum_errors = 0.;
+		cardinality_num_objects = 0;
+		cnt = 0;
+		learnOnPlanState(queryDesc->planstate, (void *) &ctx);
 	}
 
 	if (query_context.collect_stat)
@@ -439,13 +387,13 @@ learn_query_stat(QueryDesc *queryDesc)
 		INSTR_TIME_SET_CURRENT(endtime);
 		INSTR_TIME_SUBTRACT(endtime, query_context.query_starttime);
 		totaltime = INSTR_TIME_GET_DOUBLE(endtime);
-		if (query_context.learn_aqo && cardinality_num_objects)
+		if (query_context.learn_aqo && cardinality_num_objects > 0)
 			cardinality_error = cardinality_sum_errors /
 				cardinality_num_objects;
 		else
 			cardinality_error = -1;
 
-		stat = get_aqo_stat(query_context.fspace_hash);
+		stat = get_aqo_stat(query_context.query_hash);
 		if (stat != NULL)
 		{
 			if (query_context.use_aqo)
@@ -497,6 +445,63 @@ end:
 	 * standard_ExecutorEnd clears the queryDesc->planstate. After this point no
 	 * one operation with the plan can be made.
 	 */
+}
+
+/*
+ * Converts path info into plan node for collecting it after query execution.
+ */
+void
+aqo_copy_generic_path_info(PlannerInfo *root, Plan *dest, Path *src)
+{
+	bool		is_join_path;
+
+	if (prev_copy_generic_path_info_hook)
+		prev_copy_generic_path_info_hook(root, dest, src);
+
+	is_join_path = (src->type == T_NestPath || src->type == T_MergePath ||
+					src->type == T_HashPath);
+
+	if (dest->had_path)
+	{
+		/*
+		 * The convention is that any extension that sets had_path is also
+		 * responsible for setting path_clauses, path_jointype, path_relids,
+		 * path_parallel_workers, and was_parameterized.
+		 */
+		Assert(dest->path_clauses && dest->path_jointype &&
+			   dest->path_relids && dest->path_parallel_workers);
+		return;
+	}
+
+	if (is_join_path)
+	{
+		dest->path_clauses = ((JoinPath *) src)->joinrestrictinfo;
+		dest->path_jointype = ((JoinPath *) src)->jointype;
+	}
+	else
+	{
+		dest->path_clauses = list_concat(
+									list_copy(src->parent->baserestrictinfo),
+						 src->param_info ? src->param_info->ppi_clauses : NIL);
+		dest->path_jointype = JOIN_INNER;
+	}
+
+	dest->path_relids = get_list_of_relids(root, src->parent->relids);
+	dest->path_parallel_workers = src->parallel_workers;
+	dest->was_parametrized = (src->param_info != NULL);
+
+	if (src->param_info)
+	{
+		dest->predicted_cardinality = src->param_info->predicted_ppi_rows;
+		dest->fss_hash = src->param_info->fss_ppi_hash;
+	}
+	else
+	{
+		dest->predicted_cardinality = src->parent->predicted_cardinality;
+		dest->fss_hash = src->parent->fss_hash;
+	}
+
+	dest->had_path = true;
 }
 
 /*
@@ -558,9 +563,8 @@ ExtractFromQueryContext(QueryDesc *queryDesc)
 static void
 RemoveFromQueryContext(QueryDesc *queryDesc)
 {
-	EphemeralNamedRelation	enr = get_ENR(queryDesc->queryEnv, AQOPrivateData);
+	EphemeralNamedRelation enr = get_ENR(queryDesc->queryEnv, AQOPrivateData);
 	unregister_ENR(queryDesc->queryEnv, AQOPrivateData);
 	pfree(enr->reldata);
 	pfree(enr);
-
 }

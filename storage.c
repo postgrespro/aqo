@@ -293,6 +293,8 @@ add_query_text(int query_hash, const char *query_text)
 	{
 		CommandCounterIncrement();
 		simple_heap_delete(aqo_query_texts_heap, &(tuple->t_self));
+		index_close(query_index_rel, lockmode);
+		heap_close(aqo_query_texts_heap, lockmode);
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
@@ -320,8 +322,7 @@ add_query_text(int query_hash, const char *query_text)
  *			objects in the given feature space
  */
 bool
-load_fss(int fss_hash, int ncols,
-		 double **matrix, double *targets, int *rows)
+load_fss(int fss_hash, int ncols, double **matrix, double *targets, int *rows)
 {
 	RangeVar   *aqo_data_table_rv;
 	Relation	aqo_data_heap;
@@ -378,7 +379,10 @@ load_fss(int fss_hash, int ncols,
 
 		if (DatumGetInt32(values[2]) == ncols)
 		{
-			deform_matrix(values[3], matrix);
+			if (ncols > 0)
+				/* The case than an object has not any filters, no selectivities. */
+				deform_matrix(values[3], matrix);
+
 			deform_vector(values[4], targets, rows);
 		}
 		else
@@ -408,13 +412,9 @@ load_fss(int fss_hash, int ncols,
  * 'fss_hash' specifies the feature subspace
  * 'nrows' x 'ncols' is the shape of 'matrix'
  * 'targets' is vector of size 'nrows'
- * 'old_nrows' is previous number of rows in matrix
- * 'changed_rows' is an integer list of changed lines
  */
 bool
-update_fss(int fss_hash, int nrows, int ncols,
-		   double **matrix, double *targets,
-		   int old_nrows, List *changed_rows)
+update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets)
 {
 	RangeVar   *aqo_data_table_rv;
 	Relation	aqo_data_heap;
@@ -473,7 +473,12 @@ update_fss(int fss_hash, int nrows, int ncols,
 		values[0] = Int32GetDatum(query_context.fspace_hash);
 		values[1] = Int32GetDatum(fss_hash);
 		values[2] = Int32GetDatum(ncols);
-		values[3] = PointerGetDatum(form_matrix(matrix, nrows, ncols));
+
+		if (ncols > 0)
+			values[3] = PointerGetDatum(form_matrix(matrix, nrows, ncols));
+		else
+			isnull[3] = true;
+
 		values[4] = PointerGetDatum(form_vector(targets, nrows));
 		tuple = heap_form_tuple(tuple_desc, values, isnull);
 		PG_TRY();
@@ -493,7 +498,12 @@ update_fss(int fss_hash, int nrows, int ncols,
 	else
 	{
 		heap_deform_tuple(tuple, aqo_data_heap->rd_att, values, isnull);
-		values[3] = PointerGetDatum(form_matrix(matrix, nrows, ncols));
+
+		if (ncols > 0)
+			values[3] = PointerGetDatum(form_matrix(matrix, nrows, ncols));
+		else
+			isnull[3] = true;
+
 		values[4] = PointerGetDatum(form_vector(targets, nrows));
 		nw_tuple = heap_modify_tuple(tuple, tuple_desc,
 									 values, isnull, replace);

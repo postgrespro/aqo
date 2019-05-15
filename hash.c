@@ -67,9 +67,9 @@ get_query_hash(Query *parse, const char *query_text)
  *		creates and computes fss_hash
  *		transforms selectivities to features
  */
-void
+int
 get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
-				   int *nfeatures, int *fss_hash, double **features)
+				   int *nfeatures, double **features)
 {
 	int			n;
 	int		   *clause_hashes;
@@ -91,6 +91,7 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 				m;
 	int			sh = 0,
 				old_sh;
+	int fss_hash;
 
 	n = list_length(clauselist);
 
@@ -148,11 +149,11 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 	*nfeatures = n - sh;
 	(*features) = repalloc(*features, (*nfeatures) * sizeof(**features));
 
+	/* Generate feature subspace hash */
 	clauses_hash = get_int_array_hash(sorted_clauses, *nfeatures);
 	eclasses_hash = get_int_array_hash(eclass_hash, nargs);
 	relidslist_hash = get_relidslist_hash(relidslist);
-
-	*fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relidslist_hash);
+	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relidslist_hash);
 
 	pfree(clause_hashes);
 	pfree(sorted_clauses);
@@ -161,6 +162,7 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 	pfree(clause_has_consts);
 	pfree(args_hash);
 	pfree(eclass_hash);
+	return fss_hash;
 }
 
 /*

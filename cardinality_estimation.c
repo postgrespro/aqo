@@ -13,38 +13,42 @@
  * General method for prediction the cardinality of given relation.
  */
 double
-predict_for_relation(List *restrict_clauses, List *selectivities, List *relids)
+predict_for_relation(List *restrict_clauses, List *selectivities, List *relids, int *fss_hash)
 {
-	int			nfeatures;
-	int			fss_hash;
-	double	  **matrix;
-	double	   *target;
-	double	   *features;
-	double		result;
-	int			rows;
-	int			i;
+	int		nfeatures;
+	double	*matrix[aqo_K];
+	double	targets[aqo_K];
+	double	*features;
+	double	result;
+	int		rows;
+	int		i;
 
-	get_fss_for_object(restrict_clauses, selectivities, relids,
-					   &nfeatures, &fss_hash, &features);
+	*fss_hash = get_fss_for_object(restrict_clauses, selectivities, relids,
+														&nfeatures, &features);
 
-	matrix = palloc(sizeof(*matrix) * aqo_K);
-	for (i = 0; i < aqo_K; ++i)
-		matrix[i] = palloc0(sizeof(**matrix) * nfeatures);
-	target = palloc0(sizeof(*target) * aqo_K);
+	if (nfeatures > 0)
+		for (i = 0; i < aqo_K; ++i)
+			matrix[i] = palloc0(sizeof(**matrix) * nfeatures);
 
-	if (load_fss(fss_hash, nfeatures, matrix, target, &rows))
-		result = OkNNr_predict(rows, nfeatures, matrix, target, features);
+	if (load_fss(*fss_hash, nfeatures, matrix, targets, &rows))
+		result = OkNNr_predict(rows, nfeatures, matrix, targets, features);
 	else
+	{
+		/*
+		 * Due to planning optimizer tries to build many alternate paths. Many
+		 * of these not used in final query execution path. Consequently, only
+		 * small part of paths was used for AQO learning and fetch into the AQO
+		 * knowledge base.
+		 */
 		result = -1;
+	}
 
 	pfree(features);
-	for (i = 0; i < aqo_K; ++i)
-		pfree(matrix[i]);
-	pfree(matrix);
-	pfree(target);
-	list_free_deep(selectivities);
-	list_free(restrict_clauses);
-	list_free(relids);
+	if (nfeatures > 0)
+	{
+		for (i = 0; i < aqo_K; ++i)
+			pfree(matrix[i]);
+	}
 
 	if (result < 0)
 		return -1;

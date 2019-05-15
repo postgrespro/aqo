@@ -133,6 +133,7 @@
 #include "executor/execdesc.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
+#include "optimizer/pathnode.h"
 #include "optimizer/planmain.h"
 #include "optimizer/planner.h"
 #include "optimizer/cost.h"
@@ -144,7 +145,6 @@
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
-#include "utils/tqual.h"
 #include "utils/fmgroids.h"
 #include "utils/snapmgr.h"
 
@@ -165,11 +165,19 @@ typedef enum
 	AQO_MODE_CONTROLLED,
 	/* Creates new feature space for each query type without auto-tuning */
 	AQO_MODE_LEARN,
+	/* Use only current AQO estimations, without learning or tuning */
+	AQO_MODE_FIXED,
 	/* Aqo is disabled for all queries */
 	AQO_MODE_DISABLED,
 }	AQO_MODE;
 extern int	aqo_mode;
 
+/*
+ * It is mostly needed for auto tuning of query. with auto tuning mode aqo
+ * checks stability of last executions of the query, bad influence of strong
+ * cardinality estimation on query execution (planner bug?) and so on.
+ * It can induce aqo to suppress machine learning for this query.
+ */
 typedef struct
 {
 	double	   *execution_time_with_aqo;
@@ -178,12 +186,14 @@ typedef struct
 	double	   *planning_time_without_aqo;
 	double	   *cardinality_error_with_aqo;
 	double	   *cardinality_error_without_aqo;
+
 	int			execution_time_with_aqo_size;
 	int			execution_time_without_aqo_size;
 	int			planning_time_with_aqo_size;
 	int			planning_time_without_aqo_size;
 	int			cardinality_error_with_aqo_size;
 	int			cardinality_error_without_aqo_size;
+
 	int64		executions_with_aqo;
 	int64		executions_without_aqo;
 }	QueryStat;
@@ -205,6 +215,9 @@ typedef struct QueryContextData
 	double		query_planning_time;
 } QueryContextData;
 
+extern double predicted_ppi_rows;
+extern double fss_ppi_hash;
+
 /* Parameters of autotuning */
 extern int	aqo_stat_size;
 extern int	auto_tuning_window_size;
@@ -213,11 +226,12 @@ extern int	auto_tuning_max_iterations;
 extern int	auto_tuning_infinite_loop;
 
 /* Machine learning parameters */
-extern double object_selection_prediction_threshold;
-extern double object_selection_object_threshold;
-extern double learning_rate;
+#define	aqo_K	(30)
+
+extern const double object_selection_prediction_threshold;
+extern const double object_selection_threshold;
+extern const double learning_rate;
 extern int	aqo_k;
-extern int	aqo_K;
 extern double log_selectivity_lower_bound;
 
 /* Parameters for current query */
@@ -244,11 +258,12 @@ extern		copy_generic_path_info_hook_type
 			prev_copy_generic_path_info_hook;
 extern ExplainOnePlan_hook_type prev_ExplainOnePlan_hook;
 
+extern void ppi_hook(ParamPathInfo *ppi);
 
 /* Hash functions */
 int			get_query_hash(Query *parse, const char *query_text);
-void get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
-				   int *nfeatures, int *fss_hash, double **features);
+extern int get_fss_for_object(List *clauselist, List *selectivities,
+						List *relidslist, int *nfeatures, double **features);
 void		get_eclasses(List *clauselist, int *nargs, int **args_hash, int **eclass_hash);
 int			get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash);
 
@@ -264,9 +279,8 @@ bool update_query(int query_hash, bool learn_aqo, bool use_aqo,
 bool		add_query_text(int query_hash, const char *query_text);
 bool load_fss(int fss_hash, int ncols,
 		 double **matrix, double *targets, int *rows);
-bool update_fss(int fss_hash, int nrows, int ncols,
-		   double **matrix, double *targets,
-		   int old_nrows, List *changed_rows);
+extern bool update_fss(int fss_hash, int nrows, int ncols,
+					   double **matrix, double *targets);
 QueryStat  *get_aqo_stat(int query_hash);
 void		update_aqo_stat(int query_hash, QueryStat * stat);
 void		init_deactivated_queries_storage(void);
@@ -288,7 +302,7 @@ void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 void		disable_aqo_for_query(void);
 
 /* Cardinality estimation hooks */
-void		aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel);
+extern void aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel);
 double aqo_get_parameterized_baserel_size(PlannerInfo *root,
 								   RelOptInfo *rel,
 								   List *param_clauses);
@@ -314,22 +328,21 @@ List	   *get_list_of_relids(PlannerInfo *root, Relids relids);
 List	   *get_path_clauses(Path *path, PlannerInfo *root, List **selectivities);
 
 /* Cardinality estimation */
-double predict_for_relation(List *restrict_clauses,
-					 List *selectivities,
-					 List *relids);
+double predict_for_relation(List *restrict_clauses, List *selectivities,
+					 List *relids, int *fss_hash);
 
 /* Query execution statistics collecting hooks */
 void		aqo_ExecutorStart(QueryDesc *queryDesc, int eflags);
 void		aqo_copy_generic_path_info(PlannerInfo *root, Plan *dest, Path *src);
-void		learn_query_stat(QueryDesc *queryDesc);
+void		aqo_ExecutorEnd(QueryDesc *queryDesc);
 
 /* Machine learning techniques */
-double OkNNr_predict(int matrix_rows, int matrix_cols,
-			  double **matrix, double *targets,
-			  double *nw_features);
-List *OkNNr_learn(int matrix_rows, int matrix_cols,
+extern double OkNNr_predict(int nrows, int ncols,
+							double **matrix, const double *targets,
+							double *features);
+extern int OkNNr_learn(int matrix_rows, int matrix_cols,
 			double **matrix, double *targets,
-			double *nw_features, double nw_target);
+			double *features, double target);
 
 /* Automatic query tuning */
 void		automatical_query_tuning(int query_hash, QueryStat * stat);

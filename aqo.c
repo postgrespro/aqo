@@ -14,6 +14,7 @@ static const struct config_enum_entry format_options[] = {
 	{"forced", AQO_MODE_FORCED, false},
 	{"controlled", AQO_MODE_CONTROLLED, false},
 	{"learn", AQO_MODE_LEARN, false},
+	{"fixed", AQO_MODE_FIXED, false},
 	{"disabled", AQO_MODE_DISABLED, false},
 	{NULL, 0, false}
 };
@@ -28,11 +29,24 @@ int			auto_tuning_infinite_loop = 8;
 /* stat_size > infinite_loop + window_size + 3 is required for auto_tuning*/
 
 /* Machine learning parameters */
-double		object_selection_prediction_threshold = 0.3;
-double		object_selection_object_threshold = 0.1;
-double		learning_rate = 1e-1;
+
+/*
+ * Defines where we do not perform learning procedure
+ */
+const double	object_selection_prediction_threshold = 0.3;
+
+/*
+ * This parameter tell us that the new learning sample object has very small
+ * distance from one whose features stored in matrix already.
+ * In this case we will not to add new line in matrix, but will modify this
+ * nearest neighbor features and cardinality with linear smoothing by
+ * learning_rate coefficient.
+ */
+const double	object_selection_threshold = 0.1;
+const double	learning_rate = 1e-1;
+
+/* The number of nearest neighbors which will be chosen for ML-operations */
 int			aqo_k = 3;
-int			aqo_K = 30;
 double		log_selectivity_lower_bound = -30;
 
 /*
@@ -70,7 +84,7 @@ _PG_init(void)
 							 &aqo_mode,
 							 AQO_MODE_CONTROLLED,
 							 format_options,
-							 PGC_SUSET,
+							 PGC_USERSET,
 							 0,
 							 NULL,
 							 NULL,
@@ -83,7 +97,7 @@ _PG_init(void)
 	prev_ExecutorStart_hook						= ExecutorStart_hook;
 	ExecutorStart_hook							= aqo_ExecutorStart;
 	prev_ExecutorEnd_hook						= ExecutorEnd_hook;
-	ExecutorEnd_hook							= learn_query_stat;
+	ExecutorEnd_hook							= aqo_ExecutorEnd;
 	prev_set_baserel_rows_estimate_hook			= set_baserel_rows_estimate_hook;
 	set_baserel_rows_estimate_hook				= aqo_set_baserel_rows_estimate;
 	prev_get_parameterized_baserel_size_hook	= get_parameterized_baserel_size_hook;
@@ -96,6 +110,7 @@ _PG_init(void)
 	copy_generic_path_info_hook					= aqo_copy_generic_path_info;
 	prev_ExplainOnePlan_hook					= ExplainOnePlan_hook;
 	ExplainOnePlan_hook							= print_into_explain;
+	parampathinfo_postinit_hook					= ppi_hook;
 
 	init_deactivated_queries_storage();
 	AQOMemoryContext = AllocSetContextCreate(TopMemoryContext, "AQOMemoryContext", ALLOCSET_DEFAULT_SIZES);

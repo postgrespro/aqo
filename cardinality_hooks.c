@@ -19,6 +19,9 @@
  *
  *****************************************************************************/
 
+double predicted_ppi_rows;
+double fss_ppi_hash;
+
 static void call_default_set_baserel_rows_estimate(PlannerInfo *root,
 									   RelOptInfo *rel);
 static double call_default_get_parameterized_baserel_size(PlannerInfo *root,
@@ -125,6 +128,8 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	Oid			relid;
 	List	   *relids;
 	List	   *selectivities = NULL;
+	List	*restrict_clauses;
+	int fss = 0;
 
 	if (query_context.use_aqo || query_context.learn_aqo)
 		selectivities = get_selectivities(root, rel->baserestrictinfo, 0,
@@ -142,14 +147,32 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	relid = planner_rt_fetch(rel->relid, root)->relid;
 	relids = list_make1_int(relid);
 
-	predicted = predict_for_relation(list_copy(rel->baserestrictinfo),
-									 selectivities,
-									 relids);
+	restrict_clauses = list_copy(rel->baserestrictinfo);
+	predicted = predict_for_relation(restrict_clauses, selectivities, relids, &fss);
+	rel->fss_hash = fss;
 
 	if (predicted >= 0)
+	{
 		rel->rows = predicted;
+		rel->predicted_cardinality = predicted;
+	}
 	else
+	{
 		call_default_set_baserel_rows_estimate(root, rel);
+		rel->predicted_cardinality = -1.;
+	}
+
+	list_free_deep(selectivities);
+	list_free(restrict_clauses);
+	list_free(relids);
+}
+
+
+void
+ppi_hook(ParamPathInfo *ppi)
+{
+	ppi->predicted_ppi_rows = predicted_ppi_rows;
+	ppi->fss_ppi_hash = fss_ppi_hash;
 }
 
 /*
@@ -173,16 +196,14 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	int		   *args_hash;
 	int		   *eclass_hash;
 	int			current_hash;
+	int fss = 0;
 
 	if (query_context.use_aqo || query_context.learn_aqo)
 	{
 		allclauses = list_concat(list_copy(param_clauses),
 								 list_copy(rel->baserestrictinfo));
-		selectivities = get_selectivities(root,
-										  allclauses,
-										  rel->relid,
-										  JOIN_INNER,
-										  NULL);
+		selectivities = get_selectivities(root, allclauses, rel->relid,
+										  JOIN_INNER, NULL);
 		relid = planner_rt_fetch(rel->relid, root)->relid;
 		get_eclasses(allclauses, &nargs, &args_hash, &eclass_hash);
 		forboth(l, allclauses, l2, selectivities)
@@ -210,7 +231,10 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 
 	relids = list_make1_int(relid);
 
-	predicted = predict_for_relation(allclauses, selectivities, relids);
+	predicted = predict_for_relation(allclauses, selectivities, relids, &fss);
+
+	predicted_ppi_rows = predicted;
+	fss_ppi_hash = fss;
 
 	if (predicted >= 0)
 		return predicted;
@@ -240,6 +264,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	List	   *inner_selectivities;
 	List	   *outer_selectivities;
 	List	   *current_selectivities = NULL;
+	int fss = 0;
 
 	if (query_context.use_aqo || query_context.learn_aqo)
 		current_selectivities = get_selectivities(root, restrictlist, 0,
@@ -269,16 +294,23 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 								list_concat(outer_selectivities,
 											inner_selectivities));
 
-	predicted = predict_for_relation(allclauses, selectivities, relids);
+	predicted = predict_for_relation(allclauses, selectivities, relids, &fss);
+	rel->fss_hash = fss;
 
 	if (predicted >= 0)
+	{
+		rel->predicted_cardinality = predicted;
 		rel->rows = predicted;
+	}
 	else
+	{
+		rel->predicted_cardinality = -1;
 		call_default_set_joinrel_size_estimates(root, rel,
 												outer_rel,
 												inner_rel,
 												sjinfo,
 												restrictlist);
+	}
 }
 
 /*
@@ -303,6 +335,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	List	   *inner_selectivities;
 	List	   *outer_selectivities;
 	List	   *current_selectivities = NULL;
+	int			fss = 0;
 
 	if (query_context.use_aqo || query_context.learn_aqo)
 		current_selectivities = get_selectivities(root, restrict_clauses, 0,
@@ -329,7 +362,10 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 								list_concat(outer_selectivities,
 											inner_selectivities));
 
-	predicted = predict_for_relation(allclauses, selectivities, relids);
+	predicted = predict_for_relation(allclauses, selectivities, relids, &fss);
+
+	predicted_ppi_rows = predicted;
+	fss_ppi_hash = fss;
 
 	if (predicted >= 0)
 		return predicted;

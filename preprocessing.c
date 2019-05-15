@@ -1,5 +1,6 @@
 #include "aqo.h"
 #include "access/parallel.h"
+#include "commands/extension.h"
 
 /*****************************************************************************
  *
@@ -50,12 +51,6 @@
  *		the machine learning setting are fixed for all feature spaces.
  *
  *****************************************************************************/
-
-#define CREATE_EXTENSION_STARTSTRING_0 \
-"-- complain if script is sourced in psql, rather than via CREATE EXTENSION"
-#define CREATE_EXTENSION_STARTSTRING_1 \
-"SELECT 1 FROM ONLY \"public\".\"aqo_queries\" x WHERE \"query_hash\"\
- OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x"
 
 static bool isQueryUsingSystemRelation(Query *query);
 static bool isQueryUsingSystemRelation_walker(Node *node, void *context);
@@ -118,16 +113,14 @@ aqo_planner(Query *parse,
 
 	 /*
 	  * We do not work inside an parallel worker now by reason of insert into
-	  * heap during planning. Transactions is synchronized between parallel
-	  * section. See GetCurrentCommandId() comments also.
+	  * the heap during planning. Transactions is synchronized between parallel
+	  * sections. See GetCurrentCommandId() comments also.
 	  */
 	if ((parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT &&
-	 parse->commandType != CMD_UPDATE && parse->commandType != CMD_DELETE) ||
-		strncmp(query_text, CREATE_EXTENSION_STARTSTRING_0,
-				strlen(CREATE_EXTENSION_STARTSTRING_0)) == 0 ||
-		strncmp(query_text, CREATE_EXTENSION_STARTSTRING_1,
-				strlen(CREATE_EXTENSION_STARTSTRING_1)) == 0 ||
-		IsInParallelMode() || IsParallelWorker() ||
+		parse->commandType != CMD_UPDATE && parse->commandType != CMD_DELETE) ||
+		get_extension_oid("aqo", true) == InvalidOid ||
+		creating_extension ||
+		/*IsInParallelMode() ||*/ IsParallelWorker() ||
 		aqo_mode == AQO_MODE_DISABLED || isQueryUsingSystemRelation(parse))
 	{
 		disable_aqo_for_query();
@@ -168,6 +161,8 @@ aqo_planner(Query *parse,
 				query_context.collect_stat = false;
 				break;
 			case AQO_MODE_CONTROLLED:
+			case AQO_MODE_FIXED:
+				/* if query is not in AQO database than disable AQO for this query */
 				query_context.adding_query = false;
 				query_context.learn_aqo = false;
 				query_context.use_aqo = false;
@@ -227,6 +222,12 @@ aqo_planner(Query *parse,
 			query_context.auto_tuning = false;
 			query_context.collect_stat = false;
 		}
+
+		if (aqo_mode == AQO_MODE_FIXED)
+		{
+			query_context.learn_aqo = false;
+			query_context.auto_tuning = false;
+		}
 	}
 	query_context.explain_aqo = query_context.use_aqo;
 
@@ -243,13 +244,39 @@ void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 	if (prev_ExplainOnePlan_hook)
 		prev_ExplainOnePlan_hook(plannedstmt, into, es, queryString,
 								params, planduration);
+#ifdef AQO_EXPLAIN
 	if (query_context.explain_aqo)
 	{
 		/* Report to user about aqo state only in verbose mode */
 		if (es->verbose)
+		{
 			ExplainPropertyBool("Using aqo", true, es);
+
+			switch (aqo_mode)
+			{
+			case AQO_MODE_INTELLIGENT:
+				ExplainPropertyText("AQO mode", "INTELLIGENT", es);
+				break;
+			case AQO_MODE_FORCED:
+				ExplainPropertyText("AQO mode", "FORCED", es);
+				break;
+			case AQO_MODE_CONTROLLED:
+				ExplainPropertyText("AQO mode", "CONTROLLED", es);
+				break;
+			case AQO_MODE_LEARN:
+				ExplainPropertyText("AQO mode", "LEARN", es);
+				break;
+			case AQO_MODE_FIXED:
+				ExplainPropertyText("AQO mode", "FIXED", es);
+				break;
+			default:
+				elog(ERROR, "Bad AQO state");
+				break;
+			}
+		}
 		query_context.explain_aqo = false;
 	}
+#endif
 }
 
 /*
