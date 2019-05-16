@@ -378,7 +378,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 
 		cardinality_sum_errors = 0.;
 		cardinality_num_objects = 0;
-		cnt = 0;
+
 		learnOnPlanState(queryDesc->planstate, (void *) &ctx);
 	}
 
