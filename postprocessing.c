@@ -228,18 +228,48 @@ learnOnPlanState(PlanState *p, void *context)
 		if (p->instrument && (p->righttree != NULL || p->lefttree == NULL ||
 							  p->plan->path_clauses != NIL))
 		{
-			double learn_rows;
+			double learn_rows = 0.;
+			double predicted;
 
 			InstrEndLoop(p->instrument);
-			if (p->instrument->nloops > 0)
+			if (p->instrument->nloops > 0.)
 			{
-				learn_rows = p->instrument->ntuples / p->instrument->nloops;
+				/* If we can strongly calculate produced rows, do it. */
+				if (p->worker_instrument)
+				{
+					double wnloops = 0.;
+					double wntuples = 0.;
+					int i;
 
-				if (p->plan->parallel_aware || (p->plan->path_parallel_workers > 0 &&
+					for (i = 0; i < p->worker_instrument->num_workers; i++)
+					{
+						double t = p->worker_instrument->instrument[i].ntuples;
+						double l = p->worker_instrument->instrument[i].nloops;
+						wntuples += t;
+						wnloops += l;
+						learn_rows += t/l;
+					}
+
+					Assert(p->instrument->nloops >= wnloops);
+					Assert(p->instrument->ntuples >= wntuples);
+					if (p->instrument->nloops - wnloops > 0.5)
+						learn_rows += (p->instrument->ntuples - wntuples) /
+											(p->instrument->nloops - wnloops);
+				}
+				else
+					/* We don't have any workers. */
+					learn_rows = p->instrument->ntuples / p->instrument->nloops;
+
+				if (p->plan->predicted_cardinality > 0.)
+					predicted = p->plan->predicted_cardinality;
+				else if (p->plan->parallel_aware ||
+					(p->plan->path_parallel_workers > 0 &&
 					(nodeTag(p->plan) == T_HashJoin ||
 					nodeTag(p->plan) == T_MergeJoin ||
 					nodeTag(p->plan) == T_NestLoop)))
-					learn_rows *= (p->plan->path_parallel_workers + 1);
+					predicted = p->plan->plan_rows * get_parallel_divisor(p->plan->path_parallel_workers);
+				else
+					predicted = p->plan->plan_rows;
 
 				/* It is needed for correct exp(result) calculation. */
 				if (learn_rows < 1.)
@@ -260,8 +290,8 @@ learnOnPlanState(PlanState *p, void *context)
 			 * than a subtree will never be visited.
 			 */
 			if (!(p->instrument->ntuples <= 0. && p->instrument->nloops <= 0.))
-				learn_sample(ctx->clauselist, ctx->selectivities, ctx->relidslist,
-							 learn_rows, p->plan->plan_rows);
+				learn_sample(ctx->clauselist, ctx->selectivities,
+										ctx->relidslist, learn_rows, predicted);
 		}
 	}
 
