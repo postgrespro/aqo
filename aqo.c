@@ -55,6 +55,9 @@ double		log_selectivity_lower_bound = -30;
  */
 MemoryContext		AQOMemoryContext;
 QueryContextData	query_context;
+/* Additional plan info */
+int njoins;
+
 char				*query_text = NULL;
 
 /* Saved hook values */
