@@ -26,6 +26,7 @@ static int	cardinality_num_objects;
  * environment field.
  */
 static char *AQOPrivateData = "AQOPrivateData";
+static char *PlanStateInfo = "PlanStateInfo";
 
 
 /* Query execution statistics collecting utilities */
@@ -49,6 +50,7 @@ static void update_query_stat_row(double *et, int *et_size,
 					  double cardinality_error,
 					  int64 *n_exec);
 static void StoreToQueryContext(QueryDesc *queryDesc);
+static void StorePlanInternals(QueryDesc *queryDesc);
 static bool ExtractFromQueryContext(QueryDesc *queryDesc);
 static void RemoveFromQueryContext(QueryDesc *queryDesc);
 
@@ -370,6 +372,10 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 		prev_ExecutorStart_hook(queryDesc, eflags);
 	else
 		standard_ExecutorStart(queryDesc, eflags);
+
+	/* Plan state has initialized */
+
+	StorePlanInternals(queryDesc);
 }
 
 /*
@@ -384,6 +390,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	double		cardinality_error;
 	QueryStat  *stat = NULL;
 	instr_time	endtime;
+	EphemeralNamedRelation enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
 
 	if (!ExtractFromQueryContext(queryDesc))
 		/* AQO keep all query-related preferences at the query context.
@@ -393,6 +400,9 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		 * stage for this query.
 		 */
 		goto end;
+
+	if (enr)
+		njoins = *(int *) enr->reldata;
 
 	Assert(!IsParallelWorker());
 
@@ -564,6 +574,46 @@ StoreToQueryContext(QueryDesc *queryDesc)
 	MemoryContextSwitchTo(oldCxt);
 }
 
+static bool
+calculateJoinNum(PlanState *ps, void *context)
+{
+	int *njoins_ptr = (int *) context;
+
+	planstate_tree_walker(ps, calculateJoinNum, context);
+
+	if (nodeTag(ps->plan) == T_NestLoop ||
+		nodeTag(ps->plan) == T_MergeJoin ||
+		nodeTag(ps->plan) == T_HashJoin)
+		(*njoins_ptr)++;
+
+	return false;
+}
+
+static void
+StorePlanInternals(QueryDesc *queryDesc)
+{
+	EphemeralNamedRelation enr;
+	MemoryContext	oldCxt;
+
+	njoins = 0;
+	planstate_tree_walker(queryDesc->planstate, calculateJoinNum, &njoins);
+
+	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
+	enr = palloc0(sizeof(EphemeralNamedRelationData));
+	if (queryDesc->queryEnv == NULL)
+			queryDesc->queryEnv = create_queryEnv();
+
+	enr->md.name = PlanStateInfo;
+	enr->md.enrtuples = 0;
+	enr->md.enrtype = 0;
+	enr->md.reliddesc = InvalidOid;
+	enr->md.tupdesc = NULL;
+	enr->reldata = palloc0(sizeof(int));
+	memcpy(enr->reldata, &njoins, sizeof(int));
+	register_ENR(queryDesc->queryEnv, enr);
+	MemoryContextSwitchTo(oldCxt);
+}
+
 /*
  * Restore AQO data, related to the query.
  */
@@ -597,4 +647,53 @@ RemoveFromQueryContext(QueryDesc *queryDesc)
 	unregister_ENR(queryDesc->queryEnv, AQOPrivateData);
 	pfree(enr->reldata);
 	pfree(enr);
+}
+
+/*
+ * Prints if the plan was constructed with AQO.
+ */
+void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
+			   ExplainState *es, const char *queryString,
+			   ParamListInfo params, const instr_time *planduration,
+			   QueryEnvironment *queryEnv)
+{
+	if (prev_ExplainOnePlan_hook)
+		prev_ExplainOnePlan_hook(plannedstmt, into, es, queryString,
+								params, planduration, queryEnv);
+
+#ifdef AQO_EXPLAIN
+	if (query_context.explain_aqo)
+	{
+		/* Report to user about aqo state only in verbose mode */
+		if (es->verbose)
+		{
+			ExplainPropertyBool("Using aqo", true, es);
+
+			switch (aqo_mode)
+			{
+			case AQO_MODE_INTELLIGENT:
+				ExplainPropertyText("AQO mode", "INTELLIGENT", es);
+				break;
+			case AQO_MODE_FORCED:
+				ExplainPropertyText("AQO mode", "FORCED", es);
+				break;
+			case AQO_MODE_CONTROLLED:
+				ExplainPropertyText("AQO mode", "CONTROLLED", es);
+				break;
+			case AQO_MODE_LEARN:
+				ExplainPropertyText("AQO mode", "LEARN", es);
+				break;
+			case AQO_MODE_FIXED:
+				ExplainPropertyText("AQO mode", "FIXED", es);
+				break;
+			default:
+				elog(ERROR, "Bad AQO state");
+				break;
+			}
+
+			ExplainPropertyInteger("JOINS", NULL, njoins, es);
+		}
+		query_context.explain_aqo = false;
+	}
+#endif
 }

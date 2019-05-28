@@ -1,5 +1,6 @@
 #include "aqo.h"
 #include "access/parallel.h"
+#include "access/table.h"
 #include "commands/extension.h"
 
 /*****************************************************************************
@@ -232,51 +233,6 @@ aqo_planner(Query *parse,
 	query_context.explain_aqo = query_context.use_aqo;
 
 	return call_default_planner(parse, cursorOptions, boundParams);
-}
-
-/*
- * Prints if the plan was constructed with AQO.
- */
-void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
-			   ExplainState *es, const char *queryString,
-			   ParamListInfo params, const instr_time *planduration)
-{
-	if (prev_ExplainOnePlan_hook)
-		prev_ExplainOnePlan_hook(plannedstmt, into, es, queryString,
-								params, planduration);
-#ifdef AQO_EXPLAIN
-	if (query_context.explain_aqo)
-	{
-		/* Report to user about aqo state only in verbose mode */
-		if (es->verbose)
-		{
-			ExplainPropertyBool("Using aqo", true, es);
-
-			switch (aqo_mode)
-			{
-			case AQO_MODE_INTELLIGENT:
-				ExplainPropertyText("AQO mode", "INTELLIGENT", es);
-				break;
-			case AQO_MODE_FORCED:
-				ExplainPropertyText("AQO mode", "FORCED", es);
-				break;
-			case AQO_MODE_CONTROLLED:
-				ExplainPropertyText("AQO mode", "CONTROLLED", es);
-				break;
-			case AQO_MODE_LEARN:
-				ExplainPropertyText("AQO mode", "LEARN", es);
-				break;
-			case AQO_MODE_FIXED:
-				ExplainPropertyText("AQO mode", "FIXED", es);
-				break;
-			default:
-				elog(ERROR, "Bad AQO state");
-				break;
-			}
-		}
-		query_context.explain_aqo = false;
-	}
-#endif
 }
 
 /*

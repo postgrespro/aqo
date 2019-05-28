@@ -226,6 +226,8 @@ extern int	auto_tuning_max_iterations;
 extern int	auto_tuning_infinite_loop;
 
 /* Machine learning parameters */
+
+/* Max number of matrix rows - max number of possible neighbors. */
 #define	aqo_K	(30)
 
 extern const double object_selection_prediction_threshold;
@@ -236,6 +238,7 @@ extern double log_selectivity_lower_bound;
 
 /* Parameters for current query */
 extern QueryContextData query_context;
+extern int njoins;
 extern char				*query_text;
 
 /* Memory context for long-live data */
@@ -298,7 +301,8 @@ PlannedStmt *aqo_planner(Query *parse,
 			ParamListInfo boundParams);
 void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 			   ExplainState *es, const char *queryString,
-			   ParamListInfo params, const instr_time *planduration);
+			   ParamListInfo params, const instr_time *planduration,
+			   QueryEnvironment *queryEnv);
 void		disable_aqo_for_query(void);
 
 /* Cardinality estimation hooks */

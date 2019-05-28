@@ -1,5 +1,9 @@
 #include "aqo.h"
 
+#include "access/heapam.h"
+#include "access/table.h"
+#include "access/tableam.h"
+
 /*****************************************************************************
  *
  *	STORAGE INTERACTION
@@ -23,7 +27,8 @@ static void deform_vector(Datum datum, double *vector, int *nelems);
 
 static bool my_simple_heap_update(Relation relation,
 								  ItemPointer otid,
-								  HeapTuple tup);
+								  HeapTuple tup,
+								  bool *update_indexes);
 
 static bool my_index_insert(Relation indexRelation,
 							Datum *values,
@@ -45,6 +50,8 @@ find_query(int query_hash,
 	RangeVar   *aqo_queries_table_rv;
 	Relation	aqo_queries_heap;
 	HeapTuple	tuple;
+	TupleTableSlot *slot;
+	bool shouldFree;
 
 	LOCKMODE	lockmode = AccessShareLock;
 
@@ -79,14 +86,20 @@ find_query(int query_hash,
 				Int32GetDatum(query_hash));
 
 	index_rescan(query_index_scan, &key, 1, NULL, 0);
-	tuple = index_getnext(query_index_scan, ForwardScanDirection);
 
-	find_ok = (tuple != NULL);
+	slot = MakeSingleTupleTableSlot(query_index_scan->heapRelation->rd_att,
+														&TTSOpsBufferHeapTuple);
+	find_ok = index_getnext_slot(query_index_scan, ForwardScanDirection, slot);
 
 	if (find_ok)
+	{
+		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
+		Assert(shouldFree != true);
 		heap_deform_tuple(tuple, aqo_queries_heap->rd_att,
-						  search_values, search_nulls);
+												search_values, search_nulls);
+	}
 
+	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(query_index_scan);
 	index_close(query_index_rel, lockmode);
 	heap_close(aqo_queries_heap, lockmode);
@@ -170,6 +183,11 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 	HeapTuple	tuple,
 				nw_tuple;
 
+	TupleTableSlot *slot;
+	bool		shouldFree;
+	bool		find_ok = false;
+	bool		update_indexes;
+
 	LOCKMODE	lockmode = RowExclusiveLock;
 
 	Relation	query_index_rel;
@@ -205,7 +223,12 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 				Int32GetDatum(query_hash));
 
 	index_rescan(query_index_scan, &key, 1, NULL, 0);
-	tuple = index_getnext(query_index_scan, ForwardScanDirection);
+	slot = MakeSingleTupleTableSlot(query_index_scan->heapRelation->rd_att,
+															&TTSOpsBufferHeapTuple);
+	find_ok = index_getnext_slot(query_index_scan, ForwardScanDirection, slot);
+	Assert(find_ok);
+	tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
+	Assert(shouldFree != true);
 
 	heap_deform_tuple(tuple, aqo_queries_heap->rd_att,
 					  values, isnull);
@@ -217,10 +240,13 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 
 	nw_tuple = heap_modify_tuple(tuple, aqo_queries_heap->rd_att,
 								 values, isnull, replace);
-	if (my_simple_heap_update(aqo_queries_heap, &(nw_tuple->t_self), nw_tuple))
+	if (my_simple_heap_update(aqo_queries_heap, &(nw_tuple->t_self), nw_tuple,
+			&update_indexes))
 	{
-		my_index_insert(query_index_rel, values, isnull, &(nw_tuple->t_self),
-						aqo_queries_heap, UNIQUE_CHECK_YES);
+		if (update_indexes)
+			my_index_insert(query_index_rel, values, isnull,
+							&(nw_tuple->t_self),
+							aqo_queries_heap, UNIQUE_CHECK_YES);
 	}
 	else
 	{
@@ -232,6 +258,7 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 		 */
 	}
 
+	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(query_index_scan);
 	index_close(query_index_rel, lockmode);
 	heap_close(aqo_queries_heap, lockmode);
@@ -327,6 +354,9 @@ load_fss(int fss_hash, int ncols, double **matrix, double *targets, int *rows)
 	RangeVar   *aqo_data_table_rv;
 	Relation	aqo_data_heap;
 	HeapTuple	tuple;
+	TupleTableSlot *slot;
+	bool		shouldFree;
+	bool		find_ok = false;
 
 	Relation	data_index_rel;
 	Oid			data_index_rel_oid;
@@ -371,10 +401,14 @@ load_fss(int fss_hash, int ncols, double **matrix, double *targets, int *rows)
 
 	index_rescan(data_index_scan, key, 2, NULL, 0);
 
-	tuple = index_getnext(data_index_scan, ForwardScanDirection);
+	slot = MakeSingleTupleTableSlot(data_index_scan->heapRelation->rd_att,
+														&TTSOpsBufferHeapTuple);
+	find_ok = index_getnext_slot(data_index_scan, ForwardScanDirection, slot);
 
-	if (tuple)
+	if (find_ok)
 	{
+		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
+		Assert(shouldFree != true);
 		heap_deform_tuple(tuple, aqo_data_heap->rd_att, values, isnull);
 
 		if (DatumGetInt32(values[2]) == ncols)
@@ -397,8 +431,8 @@ load_fss(int fss_hash, int ncols, double **matrix, double *targets, int *rows)
 	else
 		success = false;
 
+	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(data_index_scan);
-
 	index_close(data_index_rel, lockmode);
 	heap_close(aqo_data_heap, lockmode);
 
@@ -422,12 +456,17 @@ update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets)
 	HeapTuple	tuple,
 				nw_tuple;
 
+	TupleTableSlot *slot;
+	bool		shouldFree;
+	bool		find_ok = false;
+	bool		update_indexes;
+
+	LOCKMODE	lockmode = RowExclusiveLock;
+
 	Relation	data_index_rel;
 	Oid			data_index_rel_oid;
 	IndexScanDesc data_index_scan;
 	ScanKeyData	key[2];
-
-	LOCKMODE	lockmode = RowExclusiveLock;
 
 	Datum		values[5];
 	bool		isnull[5] = { false, false, false, false, false };
@@ -466,9 +505,11 @@ update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets)
 
 	index_rescan(data_index_scan, key, 2, NULL, 0);
 
-	tuple = index_getnext(data_index_scan, ForwardScanDirection);
+	slot = MakeSingleTupleTableSlot(data_index_scan->heapRelation->rd_att,
+															&TTSOpsBufferHeapTuple);
+	find_ok = index_getnext_slot(data_index_scan, ForwardScanDirection, slot);
 
-	if (!tuple)
+	if (!find_ok)
 	{
 		values[0] = Int32GetDatum(query_context.fspace_hash);
 		values[1] = Int32GetDatum(fss_hash);
@@ -497,6 +538,8 @@ update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets)
 	}
 	else
 	{
+		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
+		Assert(shouldFree != true);
 		heap_deform_tuple(tuple, aqo_data_heap->rd_att, values, isnull);
 
 		if (ncols > 0)
@@ -507,10 +550,13 @@ update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets)
 		values[4] = PointerGetDatum(form_vector(targets, nrows));
 		nw_tuple = heap_modify_tuple(tuple, tuple_desc,
 									 values, isnull, replace);
-		if (my_simple_heap_update(aqo_data_heap, &(nw_tuple->t_self), nw_tuple))
+		if (my_simple_heap_update(aqo_data_heap, &(nw_tuple->t_self), nw_tuple,
+															&update_indexes))
 		{
-			my_index_insert(data_index_rel, values, isnull, &(nw_tuple->t_self),
-							aqo_data_heap, UNIQUE_CHECK_YES);
+			if (update_indexes)
+				my_index_insert(data_index_rel, values, isnull,
+								&(nw_tuple->t_self),
+								aqo_data_heap, UNIQUE_CHECK_YES);
 		}
 		else
 		{
@@ -524,8 +570,8 @@ update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets)
 		}
 	}
 
+	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(data_index_scan);
-
 	index_close(data_index_rel, lockmode);
 	heap_close(aqo_data_heap, lockmode);
 
@@ -559,6 +605,10 @@ get_aqo_stat(int query_hash)
 
 	QueryStat  *stat = palloc_query_stat();
 
+	TupleTableSlot *slot;
+	bool		shouldFree;
+	bool		find_ok = false;
+
 	stat_index_rel_oid = RelnameGetRelid("aqo_query_stat_idx");
 	if (!OidIsValid(stat_index_rel_oid))
 	{
@@ -584,10 +634,14 @@ get_aqo_stat(int query_hash)
 
 	index_rescan(stat_index_scan, &key, 1, NULL, 0);
 
-	tuple = index_getnext(stat_index_scan, ForwardScanDirection);
+	slot = MakeSingleTupleTableSlot(stat_index_scan->heapRelation->rd_att,
+																&TTSOpsBufferHeapTuple);
+	find_ok = index_getnext_slot(stat_index_scan, ForwardScanDirection, slot);
 
-	if (tuple)
+	if (find_ok)
 	{
+		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
+		Assert(shouldFree != true);
 		heap_deform_tuple(tuple, aqo_stat_heap->rd_att, values, nulls);
 
 		DeformVectorSz(values[1], stat->execution_time_with_aqo);
@@ -601,8 +655,8 @@ get_aqo_stat(int query_hash)
 		stat->executions_without_aqo = DatumGetInt64(values[8]);
 	}
 
+	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(stat_index_scan);
-
 	index_close(stat_index_rel, index_lock);
 	heap_close(aqo_stat_heap, heap_lock);
 
@@ -622,12 +676,17 @@ update_aqo_stat(int query_hash, QueryStat *stat)
 				nw_tuple;
 	TupleDesc	tuple_desc;
 
+	TupleTableSlot *slot;
+	bool		shouldFree;
+	bool		find_ok = false;
+	bool		update_indexes;
+
+	LOCKMODE	lockmode = RowExclusiveLock;
+
 	Relation	stat_index_rel;
 	Oid			stat_index_rel_oid;
 	IndexScanDesc stat_index_scan;
 	ScanKeyData	key;
-
-	LOCKMODE	lockmode = RowExclusiveLock;
 
 	Datum		values[9];
 	bool		isnull[9] = { false, false, false,
@@ -664,12 +723,11 @@ update_aqo_stat(int query_hash, QueryStat *stat)
 
 	index_rescan(stat_index_scan, &key, 1, NULL, 0);
 
-	tuple = index_getnext(stat_index_scan, ForwardScanDirection);
+	slot = MakeSingleTupleTableSlot(stat_index_scan->heapRelation->rd_att,
+														&TTSOpsBufferHeapTuple);
+	find_ok = index_getnext_slot(stat_index_scan, ForwardScanDirection, slot);
 
-	values[0] = tuple == NULL ?
-					Int32GetDatum(query_hash) :
-					heap_getattr(tuple, 1, RelationGetDescr(aqo_stat_heap), &isnull[0]);
-
+	/*values[0] will be initialized later */
 	values[1] = PointerGetDatum(FormVectorSz(stat->execution_time_with_aqo));
 	values[2] = PointerGetDatum(FormVectorSz(stat->execution_time_without_aqo));
 	values[3] = PointerGetDatum(FormVectorSz(stat->planning_time_with_aqo));
@@ -680,8 +738,9 @@ update_aqo_stat(int query_hash, QueryStat *stat)
 	values[7] = Int64GetDatum(stat->executions_with_aqo);
 	values[8] = Int64GetDatum(stat->executions_without_aqo);
 
-	if (!tuple)
+	if (!find_ok)
 	{
+		values[0] = Int32GetDatum(query_hash);
 		tuple = heap_form_tuple(tuple_desc, values, isnull);
 		PG_TRY();
 		{
@@ -699,13 +758,19 @@ update_aqo_stat(int query_hash, QueryStat *stat)
 	}
 	else
 	{
+		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
+		Assert(shouldFree != true);
+		values[0] = heap_getattr(tuple, 1, RelationGetDescr(aqo_stat_heap), &isnull[0]);
 		nw_tuple = heap_modify_tuple(tuple, tuple_desc,
 									 values, isnull, replace);
-		if (my_simple_heap_update(aqo_stat_heap, &(nw_tuple->t_self), nw_tuple))
+		if (my_simple_heap_update(aqo_stat_heap, &(nw_tuple->t_self), nw_tuple,
+															&update_indexes))
 		{
 			/* NOTE: insert index tuple iff heap update succeeded! */
-			my_index_insert(stat_index_rel, values, isnull, &(nw_tuple->t_self),
-							aqo_stat_heap, UNIQUE_CHECK_YES);
+			if (update_indexes)
+				my_index_insert(stat_index_rel, values, isnull,
+								&(nw_tuple->t_self),
+								aqo_stat_heap, UNIQUE_CHECK_YES);
 		}
 		else
 		{
@@ -719,8 +784,8 @@ update_aqo_stat(int query_hash, QueryStat *stat)
 		}
 	}
 
+	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(stat_index_scan);
-
 	index_close(stat_index_rel, lockmode);
 	heap_close(aqo_stat_heap, lockmode);
 
@@ -831,33 +896,38 @@ form_vector(double *vector, int nrows)
  * another session, error otherwise.
  */
 static bool
-my_simple_heap_update(Relation relation, ItemPointer otid, HeapTuple tup)
+my_simple_heap_update(Relation relation, ItemPointer otid, HeapTuple tup,
+					  bool *update_indexes)
 {
-	HTSU_Result result;
-	HeapUpdateFailureData hufd;
+	TM_Result result;
+	TM_FailureData hufd;
 	LockTupleMode lockmode;
 
+	Assert(update_indexes != NULL);
 	result = heap_update(relation, otid, tup,
 						 GetCurrentCommandId(true), InvalidSnapshot,
 						 true /* wait for commit */ ,
 						 &hufd, &lockmode);
 	switch (result)
 	{
-		case HeapTupleSelfUpdated:
+		case TM_SelfModified:
 			/* Tuple was already updated in current command? */
 			elog(ERROR, "tuple already updated by self");
 			break;
 
-		case HeapTupleMayBeUpdated:
+		case TM_Ok:
 			/* done successfully */
+			if (!HeapTupleIsHeapOnly(tup))
+				*update_indexes = true;
+			else
+				*update_indexes = false;
 			return true;
-			break;
 
-		case HeapTupleUpdated:
+		case TM_Updated:
 			return false;
 			break;
 
-		case HeapTupleBeingUpdated:
+		case TM_BeingModified:
 			return false;
 			break;
 
