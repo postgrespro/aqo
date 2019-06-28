@@ -105,8 +105,6 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 	fss_hash = get_fss_for_object(clauselist, selectivities, relidslist,
 					   &nfeatures, &features);
 
-	/* In the case of zero matrix we not need to learn */
-
 	if (nfeatures > 0)
 		for (i = 0; i < aqo_K; ++i)
 			matrix[i] = palloc(sizeof(double) * nfeatures);
@@ -186,6 +184,17 @@ restore_selectivities(List *clauselist,
 	return lst;
 }
 
+static bool
+we_need_to_sum_tuples(const Plan *plan)
+{
+	if (plan->path_parallel_workers > 0 && (
+		plan->parallel_aware || nodeTag(plan) == T_HashJoin ||
+								nodeTag(plan) == T_MergeJoin ||
+								nodeTag(plan) == T_NestLoop))
+		return true;
+	return false;
+}
+
 /*
  * Walks over obtained PlanState tree, collects relation objects with their
  * clauses, selectivities and relids and passes each object to learn_sample.
@@ -237,7 +246,7 @@ learnOnPlanState(PlanState *p, void *context)
 			if (p->instrument->nloops > 0.)
 			{
 				/* If we can strongly calculate produced rows, do it. */
-				if (p->worker_instrument)
+				if (p->worker_instrument && we_need_to_sum_tuples(p->plan))
 				{
 					double wnloops = 0.;
 					double wntuples = 0.;
