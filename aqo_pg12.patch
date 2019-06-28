@@ -1,5 +1,5 @@
 diff --git a/src/backend/commands/explain.c b/src/backend/commands/explain.c
-index 92969636b7..1e705c709f 100644
+index 92969636b7..42446d4e93 100644
 --- a/src/backend/commands/explain.c
 +++ b/src/backend/commands/explain.c
 @@ -46,6 +46,9 @@ ExplainOneQuery_hook_type ExplainOneQuery_hook = NULL;
@@ -22,8 +22,26 @@ index 92969636b7..1e705c709f 100644
 +
  	ExplainCloseGroup("Query", NULL, true, es);
  }
- 
-@@ -1523,6 +1530,24 @@ ExplainNode(PlanState *planstate, List *ancestors,
+
+@@ -1041,6 +1048,17 @@ ExplainPreScanNode(PlanState *planstate, Bitmapset **rels_used)
+	return planstate_tree_walker(planstate, ExplainPreScanNode, rels_used);
+ }
+
++static bool
++we_need_to_sum_tuples(const Plan *plan)
++{
++	if (plan->path_parallel_workers > 0 && (
++		plan->parallel_aware || nodeTag(plan) == T_HashJoin ||
++								nodeTag(plan) == T_MergeJoin ||
++								nodeTag(plan) == T_NestLoop))
++		return true;
++	return false;
++}
++
+ /*
+  * ExplainNode -
+  *	  Appends a description of a plan tree to es->str
+@@ -1523,6 +1541,24 @@ ExplainNode(PlanState *planstate, List *ancestors,
  				appendStringInfo(es->str,
  								 " (actual rows=%.0f loops=%.0f)",
  								 rows, nloops);
@@ -33,8 +51,8 @@ index 92969636b7..1e705c709f 100644
 +				int wrkrs = 1;
 +				double error = -1.;
 +
-+				if (planstate->worker_instrument && plan->parallel_aware)
-+					wrkrs = planstate->worker_instrument->num_workers + 1;
++				if (planstate->worker_instrument && we_need_to_sum_tuples(plan))
++					wrkrs += planstate->worker_instrument->num_workers;
 +
 +				if (plan->predicted_cardinality > 0.)
 +				{
@@ -859,7 +877,7 @@ index f8b79ec120..b5eda01907 100644
  extern void ExplainQuery(ParseState *pstate, ExplainStmt *stmt, const char *queryString,
  						 ParamListInfo params, QueryEnvironment *queryEnv, DestReceiver *dest);
 diff --git a/src/include/nodes/pathnodes.h b/src/include/nodes/pathnodes.h
-index 4b7703d478..490d67b098 100644
+index 441e64eca9..484bca379a 100644
 --- a/src/include/nodes/pathnodes.h
 +++ b/src/include/nodes/pathnodes.h
 @@ -710,6 +710,10 @@ typedef struct RelOptInfo
