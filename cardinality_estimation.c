@@ -1,4 +1,5 @@
 #include "aqo.h"
+#include "optimizer/optimizer.h"
 
 /*****************************************************************************
  *
@@ -53,5 +54,5 @@ predict_for_relation(List *restrict_clauses, List *selectivities, List *relids, 
 	if (result < 0)
 		return -1;
 	else
-		return exp(result);
+		return clamp_row_est(exp(result));
 }

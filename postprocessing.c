@@ -1,5 +1,6 @@
 #include "aqo.h"
 #include "access/parallel.h"
+#include "optimizer/optimizer.h"
 #include "utils/queryenvironment.h"
 
 /*****************************************************************************
@@ -184,17 +185,6 @@ restore_selectivities(List *clauselist,
 	return lst;
 }
 
-static bool
-we_need_to_sum_tuples(const Plan *plan)
-{
-	if (plan->path_parallel_workers > 0 && (
-		plan->parallel_aware || nodeTag(plan) == T_HashJoin ||
-								nodeTag(plan) == T_MergeJoin ||
-								nodeTag(plan) == T_NestLoop))
-		return true;
-	return false;
-}
-
 /*
  * Walks over obtained PlanState tree, collects relation objects with their
  * clauses, selectivities and relids and passes each object to learn_sample.
@@ -210,8 +200,9 @@ static bool
 learnOnPlanState(PlanState *p, void *context)
 {
 	aqo_obj_stat *ctx = (aqo_obj_stat *) context;
+	aqo_obj_stat SubplanCtx = {NIL, NIL, NIL};
 
-	planstate_tree_walker(p, learnOnPlanState, context);
+	planstate_tree_walker(p, learnOnPlanState, (void *) &SubplanCtx);
 
 	/*
 	 * Some nodes inserts after planning step (See T_Hash node type).
@@ -225,9 +216,11 @@ learnOnPlanState(PlanState *p, void *context)
 												  p->plan->path_relids,
 												  p->plan->path_jointype,
 												  p->plan->was_parametrized);
-		ctx->selectivities = list_concat(ctx->selectivities, cur_selectivities);
-		ctx->clauselist = list_concat(ctx->clauselist,
+		SubplanCtx.selectivities = list_concat(SubplanCtx.selectivities,
+															cur_selectivities);
+		SubplanCtx.clauselist = list_concat(SubplanCtx.clauselist,
 											list_copy(p->plan->path_clauses));
+
 		if (p->plan->path_relids != NIL)
 			/*
 			 * This plan can be stored as cached plan. In the case we will have
@@ -246,7 +239,7 @@ learnOnPlanState(PlanState *p, void *context)
 			if (p->instrument->nloops > 0.)
 			{
 				/* If we can strongly calculate produced rows, do it. */
-				if (p->worker_instrument && we_need_to_sum_tuples(p->plan))
+				if (p->worker_instrument && IsParallelTuplesProcessing(p->plan))
 				{
 					double wnloops = 0.;
 					double wntuples = 0.;
@@ -256,6 +249,10 @@ learnOnPlanState(PlanState *p, void *context)
 					{
 						double t = p->worker_instrument->instrument[i].ntuples;
 						double l = p->worker_instrument->instrument[i].nloops;
+
+						if (l <= 0)
+							continue;
+
 						wntuples += t;
 						wnloops += l;
 						learn_rows += t/l;
@@ -268,7 +265,8 @@ learnOnPlanState(PlanState *p, void *context)
 											(p->instrument->nloops - wnloops);
 				}
 				else
-					/* We don't have any workers. */
+					/* This node does not required to sum tuples of each worker
+					 * to calculate produced rows.  */
 					learn_rows = p->instrument->ntuples / p->instrument->nloops;
 
 				if (p->plan->predicted_cardinality > 0.)
@@ -283,8 +281,7 @@ learnOnPlanState(PlanState *p, void *context)
 					predicted = p->plan->plan_rows;
 
 				/* It is needed for correct exp(result) calculation. */
-				if (learn_rows < 1.)
-					learn_rows = 1.;
+				learn_rows = clamp_row_est(learn_rows);
 			}
 			else
 			{
@@ -297,15 +294,20 @@ learnOnPlanState(PlanState *p, void *context)
 			}
 
 			/*
-			 * Some execution logic optimizations can lead to the situation
-			 * than a subtree will never be visited.
+			 * A subtree was not visited. In this case we can not teach AQO
+			 * because ntuples value is equal to 0 and we will got learn rows == 1.
+			 * It is false teaching, because at another place of a plan
+			 * scanning of the node may produce many tuples.
 			 */
-			if (!(p->instrument->ntuples <= 0. && p->instrument->nloops <= 0.))
-				learn_sample(ctx->clauselist, ctx->selectivities,
-										ctx->relidslist, learn_rows, predicted);
+			if (p->instrument->nloops >= 1)
+				learn_sample(SubplanCtx.clauselist, SubplanCtx.selectivities,
+								p->plan->path_relids, learn_rows, predicted);
 		}
 	}
 
+	ctx->clauselist = list_concat(ctx->clauselist, SubplanCtx.clauselist);
+	ctx->selectivities = list_concat(ctx->selectivities,
+												SubplanCtx.selectivities);
 	return false;
 }
 
@@ -429,6 +431,9 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		cardinality_num_objects = 0;
 
 		learnOnPlanState(queryDesc->planstate, (void *) &ctx);
+		list_free(ctx.clauselist);
+		list_free(ctx.relidslist);
+		list_free(ctx.selectivities);
 	}
 
 	if (query_context.collect_stat)
