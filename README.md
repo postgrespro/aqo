@@ -20,14 +20,17 @@ installed with `make install`.
 ```
 cd postgresql-9.6                                                # enter postgresql source directory
 git clone https://github.com/tigvarts/aqo.git contrib/aqo        # clone aqo into contrib
-patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg9_6.patch  # patch postgresql
+patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg<version>.patch  # patch postgresql
 make clean && make && make install                               # recompile postgresql
 cd contrib/aqo                                                   # enter aqo directory
 make && make install                                             # install aqo
 make check                                              # check whether it works correctly (optional)
 ```
 
-For PostgreSQL 10 and above use aqo_pg10.patch instead of aqo_pg9_6.patch
+Tag `version` at the patch name corresponds to suitable PostgreSQL release.
+For PostgreSQL 10 use aqo_pg10.patch; for PostgreSQL 11 use aqo_pg11.patch and so on.
+Also, you can see git tags at the master branch for more accurate definition of
+suitable PostgreSQL version.
 
 In your database:
 
