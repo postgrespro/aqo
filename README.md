@@ -6,9 +6,22 @@ for improving cardinality estimation. Experimental evaluation shows that this
 improvement sometimes provides an enormously large speed-up for rather
 complicated queries.
 
+## Docker container
+For quick look into the query-driven adaptive query optimization you can use
+docker container defined by `Dockerfile` and `docker-entrypoint.sh` files.
+
+Frequently used commands:
+* docker build -t aqo .					# Build an image
+* docker run -d -p 5432:5432 aqo		# Run a container
+* docker exec -it `<CONTAINER_ID>` bash	# Open command prompt in the container
+Now, you can use `psql`.
+
 ## Installation
 
-The module works with PostgreSQL 9.6 and above.
+The module works with PostgreSQL 9.6 and above. You need to use appropriate
+branch from git repository. The repository contains branch `master` corresponding
+to current PostgreSQL master branch, and a number of branches called `stable9_6`
+`stable11` and `stable12`. The branch `stable11` can be used with PostgreSQL 10 too.
 
 The module contains a patch and an extension. Patch has to be applied to the
 sources of PostgresSQL. Patch affects header files, that is why PostgreSQL
@@ -18,16 +31,19 @@ Extension has to be unpacked into contrib directory and then to be compiled and
 installed with `make install`.
 
 ```
-cd postgresql-9.6                                                # enter postgresql source directory
-git clone https://github.com/tigvarts/aqo.git contrib/aqo        # clone aqo into contrib
-patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg9_6.patch  # patch postgresql
-make clean && make && make install                               # recompile postgresql
-cd contrib/aqo                                                   # enter aqo directory
-make && make install                                             # install aqo
-make check                                              # check whether it works correctly (optional)
+cd postgresql-9.6													# enter postgresql source directory
+git clone https://github.com/postgrespro/aqo.git					# clone aqo into contrib
+patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg<ver>.patch	# patch postgresql
+make clean && make && make install									# recompile postgresql
+cd contrib/aqo														# enter aqo directory
+make && make install												# install aqo
+make check															# check whether it works correctly (optional)
 ```
 
-For PostgreSQL 10 and above use aqo_pg10.patch instead of aqo_pg9_6.patch
+Tag `ver` at the patch name corresponds to suitable PostgreSQL release.
+For PostgreSQL 10 use aqo_pg10.patch; for PostgreSQL 11 use aqo_pg11.patch and so on.
+Also, you can see git tags at the master branch for more accurate definition of
+suitable PostgreSQL version.
 
 In your database:
 
