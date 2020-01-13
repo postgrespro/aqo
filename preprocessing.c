@@ -205,7 +205,9 @@ aqo_planner(Query *parse,
 		}
 		if (query_context.adding_query)
 		{
-			add_query(query_context.query_hash, query_context.learn_aqo, query_context.use_aqo, query_context.fspace_hash, query_context.auto_tuning);
+			add_query(query_context.query_hash, query_context.learn_aqo,
+					  query_context.use_aqo, query_context.fspace_hash,
+					  query_context.auto_tuning);
 			add_query_text(query_context.query_hash, query_text);
 		}
 	}
@@ -217,8 +219,11 @@ aqo_planner(Query *parse,
 		query_context.fspace_hash = DatumGetInt32(query_params[3]);
 		query_context.auto_tuning = DatumGetBool(query_params[4]);
 		query_context.collect_stat = query_context.auto_tuning;
-		if (!query_context.learn_aqo && !query_context.use_aqo && !query_context.auto_tuning)
+
+		if (!query_context.learn_aqo && !query_context.use_aqo &&
+			!query_context.auto_tuning)
 			add_deactivated_query(query_context.query_hash);
+
 		if (RecoveryInProgress())
 		{
 			query_context.learn_aqo = false;
@@ -232,8 +237,8 @@ aqo_planner(Query *parse,
 			query_context.auto_tuning = false;
 		}
 	}
-	query_context.explain_aqo = query_context.use_aqo;
 
+	query_context.explain_aqo = query_context.use_aqo;
 	return call_default_planner(parse, cursorOptions, boundParams);
 }
 

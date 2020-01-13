@@ -316,7 +316,7 @@ Dynamically generated constants are okay.
 
 ## License
 
-© [Postgres Professional](https://postgrespro.com/), 2016-2018. Licensed under
+© [Postgres Professional](https://postgrespro.com/), 2016-2020. Licensed under
 [The PostgreSQL License](LICENSE).
 
 ## Reference
