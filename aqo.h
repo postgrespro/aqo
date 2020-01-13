@@ -105,7 +105,7 @@
  * Module storage.c is responsible for storage query settings and models
  * (i. e. all information which is used in extension).
  *
- * Copyright (c) 2016-2018, Postgres Professional
+ * Copyright (c) 2016-2020, Postgres Professional
  *
  * IDENTIFICATION
  *	  contrib/aqo/aqo.h
@@ -267,8 +267,10 @@ extern void ppi_hook(ParamPathInfo *ppi);
 int			get_query_hash(Query *parse, const char *query_text);
 extern int get_fss_for_object(List *clauselist, List *selectivities,
 						List *relidslist, int *nfeatures, double **features);
-void		get_eclasses(List *clauselist, int *nargs, int **args_hash, int **eclass_hash);
-int			get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash);
+void		get_eclasses(List *clauselist, int *nargs,
+						 int **args_hash, int **eclass_hash);
+int			get_clause_hash(Expr *clause, int nargs,
+							int *args_hash, int *eclass_hash);
 
 
 /* Storage interaction */

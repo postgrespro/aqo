@@ -276,7 +276,8 @@ learnOnPlanState(PlanState *p, void *context)
 					(nodeTag(p->plan) == T_HashJoin ||
 					nodeTag(p->plan) == T_MergeJoin ||
 					nodeTag(p->plan) == T_NestLoop)))
-					predicted = p->plan->plan_rows * get_parallel_divisor(p->plan->path_parallel_workers);
+					predicted = p->plan->plan_rows *
+						get_parallel_divisor(p->plan->path_parallel_workers);
 				else
 					predicted = p->plan->plan_rows;
 
@@ -295,7 +296,8 @@ learnOnPlanState(PlanState *p, void *context)
 
 			/*
 			 * A subtree was not visited. In this case we can not teach AQO
-			 * because ntuples value is equal to 0 and we will got learn rows == 1.
+			 * because ntuples value is equal to 0 and we will got
+			 * learn rows == 1.
 			 * It is false teaching, because at another place of a plan
 			 * scanning of the node may produce many tuples.
 			 */

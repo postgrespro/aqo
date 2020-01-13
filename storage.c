@@ -224,7 +224,7 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 
 	index_rescan(query_index_scan, &key, 1, NULL, 0);
 	slot = MakeSingleTupleTableSlot(query_index_scan->heapRelation->rd_att,
-															&TTSOpsBufferHeapTuple);
+														&TTSOpsBufferHeapTuple);
 	find_ok = index_getnext_slot(query_index_scan, ForwardScanDirection, slot);
 	Assert(find_ok);
 	tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
@@ -414,7 +414,9 @@ load_fss(int fss_hash, int ncols, double **matrix, double *targets, int *rows)
 		if (DatumGetInt32(values[2]) == ncols)
 		{
 			if (ncols > 0)
-				/* The case than an object has not any filters, no selectivities. */
+				/*
+				 * The case than an object has not any filters and selectivities
+				 */
 				deform_matrix(values[3], matrix);
 
 			deform_vector(values[4], targets, rows);
@@ -506,7 +508,7 @@ update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets)
 	index_rescan(data_index_scan, key, 2, NULL, 0);
 
 	slot = MakeSingleTupleTableSlot(data_index_scan->heapRelation->rd_att,
-															&TTSOpsBufferHeapTuple);
+														&TTSOpsBufferHeapTuple);
 	find_ok = index_getnext_slot(data_index_scan, ForwardScanDirection, slot);
 
 	if (!find_ok)
@@ -635,7 +637,7 @@ get_aqo_stat(int query_hash)
 	index_rescan(stat_index_scan, &key, 1, NULL, 0);
 
 	slot = MakeSingleTupleTableSlot(stat_index_scan->heapRelation->rd_att,
-																&TTSOpsBufferHeapTuple);
+														&TTSOpsBufferHeapTuple);
 	find_ok = index_getnext_slot(stat_index_scan, ForwardScanDirection, slot);
 
 	if (find_ok)
@@ -760,9 +762,10 @@ update_aqo_stat(int query_hash, QueryStat *stat)
 	{
 		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
 		Assert(shouldFree != true);
-		values[0] = heap_getattr(tuple, 1, RelationGetDescr(aqo_stat_heap), &isnull[0]);
+		values[0] = heap_getattr(tuple, 1,
+								 RelationGetDescr(aqo_stat_heap), &isnull[0]);
 		nw_tuple = heap_modify_tuple(tuple, tuple_desc,
-									 values, isnull, replace);
+													values, isnull, replace);
 		if (my_simple_heap_update(aqo_stat_heap, &(nw_tuple->t_self), nw_tuple,
 															&update_indexes))
 		{

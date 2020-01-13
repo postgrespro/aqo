@@ -14,7 +14,8 @@
  * General method for prediction the cardinality of given relation.
  */
 double
-predict_for_relation(List *restrict_clauses, List *selectivities, List *relids, int *fss_hash)
+predict_for_relation(List *restrict_clauses, List *selectivities,
+					 List *relids, int *fss_hash)
 {
 	int		nfeatures;
 	double	*matrix[aqo_K];

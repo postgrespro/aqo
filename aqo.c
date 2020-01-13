@@ -116,7 +116,9 @@ _PG_init(void)
 	parampathinfo_postinit_hook					= ppi_hook;
 
 	init_deactivated_queries_storage();
-	AQOMemoryContext = AllocSetContextCreate(TopMemoryContext, "AQOMemoryContext", ALLOCSET_DEFAULT_SIZES);
+	AQOMemoryContext = AllocSetContextCreate(TopMemoryContext,
+											 "AQOMemoryContext",
+											 ALLOCSET_DEFAULT_SIZES);
 }
 
 PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
