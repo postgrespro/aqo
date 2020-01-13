@@ -70,7 +70,7 @@ find_query(int query_hash,
 	}
 
 	aqo_queries_table_rv = makeRangeVar("public", "aqo_queries", -1);
-	aqo_queries_heap = heap_openrv(aqo_queries_table_rv, lockmode);
+	aqo_queries_heap = table_openrv(aqo_queries_table_rv, lockmode);
 
 	query_index_rel = index_open(query_index_rel_oid, lockmode);
 	query_index_scan = index_beginscan(aqo_queries_heap,
@@ -102,7 +102,7 @@ find_query(int query_hash,
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(query_index_scan);
 	index_close(query_index_rel, lockmode);
-	heap_close(aqo_queries_heap, lockmode);
+	table_close(aqo_queries_heap, lockmode);
 
 	return find_ok;
 }
@@ -142,7 +142,7 @@ add_query(int query_hash, bool learn_aqo, bool use_aqo,
 	query_index_rel = index_open(query_index_rel_oid, lockmode);
 
 	aqo_queries_table_rv = makeRangeVar("public", "aqo_queries", -1);
-	aqo_queries_heap = heap_openrv(aqo_queries_table_rv, lockmode);
+	aqo_queries_heap = table_openrv(aqo_queries_table_rv, lockmode);
 
 	tuple = heap_form_tuple(RelationGetDescr(aqo_queries_heap),
 							values, nulls);
@@ -167,7 +167,7 @@ add_query(int query_hash, bool learn_aqo, bool use_aqo,
 	PG_END_TRY();
 
 	index_close(query_index_rel, lockmode);
-	heap_close(aqo_queries_heap, lockmode);
+	table_close(aqo_queries_heap, lockmode);
 
 	CommandCounterIncrement();
 
@@ -207,7 +207,7 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 	}
 
 	aqo_queries_table_rv = makeRangeVar("public", "aqo_queries", -1);
-	aqo_queries_heap = heap_openrv(aqo_queries_table_rv, lockmode);
+	aqo_queries_heap = table_openrv(aqo_queries_table_rv, lockmode);
 
 	query_index_rel = index_open(query_index_rel_oid, lockmode);
 	query_index_scan = index_beginscan(aqo_queries_heap,
@@ -261,7 +261,7 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(query_index_scan);
 	index_close(query_index_rel, lockmode);
-	heap_close(aqo_queries_heap, lockmode);
+	table_close(aqo_queries_heap, lockmode);
 
 	CommandCounterIncrement();
 
@@ -301,7 +301,7 @@ add_query_text(int query_hash, const char *query_text)
 	aqo_query_texts_table_rv = makeRangeVar("public",
 											"aqo_query_texts",
 											-1);
-	aqo_query_texts_heap = heap_openrv(aqo_query_texts_table_rv,
+	aqo_query_texts_heap = table_openrv(aqo_query_texts_table_rv,
 									   lockmode);
 
 	tuple = heap_form_tuple(RelationGetDescr(aqo_query_texts_heap),
@@ -321,13 +321,13 @@ add_query_text(int query_hash, const char *query_text)
 		CommandCounterIncrement();
 		simple_heap_delete(aqo_query_texts_heap, &(tuple->t_self));
 		index_close(query_index_rel, lockmode);
-		heap_close(aqo_query_texts_heap, lockmode);
+		table_close(aqo_query_texts_heap, lockmode);
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
 
 	index_close(query_index_rel, lockmode);
-	heap_close(aqo_query_texts_heap, lockmode);
+	table_close(aqo_query_texts_heap, lockmode);
 
 	CommandCounterIncrement();
 
@@ -378,7 +378,7 @@ load_fss(int fss_hash, int ncols, double **matrix, double *targets, int *rows)
 	}
 
 	aqo_data_table_rv = makeRangeVar("public", "aqo_data", -1);
-	aqo_data_heap = heap_openrv(aqo_data_table_rv, lockmode);
+	aqo_data_heap = table_openrv(aqo_data_table_rv, lockmode);
 
 	data_index_rel = index_open(data_index_rel_oid, lockmode);
 	data_index_scan = index_beginscan(aqo_data_heap,
@@ -434,7 +434,7 @@ load_fss(int fss_hash, int ncols, double **matrix, double *targets, int *rows)
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(data_index_scan);
 	index_close(data_index_rel, lockmode);
-	heap_close(aqo_data_heap, lockmode);
+	table_close(aqo_data_heap, lockmode);
 
 	return success;
 }
@@ -480,7 +480,7 @@ update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets)
 	}
 
 	aqo_data_table_rv = makeRangeVar("public", "aqo_data", -1);
-	aqo_data_heap = heap_openrv(aqo_data_table_rv, lockmode);
+	aqo_data_heap = table_openrv(aqo_data_table_rv, lockmode);
 
 	tuple_desc = RelationGetDescr(aqo_data_heap);
 
@@ -573,7 +573,7 @@ update_fss(int fss_hash, int nrows, int ncols, double **matrix, double *targets)
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(data_index_scan);
 	index_close(data_index_rel, lockmode);
-	heap_close(aqo_data_heap, lockmode);
+	table_close(aqo_data_heap, lockmode);
 
 	CommandCounterIncrement();
 
@@ -617,7 +617,7 @@ get_aqo_stat(int query_hash)
 	}
 
 	aqo_stat_table_rv = makeRangeVar("public", "aqo_query_stat", -1);
-	aqo_stat_heap = heap_openrv(aqo_stat_table_rv, heap_lock);
+	aqo_stat_heap = table_openrv(aqo_stat_table_rv, heap_lock);
 
 	stat_index_rel = index_open(stat_index_rel_oid, index_lock);
 	stat_index_scan = index_beginscan(aqo_stat_heap,
@@ -658,7 +658,7 @@ get_aqo_stat(int query_hash)
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(stat_index_scan);
 	index_close(stat_index_rel, index_lock);
-	heap_close(aqo_stat_heap, heap_lock);
+	table_close(aqo_stat_heap, heap_lock);
 
 	return stat;
 }
@@ -704,7 +704,7 @@ update_aqo_stat(int query_hash, QueryStat *stat)
 	}
 
 	aqo_stat_table_rv = makeRangeVar("public", "aqo_query_stat", -1);
-	aqo_stat_heap = heap_openrv(aqo_stat_table_rv, lockmode);
+	aqo_stat_heap = table_openrv(aqo_stat_table_rv, lockmode);
 
 	tuple_desc = RelationGetDescr(aqo_stat_heap);
 
@@ -787,7 +787,7 @@ update_aqo_stat(int query_hash, QueryStat *stat)
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(stat_index_scan);
 	index_close(stat_index_rel, lockmode);
-	heap_close(aqo_stat_heap, lockmode);
+	table_close(aqo_stat_heap, lockmode);
 
 	CommandCounterIncrement();
 }

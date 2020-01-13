@@ -155,7 +155,7 @@ OkNNr_learn(int nrows, int nfeatures, double **matrix, double *targets,
 	 * replace data for the neighbor to avoid some fluctuations.
 	 * We will change it's row with linear smoothing by learning_rate.
 	 */
-	if (nrows != 0 && distances[mid] < object_selection_threshold)
+	if (nrows > 0 && distances[mid] < object_selection_threshold)
 	{
 		for (j = 0; j < nfeatures; ++j)
 			matrix[mid][j] += learning_rate * (features[j] - matrix[mid][j]);
