@@ -233,7 +233,7 @@ learnOnPlanState(PlanState *p, void *context)
 							  p->plan->path_clauses != NIL))
 		{
 			double learn_rows = 0.;
-			double predicted;
+			double predicted = 0.;
 
 			InstrEndLoop(p->instrument);
 			if (p->instrument->nloops > 0.)

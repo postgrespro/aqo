@@ -163,10 +163,14 @@ aqo_planner(Query *parse,
 				break;
 			case AQO_MODE_CONTROLLED:
 			case AQO_MODE_FIXED:
-				/* if query is not in AQO database than disable AQO for this query */
+				/*
+				 * if query is not in the AQO knowledge base than disable AQO
+				 * for this query.
+				 */
 				query_context.adding_query = false;
 				query_context.learn_aqo = false;
 				query_context.use_aqo = false;
+				query_context.auto_tuning = false;
 				query_context.collect_stat = false;
 				break;
 			case AQO_MODE_LEARN:
@@ -181,9 +185,7 @@ aqo_planner(Query *parse,
 				/* Should never happen */
 				break;
 			default:
-				elog(WARNING,
-					 "unrecognized mode in AQO: %d",
-					 aqo_mode);
+				elog(WARNING, "unrecognized mode in AQO: %d", aqo_mode);
 				break;
 		}
 		if (RecoveryInProgress())
@@ -275,10 +277,10 @@ isQueryUsingSystemRelation_walker(Node *node, void *context)
 
 			if (rte->rtekind == RTE_RELATION)
 			{
-				Relation	rel = heap_open(rte->relid, AccessShareLock);
+				Relation	rel = table_open(rte->relid, AccessShareLock);
 				bool		is_catalog = IsCatalogRelation(rel);
 
-				heap_close(rel, AccessShareLock);
+				table_close(rel, AccessShareLock);
 				if (is_catalog)
 					return true;
 			}
