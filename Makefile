@@ -1,7 +1,7 @@
 # contrib/aqo/Makefile
 
 EXTENSION = aqo
-EXTVERSION = 1.1
+EXTVERSION = 1.2
 PGFILEDESC = "AQO - adaptive query optimization"
 MODULES = aqo
 OBJS = aqo.o auto_tuning.o cardinality_estimation.o cardinality_hooks.o \
@@ -17,8 +17,8 @@ REGRESS =	aqo_disabled \
 
 EXTRA_REGRESS_OPTS=--temp-config=$(top_srcdir)/$(subdir)/conf.add
 
-DATA = aqo--1.0.sql aqo--1.0--1.1.sql
-DATA_built = aqo--1.1.sql
+DATA = aqo--1.0.sql aqo--1.0--1.1.sql aqo--1.1--1.2.sql
+DATA_built = aqo--1.2.sql
 
 MODULE_big = aqo
 ifdef USE_PGXS

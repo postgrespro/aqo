@@ -6,7 +6,8 @@ void _PG_init(void);
 
 
 /* Strategy of determining feature space for new queries. */
-int			aqo_mode;
+int		aqo_mode;
+bool	force_collect_stat;
 
 /* GUC variables */
 static const struct config_enum_entry format_options[] = {
@@ -14,7 +15,7 @@ static const struct config_enum_entry format_options[] = {
 	{"forced", AQO_MODE_FORCED, false},
 	{"controlled", AQO_MODE_CONTROLLED, false},
 	{"learn", AQO_MODE_LEARN, false},
-	{"fixed", AQO_MODE_FIXED, false},
+	{"frozen", AQO_MODE_FROZEN, false},
 	{"disabled", AQO_MODE_DISABLED, false},
 	{NULL, 0, false}
 };
@@ -92,6 +93,19 @@ _PG_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	DefineCustomBoolVariable(
+							 "aqo.force_collect_stat",
+							 "Collect statistics at all AQO modes",
+							 NULL,
+							 &force_collect_stat,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL
+		);
 
 	prev_planner_hook							= planner_hook;
 	planner_hook								= aqo_planner;
