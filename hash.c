@@ -334,7 +334,11 @@ get_relidslist_hash(List *relidslist)
 char *
 remove_consts(const char *str)
 {
-	return replace_patterns(str, "{CONST", is_brace);
+	char *res;
+
+	res = replace_patterns(str, "{CONST", is_brace);
+	res = replace_patterns(res, ":stmt_len", is_brace);
+	return res;
 }
 
 /*

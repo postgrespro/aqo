@@ -166,11 +166,13 @@ typedef enum
 	/* Creates new feature space for each query type without auto-tuning */
 	AQO_MODE_LEARN,
 	/* Use only current AQO estimations, without learning or tuning */
-	AQO_MODE_FIXED,
+	AQO_MODE_FROZEN,
 	/* Aqo is disabled for all queries */
 	AQO_MODE_DISABLED,
 }	AQO_MODE;
+
 extern int	aqo_mode;
+extern bool	force_collect_stat;
 
 /*
  * It is mostly needed for auto tuning of query. with auto tuning mode aqo

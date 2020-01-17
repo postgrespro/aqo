@@ -122,7 +122,9 @@ aqo_planner(Query *parse,
 		get_extension_oid("aqo", true) == InvalidOid ||
 		creating_extension ||
 		/*IsInParallelMode() ||*/ IsParallelWorker() ||
-		aqo_mode == AQO_MODE_DISABLED || isQueryUsingSystemRelation(parse))
+		(aqo_mode == AQO_MODE_DISABLED && !force_collect_stat) ||
+		isQueryUsingSystemRelation(parse) ||
+		RecoveryInProgress())
 	{
 		disable_aqo_for_query();
 		return call_default_planner(parse, cursorOptions, boundParams);
@@ -162,7 +164,7 @@ aqo_planner(Query *parse,
 				query_context.collect_stat = false;
 				break;
 			case AQO_MODE_CONTROLLED:
-			case AQO_MODE_FIXED:
+			case AQO_MODE_FROZEN:
 				/*
 				 * if query is not in the AQO knowledge base than disable AQO
 				 * for this query.
@@ -185,10 +187,10 @@ aqo_planner(Query *parse,
 				/* Should never happen */
 				break;
 			default:
-				elog(WARNING, "unrecognized mode in AQO: %d", aqo_mode);
+				elog(ERROR, "unrecognized mode in AQO: %d", aqo_mode);
 				break;
 		}
-		if (RecoveryInProgress())
+/*		if (RecoveryInProgress())
 		{
 			if (aqo_mode == AQO_MODE_FORCED)
 			{
@@ -202,8 +204,8 @@ aqo_planner(Query *parse,
 				disable_aqo_for_query();
 				return call_default_planner(parse, cursorOptions, boundParams);
 			}
-		}
-		if (query_context.adding_query)
+		}*/
+		if (query_context.adding_query || force_collect_stat)
 		{
 			add_query(query_context.query_hash, query_context.learn_aqo,
 					  query_context.use_aqo, query_context.fspace_hash,
@@ -224,18 +226,58 @@ aqo_planner(Query *parse,
 			!query_context.auto_tuning)
 			add_deactivated_query(query_context.query_hash);
 
-		if (RecoveryInProgress())
+		/*
+		 * That we can do if query exists in database.
+		 * Additional preference changes, based on AQO mode.
+		 */
+		switch (aqo_mode)
 		{
+		case AQO_MODE_FROZEN:
+			/*
+			 * In this mode we will suppress all writings to the knowledge base.
+			 * AQO will be used for all known queries, if it is not suppressed.
+			 */
 			query_context.learn_aqo = false;
 			query_context.auto_tuning = false;
 			query_context.collect_stat = false;
-		}
+			break;
 
-		if (aqo_mode == AQO_MODE_FIXED)
-		{
-			query_context.learn_aqo = false;
-			query_context.auto_tuning = false;
+		case AQO_MODE_LEARN:
+			/*
+			 * In this mode we want to learn with incoming query (if it is not
+			 * suppressed manually) and collect stats.
+			 */
+			query_context.collect_stat = true;
+			query_context.fspace_hash = query_context.query_hash;
+			break;
+
+		case AQO_MODE_INTELLIGENT:
+		case AQO_MODE_FORCED:
+		case AQO_MODE_CONTROLLED:
+		case AQO_MODE_DISABLED:
+			/* Use preferences as set early. */
+			break;
+
+		default:
+			elog(ERROR, "Unrecognized aqo mode %d", aqo_mode);
 		}
+	}
+
+	/*
+	 * This mode is possible here, because force collect statistics uses AQO
+	 * machinery.
+	 */
+	if (aqo_mode == AQO_MODE_DISABLED)
+		disable_aqo_for_query();
+
+	if (force_collect_stat)
+	{
+		/*
+		 * If this GUC is set, AQO will analyze query results and collect
+		 * query execution statistics in any mode.
+		 */
+		query_context.collect_stat = true;
+		query_context.fspace_hash = query_context.query_hash;
 	}
 
 	query_context.explain_aqo = query_context.use_aqo;

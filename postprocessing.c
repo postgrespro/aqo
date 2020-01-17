@@ -18,6 +18,7 @@ typedef struct
 	List *clauselist;
 	List *selectivities;
 	List *relidslist;
+	bool learn;
 } aqo_obj_stat;
 
 static double cardinality_sum_errors;
@@ -90,9 +91,6 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 	double		target;
 	int			i;
 
-	cardinality_sum_errors += fabs(log(predicted_cardinality) -
-								   log(true_cardinality));
-	cardinality_num_objects += 1;
 /*
  * Suppress the optimization for debug purposes.
 	if (fabs(log(predicted_cardinality) - log(true_cardinality)) <
@@ -200,7 +198,7 @@ static bool
 learnOnPlanState(PlanState *p, void *context)
 {
 	aqo_obj_stat *ctx = (aqo_obj_stat *) context;
-	aqo_obj_stat SubplanCtx = {NIL, NIL, NIL};
+	aqo_obj_stat SubplanCtx = {NIL, NIL, NIL, ctx->learn};
 
 	planstate_tree_walker(p, learnOnPlanState, (void *) &SubplanCtx);
 
@@ -294,6 +292,10 @@ learnOnPlanState(PlanState *p, void *context)
 				learn_rows = 1.;
 			}
 
+			cardinality_sum_errors += fabs(log(predicted) -
+										   log(learn_rows));
+			cardinality_num_objects += 1;
+
 			/*
 			 * A subtree was not visited. In this case we can not teach AQO
 			 * because ntuples value is equal to 0 and we will got
@@ -301,7 +303,7 @@ learnOnPlanState(PlanState *p, void *context)
 			 * It is false teaching, because at another place of a plan
 			 * scanning of the node may produce many tuples.
 			 */
-			if (p->instrument->nloops >= 1)
+			if (ctx->learn && p->instrument->nloops >= 1)
 				learn_sample(SubplanCtx.clauselist, SubplanCtx.selectivities,
 								p->plan->path_relids, learn_rows, predicted);
 		}
@@ -366,7 +368,8 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 {
 	instr_time	current_time;
 
-	if (query_context.use_aqo || query_context.learn_aqo)
+	if (!IsParallelWorker() &&
+		(query_context.use_aqo || query_context.learn_aqo || force_collect_stat))
 	{
 		INSTR_TIME_SET_CURRENT(current_time);
 		INSTR_TIME_SUBTRACT(current_time, query_context.query_starttime);
@@ -374,7 +377,8 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 
 		query_context.explain_only = ((eflags & EXEC_FLAG_EXPLAIN_ONLY) != 0);
 
-		if (query_context.learn_aqo && !query_context.explain_only)
+		if ((query_context.learn_aqo || force_collect_stat) &&
+			!query_context.explain_only)
 			queryDesc->instrument_options |= INSTRUMENT_ROWS;
 
 		/* Save all query-related parameters into the query context. */
@@ -425,9 +429,9 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		query_context.collect_stat = false;
 	}
 
-	if (query_context.learn_aqo)
+	if (query_context.learn_aqo || query_context.collect_stat)
 	{
-		aqo_obj_stat ctx = {NIL, NIL, NIL};
+		aqo_obj_stat ctx = {NIL, NIL, NIL, query_context.learn_aqo};
 
 		cardinality_sum_errors = 0.;
 		cardinality_num_objects = 0;
@@ -443,13 +447,14 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		INSTR_TIME_SET_CURRENT(endtime);
 		INSTR_TIME_SUBTRACT(endtime, query_context.query_starttime);
 		totaltime = INSTR_TIME_GET_DOUBLE(endtime);
-		if (query_context.learn_aqo && cardinality_num_objects > 0)
+		if (cardinality_num_objects > 0)
 			cardinality_error = cardinality_sum_errors /
 				cardinality_num_objects;
 		else
 			cardinality_error = -1;
 
 		stat = get_aqo_stat(query_context.query_hash);
+
 		if (stat != NULL)
 		{
 			if (query_context.use_aqo)
@@ -699,7 +704,7 @@ void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 			case AQO_MODE_LEARN:
 				ExplainPropertyText("AQO mode", "LEARN", es);
 				break;
-			case AQO_MODE_FIXED:
+			case AQO_MODE_FROZEN:
 				ExplainPropertyText("AQO mode", "FIXED", es);
 				break;
 			default:
