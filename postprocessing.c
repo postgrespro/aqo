@@ -183,6 +183,17 @@ restore_selectivities(List *clauselist,
 	return lst;
 }
 
+static bool
+HasNeverVisitedNodes(PlanState *ps, void *context)
+{
+	Assert(context == NULL);
+
+	InstrEndLoop(ps->instrument);
+	if (ps->instrument == NULL || ps->instrument->nloops == 0)
+		return true;
+
+	return planstate_tree_walker(ps, HasNeverVisitedNodes, NULL);
+}
 /*
  * Walks over obtained PlanState tree, collects relation objects with their
  * clauses, selectivities and relids and passes each object to learn_sample.
@@ -233,7 +244,6 @@ learnOnPlanState(PlanState *p, void *context)
 			double learn_rows = 0.;
 			double predicted = 0.;
 
-			InstrEndLoop(p->instrument);
 			if (p->instrument->nloops > 0.)
 			{
 				/* If we can strongly calculate produced rows, do it. */
@@ -269,41 +279,42 @@ learnOnPlanState(PlanState *p, void *context)
 
 				if (p->plan->predicted_cardinality > 0.)
 					predicted = p->plan->predicted_cardinality;
-				else if (p->plan->parallel_aware ||
-					(p->plan->path_parallel_workers > 0 &&
-					(nodeTag(p->plan) == T_HashJoin ||
-					nodeTag(p->plan) == T_MergeJoin ||
-					nodeTag(p->plan) == T_NestLoop)))
+				else if (IsParallelTuplesProcessing(p->plan))
 					predicted = p->plan->plan_rows *
 						get_parallel_divisor(p->plan->path_parallel_workers);
 				else
 					predicted = p->plan->plan_rows;
 
 				/* It is needed for correct exp(result) calculation. */
+				predicted = clamp_row_est(predicted);
 				learn_rows = clamp_row_est(learn_rows);
 			}
 			else
 			{
 				/*
-				 * LAV: I found only one case for this code: if query returns
-				 * with error. May be we will process this case and not learn
-				 * AQO on the query?
+				 * LAV: I found two cases for this code:
+				 * 1. if query returns with error.
+				 * 2. plan node has never visited.
+				 * Both cases can't be used to learning AQO because give an
+				 * incorrect number of rows.
 				 */
-				learn_rows = 1.;
+				elog(PANIC, "AQO: impossible situation");
 			}
 
-			cardinality_sum_errors += fabs(log(predicted) -
-										   log(learn_rows));
+			Assert(predicted >= 1 && learn_rows >= 1);
+			cardinality_sum_errors += fabs(log(predicted) - log(learn_rows));
 			cardinality_num_objects += 1;
 
 			/*
 			 * A subtree was not visited. In this case we can not teach AQO
 			 * because ntuples value is equal to 0 and we will got
 			 * learn rows == 1.
-			 * It is false teaching, because at another place of a plan
-			 * scanning of the node may produce many tuples.
+			 * It is false knowledge: at another place of a plan, scanning of
+			 * the node may produce many tuples.
 			 */
-			if (ctx->learn && p->instrument->nloops >= 1)
+			Assert(p->instrument->nloops >= 1);
+
+			if (ctx->learn)
 				learn_sample(SubplanCtx.clauselist, SubplanCtx.selectivities,
 								p->plan->path_relids, learn_rows, predicted);
 		}
@@ -327,16 +338,18 @@ update_query_stat_row(double *et, int *et_size,
 					  double cardinality_error,
 					  int64 *n_exec)
 {
-	int			i;
+	int i;
 
-	if (cardinality_error >= 0)
-	{
-		if (*ce_size >= aqo_stat_size)
+	/*
+	 * If plan contains one or more "never visited" nodes, cardinality_error
+	 * have -1 value and will be written to the knowledge base. User can use it
+	 * as a sign that AQO ignores this query.
+	 */
+	if (*ce_size >= aqo_stat_size)
 			for (i = 1; i < aqo_stat_size; ++i)
 				ce[i - 1] = ce[i];
 		*ce_size = (*ce_size >= aqo_stat_size) ? aqo_stat_size : (*ce_size + 1);
 		ce[*ce_size - 1] = cardinality_error;
-	}
 
 	if (*et_size >= aqo_stat_size)
 		for (i = 1; i < aqo_stat_size; ++i)
@@ -367,9 +380,12 @@ void
 aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 {
 	instr_time	current_time;
+	bool use_aqo;
 
-	if (!IsParallelWorker() &&
-		(query_context.use_aqo || query_context.learn_aqo || force_collect_stat))
+	use_aqo = !IsParallelWorker() && (query_context.use_aqo ||
+								query_context.learn_aqo || force_collect_stat);
+
+	if (use_aqo)
 	{
 		INSTR_TIME_SET_CURRENT(current_time);
 		INSTR_TIME_SUBTRACT(current_time, query_context.query_starttime);
@@ -391,8 +407,8 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 		standard_ExecutorStart(queryDesc, eflags);
 
 	/* Plan state has initialized */
-
-	StorePlanInternals(queryDesc);
+	if (use_aqo)
+		StorePlanInternals(queryDesc);
 }
 
 /*
@@ -403,11 +419,14 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 void
 aqo_ExecutorEnd(QueryDesc *queryDesc)
 {
-	double		totaltime;
-	double		cardinality_error;
-	QueryStat  *stat = NULL;
-	instr_time	endtime;
+	double totaltime;
+	double cardinality_error;
+	QueryStat *stat = NULL;
+	instr_time endtime;
 	EphemeralNamedRelation enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
+
+	cardinality_sum_errors = 0.;
+	cardinality_num_objects = 0;
 
 	if (!ExtractFromQueryContext(queryDesc))
 		/* AQO keep all query-related preferences at the query context.
@@ -418,8 +437,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		 */
 		goto end;
 
-	if (enr)
-		njoins = *(int *) enr->reldata;
+	njoins = (enr != NULL) ? *(int *) enr->reldata : -1;
 
 	Assert(!IsParallelWorker());
 
@@ -429,12 +447,10 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		query_context.collect_stat = false;
 	}
 
-	if (query_context.learn_aqo || query_context.collect_stat)
+	if ((query_context.learn_aqo || query_context.collect_stat) &&
+		!HasNeverVisitedNodes(queryDesc->planstate, NULL))
 	{
 		aqo_obj_stat ctx = {NIL, NIL, NIL, query_context.learn_aqo};
-
-		cardinality_sum_errors = 0.;
-		cardinality_num_objects = 0;
 
 		learnOnPlanState(queryDesc->planstate, (void *) &ctx);
 		list_free(ctx.clauselist);
@@ -448,8 +464,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		INSTR_TIME_SUBTRACT(endtime, query_context.query_starttime);
 		totaltime = INSTR_TIME_GET_DOUBLE(endtime);
 		if (cardinality_num_objects > 0)
-			cardinality_error = cardinality_sum_errors /
-				cardinality_num_objects;
+			cardinality_error = cardinality_sum_errors / cardinality_num_objects;
 		else
 			cardinality_error = -1;
 
@@ -668,6 +683,12 @@ RemoveFromQueryContext(QueryDesc *queryDesc)
 	unregister_ENR(queryDesc->queryEnv, AQOPrivateData);
 	pfree(enr->reldata);
 	pfree(enr);
+
+	/* Remove the plan state internals */
+	enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
+	unregister_ENR(queryDesc->queryEnv, PlanStateInfo);
+	pfree(enr->reldata);
+	pfree(enr);
 }
 
 /*
@@ -705,13 +726,18 @@ void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 				ExplainPropertyText("AQO mode", "LEARN", es);
 				break;
 			case AQO_MODE_FROZEN:
-				ExplainPropertyText("AQO mode", "FIXED", es);
+				ExplainPropertyText("AQO mode", "FROZEN", es);
 				break;
 			default:
 				elog(ERROR, "Bad AQO state");
 				break;
 			}
 
+			/*
+			 * Query hash provides an user the conveniently use of the AQO
+			 * auxiliary functions.
+			 */
+			ExplainPropertyInteger("Query hash", NULL, query_context.query_hash, es);
 			ExplainPropertyInteger("JOINS", NULL, njoins, es);
 		}
 		query_context.explain_aqo = false;
