@@ -110,7 +110,6 @@ aqo_planner(Query *parse,
 	bool		query_nulls[5] = {false, false, false, false, false};
 
 	selectivity_cache_clear();
-	query_context.explain_aqo = false;
 
 	 /*
 	  * We do not work inside an parallel worker now by reason of insert into
@@ -121,7 +120,7 @@ aqo_planner(Query *parse,
 		parse->commandType != CMD_UPDATE && parse->commandType != CMD_DELETE) ||
 		get_extension_oid("aqo", true) == InvalidOid ||
 		creating_extension ||
-		/*IsInParallelMode() ||*/ IsParallelWorker() ||
+		IsParallelWorker() ||
 		(aqo_mode == AQO_MODE_DISABLED && !force_collect_stat) ||
 		isQueryUsingSystemRelation(parse) ||
 		RecoveryInProgress())
@@ -185,26 +184,13 @@ aqo_planner(Query *parse,
 				break;
 			case AQO_MODE_DISABLED:
 				/* Should never happen */
+				query_context.fspace_hash = query_context.query_hash;
 				break;
 			default:
 				elog(ERROR, "unrecognized mode in AQO: %d", aqo_mode);
 				break;
 		}
-/*		if (RecoveryInProgress())
-		{
-			if (aqo_mode == AQO_MODE_FORCED)
-			{
-				query_context.adding_query = false;
-				query_context.learn_aqo = false;
-				query_context.auto_tuning = false;
-				query_context.collect_stat = false;
-			}
-			else
-			{
-				disable_aqo_for_query();
-				return call_default_planner(parse, cursorOptions, boundParams);
-			}
-		}*/
+
 		if (query_context.adding_query || force_collect_stat)
 		{
 			add_query(query_context.query_hash, query_context.learn_aqo,
@@ -280,7 +266,6 @@ aqo_planner(Query *parse,
 		query_context.fspace_hash = query_context.query_hash;
 	}
 
-	query_context.explain_aqo = query_context.use_aqo;
 	return call_default_planner(parse, cursorOptions, boundParams);
 }
 

@@ -211,7 +211,7 @@ typedef struct QueryContextData
 	bool		collect_stat;
 	bool		adding_query;
 	bool		explain_only;
-	bool		explain_aqo;
+
 	/* Query execution time */
 	instr_time	query_starttime;
 	double		query_planning_time;

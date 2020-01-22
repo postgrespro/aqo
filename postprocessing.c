@@ -183,8 +183,13 @@ restore_selectivities(List *clauselist,
 	return lst;
 }
 
+/*
+ * Check for the nodes that never executed. If at least one node exists in the
+ * plan than actual rows of any another node can be false.
+ * Suppress such knowledge because it can worsen the query execution time.
+ */
 static bool
-HasNeverVisitedNodes(PlanState *ps, void *context)
+HasNeverExecutedNodes(PlanState *ps, void *context)
 {
 	Assert(context == NULL);
 
@@ -192,7 +197,7 @@ HasNeverVisitedNodes(PlanState *ps, void *context)
 	if (ps->instrument == NULL || ps->instrument->nloops == 0)
 		return true;
 
-	return planstate_tree_walker(ps, HasNeverVisitedNodes, NULL);
+	return planstate_tree_walker(ps, HasNeverExecutedNodes, NULL);
 }
 /*
  * Walks over obtained PlanState tree, collects relation objects with their
@@ -448,7 +453,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	}
 
 	if ((query_context.learn_aqo || query_context.collect_stat) &&
-		!HasNeverVisitedNodes(queryDesc->planstate, NULL))
+		!HasNeverExecutedNodes(queryDesc->planstate, NULL))
 	{
 		aqo_obj_stat ctx = {NIL, NIL, NIL, query_context.learn_aqo};
 
@@ -704,43 +709,46 @@ void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 								params, planduration, queryEnv);
 
 #ifdef AQO_EXPLAIN
-	if (query_context.explain_aqo)
+	/* Report to user about aqo state only in verbose mode */
+	if (es->verbose)
 	{
-		/* Report to user about aqo state only in verbose mode */
-		if (es->verbose)
+		ExplainPropertyBool("Using aqo", query_context.use_aqo, es);
+
+		switch (aqo_mode)
 		{
-			ExplainPropertyBool("Using aqo", true, es);
+		case AQO_MODE_INTELLIGENT:
+			ExplainPropertyText("AQO mode", "INTELLIGENT", es);
+			break;
+		case AQO_MODE_FORCED:
+			ExplainPropertyText("AQO mode", "FORCED", es);
+			break;
+		case AQO_MODE_CONTROLLED:
+			ExplainPropertyText("AQO mode", "CONTROLLED", es);
+			break;
+		case AQO_MODE_LEARN:
+			ExplainPropertyText("AQO mode", "LEARN", es);
+			break;
+		case AQO_MODE_FROZEN:
+			ExplainPropertyText("AQO mode", "FROZEN", es);
+			break;
+		case AQO_MODE_DISABLED:
+			ExplainPropertyText("AQO mode", "DISABLED", es);
+			break;
+		default:
+			elog(ERROR, "Bad AQO state");
+			break;
+		}
 
-			switch (aqo_mode)
-			{
-			case AQO_MODE_INTELLIGENT:
-				ExplainPropertyText("AQO mode", "INTELLIGENT", es);
-				break;
-			case AQO_MODE_FORCED:
-				ExplainPropertyText("AQO mode", "FORCED", es);
-				break;
-			case AQO_MODE_CONTROLLED:
-				ExplainPropertyText("AQO mode", "CONTROLLED", es);
-				break;
-			case AQO_MODE_LEARN:
-				ExplainPropertyText("AQO mode", "LEARN", es);
-				break;
-			case AQO_MODE_FROZEN:
-				ExplainPropertyText("AQO mode", "FROZEN", es);
-				break;
-			default:
-				elog(ERROR, "Bad AQO state");
-				break;
-			}
-
-			/*
-			 * Query hash provides an user the conveniently use of the AQO
-			 * auxiliary functions.
-			 */
-			ExplainPropertyInteger("Query hash", NULL, query_context.query_hash, es);
+		/*
+		 * Query hash provides an user the conveniently use of the AQO
+		 * auxiliary functions.
+		 */
+		if (aqo_mode != AQO_MODE_DISABLED || force_collect_stat)
+		{
+			ExplainPropertyInteger("Query hash", NULL,
+												query_context.query_hash, es);
 			ExplainPropertyInteger("JOINS", NULL, njoins, es);
 		}
-		query_context.explain_aqo = false;
 	}
 #endif
 }
