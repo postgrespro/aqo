@@ -25,6 +25,8 @@ DROP FUNCTION aqo_migrate_to_1_2_get_pk(regclass);
 --
 -- Service functions
 --
+
+-- Show query state at the AQO knowledge base
 CREATE FUNCTION public.aqo_status(hash int)
 RETURNS TABLE (
 	"learn"			BOOL,
@@ -60,3 +62,9 @@ WHERE (aqs.query_hash = aq.query_hash) AND
 	aqs.query_hash = $1;
 $func$ LANGUAGE SQL;
 
+-- Show queries that contains 'Never executed' nodes at the plan.
+CREATE FUNCTION public.aqo_ne_queries()
+RETURNS SETOF int
+AS $func$
+SELECT query_hash FROM aqo_query_stat aqs WHERE -1 = ANY (cardinality_error_with_aqo::double precision[]);
+$func$ LANGUAGE SQL;
