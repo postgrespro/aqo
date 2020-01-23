@@ -62,9 +62,43 @@ WHERE (aqs.query_hash = aq.query_hash) AND
 	aqs.query_hash = $1;
 $func$ LANGUAGE SQL;
 
+CREATE FUNCTION public.aqo_enable_query(hash int)
+RETURNS VOID
+AS $func$
+UPDATE aqo_queries SET
+	learn_aqo = 'true',
+	use_aqo = 'true'
+	WHERE query_hash = $1;
+$func$ LANGUAGE SQL;
+
+CREATE FUNCTION public.aqo_disable_query(hash int)
+RETURNS VOID
+AS $func$
+UPDATE aqo_queries SET
+	learn_aqo = 'false',
+	use_aqo = 'false',
+	auto_tuning = 'false'
+	WHERE query_hash = $1;
+$func$ LANGUAGE SQL;
+
+CREATE FUNCTION public.aqo_clear_hist(hash int)
+RETURNS VOID
+AS $func$
+DELETE FROM aqo_data WHERE fspace_hash=$1;
+$func$ LANGUAGE SQL;
+
 -- Show queries that contains 'Never executed' nodes at the plan.
 CREATE FUNCTION public.aqo_ne_queries()
 RETURNS SETOF int
 AS $func$
 SELECT query_hash FROM aqo_query_stat aqs WHERE -1 = ANY (cardinality_error_with_aqo::double precision[]);
+$func$ LANGUAGE SQL;
+
+CREATE FUNCTION public.aqo_drop(hash int)
+RETURNS VOID
+AS $func$
+DELETE FROM aqo_queries aq WHERE (aq.query_hash = $1);
+DELETE FROM aqo_data ad WHERE (ad.fspace_hash = $1);
+DELETE FROM aqo_query_stat aq WHERE (aq.query_hash = $1);
+DELETE FROM aqo_query_texts aq WHERE (aq.query_hash = $1);
 $func$ LANGUAGE SQL;
