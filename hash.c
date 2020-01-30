@@ -45,6 +45,8 @@ static bool clause_is_eq_clause(Expr *clause);
 /*
  * Computes hash for given query.
  * Hash is supposed to be constant-insensitive.
+ * XXX: Hashing depend on Oids of database objects. It is restrict usability of
+ * the AQO knowledge base by current database at current Postgres instance.
  */
 int
 get_query_hash(Query *parse, const char *query_text)
@@ -149,7 +151,11 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 	*nfeatures = n - sh;
 	(*features) = repalloc(*features, (*nfeatures) * sizeof(**features));
 
-	/* Generate feature subspace hash */
+	/*
+	 * Generate feature subspace hash.
+	 * XXX: Remember! that relidslist_hash isn't portable between postgres
+	 * instances.
+	 */
 	clauses_hash = get_int_array_hash(sorted_clauses, *nfeatures);
 	eclasses_hash = get_int_array_hash(eclass_hash, nargs);
 	relidslist_hash = get_relidslist_hash(relidslist);

@@ -476,9 +476,9 @@ FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3
 WHERE t1.a = t2.b AND t2.a = t3.b;
                                   QUERY PLAN                                   
 -------------------------------------------------------------------------------
- Hash Join  (cost=2.90..4.65 rows=20 width=12)
+ Hash Join  (cost=2.90..4.64 rows=18 width=12)
    Hash Cond: (t2.a = t3.b)
-   ->  Hash Join  (cost=1.45..2.92 rows=20 width=8)
+   ->  Hash Join  (cost=1.45..2.92 rows=19 width=8)
          Hash Cond: (t1.a = t2.b)
          ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.20 rows=20 width=4)
          ->  Hash  (cost=1.20..1.20 rows=20 width=8)
@@ -492,11 +492,11 @@ FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
 WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
                                      QUERY PLAN                                      
 -------------------------------------------------------------------------------------
- Hash Join  (cost=4.35..6.37 rows=20 width=16)
+ Hash Join  (cost=4.35..6.33 rows=17 width=16)
    Hash Cond: (t3.a = t4.b)
-   ->  Hash Join  (cost=2.90..4.65 rows=20 width=12)
+   ->  Hash Join  (cost=2.90..4.64 rows=18 width=12)
          Hash Cond: (t2.a = t3.b)
-         ->  Hash Join  (cost=1.45..2.92 rows=20 width=8)
+         ->  Hash Join  (cost=1.45..2.92 rows=19 width=8)
                Hash Cond: (t1.a = t2.b)
                ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.20 rows=20 width=4)
                ->  Hash  (cost=1.20..1.20 rows=20 width=8)
@@ -506,37 +506,6 @@ WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
    ->  Hash  (cost=1.20..1.20 rows=20 width=8)
          ->  Seq Scan on aqo_test1 t4  (cost=0.00..1.20 rows=20 width=8)
 (13 rows)
-
-EXPLAIN verbose SELECT t1.a AS a, t2.a AS b, t3.a AS c, t4.a AS d
-FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
-WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
- Hash Join  (cost=4.35..6.37 rows=20 width=16)
-   Output: t1.a, t2.a, t3.a, t4.a
-   Hash Cond: (t3.a = t4.b)
-   ->  Hash Join  (cost=2.90..4.65 rows=20 width=12)
-         Output: t1.a, t2.a, t3.a
-         Hash Cond: (t2.a = t3.b)
-         ->  Hash Join  (cost=1.45..2.92 rows=20 width=8)
-               Output: t1.a, t2.a
-               Hash Cond: (t1.a = t2.b)
-               ->  Seq Scan on public.aqo_test1 t1  (cost=0.00..1.20 rows=20 width=4)
-                     Output: t1.a, t1.b
-               ->  Hash  (cost=1.20..1.20 rows=20 width=8)
-                     Output: t2.a, t2.b
-                     ->  Seq Scan on public.aqo_test1 t2  (cost=0.00..1.20 rows=20 width=8)
-                           Output: t2.a, t2.b
-         ->  Hash  (cost=1.20..1.20 rows=20 width=8)
-               Output: t3.a, t3.b
-               ->  Seq Scan on public.aqo_test1 t3  (cost=0.00..1.20 rows=20 width=8)
-                     Output: t3.a, t3.b
-   ->  Hash  (cost=1.20..1.20 rows=20 width=8)
-         Output: t4.a, t4.b
-         ->  Seq Scan on public.aqo_test1 t4  (cost=0.00..1.20 rows=20 width=8)
-               Output: t4.a, t4.b
- Using aqo: true
-(24 rows)
 
 DROP INDEX aqo_test0_idx_a;
 DROP TABLE aqo_test0;

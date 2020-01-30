@@ -96,12 +96,12 @@ double
 OkNNr_predict(int nrows, int ncols, double **matrix, const double *targets,
 			  double *features)
 {
-	double	   distances[aqo_K];
-	int			i;
-	int		   idx[aqo_K]; /* indexes of nearest neighbors */
-	double	   w[aqo_K];
-	double		w_sum;
-	double		result = 0;
+	double	distances[aqo_K];
+	int		i;
+	int		idx[aqo_K]; /* indexes of nearest neighbors */
+	double	w[aqo_K];
+	double	w_sum;
+	double	result = 0;
 
 	for (i = 0; i < nrows; ++i)
 		distances[i] = fs_distance(matrix[i], features, ncols);
