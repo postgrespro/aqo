@@ -72,7 +72,7 @@ is_stable(double *elems, int nelems)
 	last = elems[nelems - 1];
 
 	return (est * (1. + auto_tuning_convergence_error) > last || est + auto_tuning_convergence_error > last) &&
-		   (est * (1. - auto_tuning_max_error) < last || est - auto_tuning_max_error < last);
+		   (est * (1. - auto_tuning_convergence_error) < last || est - auto_tuning_convergence_error < last);
 }
 
 /*
