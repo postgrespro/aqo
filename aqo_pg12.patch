@@ -59,7 +59,7 @@ index 92969636b7..d05b07e037 100644
 +					error = 100. * (plan->predicted_cardinality - (rows*wrkrs))
 +												/ plan->predicted_cardinality;
 +					appendStringInfo(es->str,
-+							" (AQO predicted: cardinality=%lf, error=%.0lf%%, fsspace_hash=%d)",
++					" (AQO: cardinality=%.0lf, error=%.0lf%%, fsspace_hash=%d)",
 +							plan->predicted_cardinality, error, plan->fss_hash);
 +				}
 +				else

@@ -226,6 +226,7 @@ extern int	auto_tuning_window_size;
 extern double auto_tuning_exploration;
 extern int	auto_tuning_max_iterations;
 extern int	auto_tuning_infinite_loop;
+extern double auto_tuning_convergence_error;
 
 /* Machine learning parameters */
 

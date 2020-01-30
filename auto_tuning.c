@@ -9,6 +9,12 @@
  *
  *****************************************************************************/
 
+/*
+ * Auto tuning criteria criteria of an query convergence by overall cardinality
+ * of plan nodes.
+ */
+double auto_tuning_convergence_error = 0.01;
+
 static double get_mean(double *elems, int nelems);
 static double get_estimation(double *elems, int nelems);
 static bool is_stable(double *elems, int nelems);
@@ -52,7 +58,7 @@ get_estimation(double *elems, int nelems)
 }
 
 /*
- * Checks whether the series is stable with absolute or relative error 0.1.
+ * Checks whether the series is stable with absolute or relative error.
  */
 bool
 is_stable(double *elems, int nelems)
@@ -65,15 +71,15 @@ is_stable(double *elems, int nelems)
 	est = get_mean(elems, nelems - 1);
 	last = elems[nelems - 1];
 
-	return (est * 1.1 > last || est + 0.1 > last) &&
-		   (est * 0.9 < last || est - 0.1 < last);
+	return (est * (1. + auto_tuning_convergence_error) > last || est + auto_tuning_convergence_error > last) &&
+		   (est * (1. - auto_tuning_max_error) < last || est - auto_tuning_max_error < last);
 }
 
 /*
  * Tests whether cardinality qualities series is converged, i. e. learning
  * process may be considered as finished.
  * Now it checks whether the cardinality quality stopped decreasing with
- * absolute or relative error 0.1.
+ * absolute or relative error.
  */
 bool
 converged_cq(double *elems, int nelems)
@@ -147,6 +153,11 @@ automatical_query_tuning(int query_hash, QueryStat * stat)
 		query_context.use_aqo = true;
 	else
 	{
+		/*
+		 * Query is converged by cardinality error. Now AQO checks convergence
+		 * by execution time. It is volatile, probabilistic part of code.
+		 * XXX: this logic of auto tuning may be reworked later.
+		 */
 		t_aqo = get_estimation(stat->execution_time_with_aqo,
 							   stat->execution_time_with_aqo_size) +
 			get_estimation(stat->planning_time_with_aqo,

@@ -99,18 +99,18 @@ palloc_query_stat(void)
 	MemoryContext	oldCxt;
 
 	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
-	res = palloc0(sizeof(*res));
-	res->execution_time_with_aqo = palloc(aqo_stat_size *
+	res = palloc0(sizeof(QueryStat));
+	res->execution_time_with_aqo = palloc0(aqo_stat_size *
 								sizeof(res->execution_time_with_aqo[0]));
-	res->execution_time_without_aqo = palloc(aqo_stat_size *
+	res->execution_time_without_aqo = palloc0(aqo_stat_size *
 								sizeof(res->execution_time_without_aqo[0]));
-	res->planning_time_with_aqo = palloc(aqo_stat_size *
+	res->planning_time_with_aqo = palloc0(aqo_stat_size *
 								sizeof(res->planning_time_with_aqo[0]));
-	res->planning_time_without_aqo = palloc(aqo_stat_size *
+	res->planning_time_without_aqo = palloc0(aqo_stat_size *
 								sizeof(res->planning_time_without_aqo[0]));
-	res->cardinality_error_with_aqo = palloc(aqo_stat_size *
+	res->cardinality_error_with_aqo = palloc0(aqo_stat_size *
 								sizeof(res->cardinality_error_with_aqo[0]));
-	res->cardinality_error_without_aqo = palloc(aqo_stat_size *
+	res->cardinality_error_without_aqo = palloc0(aqo_stat_size *
 								sizeof(res->cardinality_error_without_aqo[0]));
 	MemoryContextSwitchTo(oldCxt);
 
