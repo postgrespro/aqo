@@ -1,6 +1,5 @@
-#include "aqo.h"
-
-/*****************************************************************************
+/*
+ *******************************************************************************
  *
  *	SELECTIVITY CACHE
  *
@@ -8,7 +7,16 @@
  * clauses, because otherwise it cannot be restored after query execution
  * without PlannerInfo.
  *
- *****************************************************************************/
+ *******************************************************************************
+ *
+ * Copyright (c) 2016-2020, Postgres Professional
+ *
+ * IDENTIFICATION
+ *	  aqo/selectivity_cache.c
+ *
+ */
+
+#include "aqo.h"
 
 typedef struct
 {

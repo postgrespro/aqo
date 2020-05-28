@@ -1,6 +1,5 @@
-#include "aqo.h"
-
-/*****************************************************************************
+/*
+ *******************************************************************************
  *
  *	QUERY EXECUTION STATISTICS COLLECTING UTILITIES
  *
@@ -8,7 +7,19 @@
  * type using obtained query execution statistics.
  * Works only if aqo_learn is on.
  *
- *****************************************************************************/
+ *******************************************************************************
+ *
+ * Copyright (c) 2016-2020, Postgres Professional
+ *
+ * IDENTIFICATION
+ *	  aqo/postprocessing.c
+ *
+ */
+
+#include "aqo.h"
+#include "access/parallel.h"
+#include "optimizer/optimizer.h"
+#include "utils/queryenvironment.h"
 
 static double cardinality_sum_errors;
 static int	cardinality_num_objects;

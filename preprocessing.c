@@ -1,6 +1,5 @@
-#include "aqo.h"
-
-/*****************************************************************************
+/*
+ *******************************************************************************
  *
  *	QUERY PREPROCESSING HOOKS
  *
@@ -48,7 +47,19 @@
  * 4. For given fspace_hash we may use its machine learning settings, but now
  *		the machine learning setting are fixed for all feature spaces.
  *
- *****************************************************************************/
+ *******************************************************************************
+ *
+ * Copyright (c) 2016-2020, Postgres Professional
+ *
+ * IDENTIFICATION
+ *	  aqo/preprocessing.c
+ *
+ */
+
+#include "aqo.h"
+#include "access/parallel.h"
+#include "access/table.h"
+#include "commands/extension.h"
 
 #define CREATE_EXTENSION_STARTSTRING_0 \
 "-- complain if script is sourced in psql, rather than via CREATE EXTENSION"

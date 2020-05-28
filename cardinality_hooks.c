@@ -1,6 +1,5 @@
-#include "aqo.h"
-
-/*****************************************************************************
+/*
+ *******************************************************************************
  *
  *	CARDINALITY ESTIMATION HOOKS
  *
@@ -17,7 +16,16 @@
  * refusal to predict cardinality. In this case hooks also use default
  * postgreSQL cardinality estimator.
  *
- *****************************************************************************/
+ *******************************************************************************
+ *
+ * Copyright (c) 2016-2020, Postgres Professional
+ *
+ * IDENTIFICATION
+ *	  aqo/cardinality_hooks.c
+ *
+ */
+
+#include "aqo.h"
 
 static void call_default_set_baserel_rows_estimate(PlannerInfo *root,
 									   RelOptInfo *rel);
