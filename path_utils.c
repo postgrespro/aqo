@@ -1,10 +1,18 @@
-#include "aqo.h"
-
-/*****************************************************************************
+/*
+ *******************************************************************************
  *
  *	EXTRACTING PATH INFORMATION UTILITIES
  *
- *****************************************************************************/
+ *******************************************************************************
+ *
+ * Copyright (c) 2016-2020, Postgres Professional
+ *
+ * IDENTIFICATION
+ *	  aqo/path_utils.c
+ *
+ */
+
+#include "aqo.h"
 
 /*
  * Returns list of marginal selectivities using as an arguments for each clause

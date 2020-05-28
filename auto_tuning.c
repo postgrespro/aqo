@@ -1,13 +1,21 @@
-#include "aqo.h"
-
-/*****************************************************************************
+/*
+ *******************************************************************************
  *
  *	AUTOMATIC QUERY TUNING
  *
  * This module automatically implements basic strategies of tuning AQO for best
  * PostgreSQL performance.
  *
- *****************************************************************************/
+ *******************************************************************************
+ *
+ * Copyright (c) 2016-2020, Postgres Professional
+ *
+ * IDENTIFICATION
+ *	  aqo/auto_tuning.c
+ *
+ */
+
+#include "aqo.h"
 
 static double get_mean(double *elems, int nelems);
 static double get_estimation(double *elems, int nelems);
