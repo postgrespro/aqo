@@ -1,6 +1,5 @@
-#include "aqo.h"
-
-/*****************************************************************************
+/*
+ *******************************************************************************
  *
  *	MACHINE LEARNING TECHNIQUES
  *
@@ -11,7 +10,16 @@
  * setting after learning procedure. This property also allows to adapt to
  * workloads which properties are slowly changed.
  *
- *****************************************************************************/
+ *******************************************************************************
+ *
+ * Copyright (c) 2016-2020, Postgres Professional
+ *
+ * IDENTIFICATION
+ *	  aqo/machine_learning.c
+ *
+ */
+
+#include "aqo.h"
 
 static double fs_distance(double *a, double *b, int len);
 static double fs_similarity(double dist);

@@ -108,7 +108,8 @@
  * Copyright (c) 2016-2020, Postgres Professional
  *
  * IDENTIFICATION
- *	  contrib/aqo/aqo.h
+ *	  aqo/aqo.h
+ *
  */
 #ifndef __ML_CARD_H__
 #define __ML_CARD_H__
