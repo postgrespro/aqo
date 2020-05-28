@@ -1,3 +1,13 @@
+/*
+ * aqo.c
+ *		Adaptive query optimization extension
+ *
+ * Copyright (c) 2016-2020, Postgres Professional
+ *
+ * IDENTIFICATION
+ *	  aqo/aqo.c
+ */
+
 #include "aqo.h"
 
 PG_MODULE_MAGIC;

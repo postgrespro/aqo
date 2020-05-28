@@ -1,17 +1,25 @@
-#include "aqo.h"
-
-#include "access/heapam.h"
-#include "access/table.h"
-#include "access/tableam.h"
-
-/*****************************************************************************
+/*
+ *******************************************************************************
  *
  *	STORAGE INTERACTION
  *
  * This module is responsible for interaction with the storage of AQO data.
  * It does not provide information protection from concurrent updates.
  *
- *****************************************************************************/
+ *******************************************************************************
+ *
+ * Copyright (c) 2016-2020, Postgres Professional
+ *
+ * IDENTIFICATION
+ *	  aqo/storage.c
+ *
+ */
+
+#include "aqo.h"
+
+#include "access/heapam.h"
+#include "access/table.h"
+#include "access/tableam.h"
 
 HTAB *deactivated_queries = NULL;
 

@@ -1,9 +1,5 @@
-#include "aqo.h"
-#include "access/parallel.h"
-#include "access/table.h"
-#include "commands/extension.h"
-
-/*****************************************************************************
+/*
+ *******************************************************************************
  *
  *	QUERY PREPROCESSING HOOKS
  *
@@ -51,7 +47,19 @@
  * 4. For given fspace_hash we may use its machine learning settings, but now
  *		the machine learning setting are fixed for all feature spaces.
  *
- *****************************************************************************/
+ *******************************************************************************
+ *
+ * Copyright (c) 2016-2020, Postgres Professional
+ *
+ * IDENTIFICATION
+ *	  aqo/preprocessing.c
+ *
+ */
+
+#include "aqo.h"
+#include "access/parallel.h"
+#include "access/table.h"
+#include "commands/extension.h"
 
 static bool isQueryUsingSystemRelation(Query *query);
 static bool isQueryUsingSystemRelation_walker(Node *node, void *context);
