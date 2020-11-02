@@ -20,6 +20,8 @@ EXTRA_REGRESS_OPTS=--temp-config=$(top_srcdir)/$(subdir)/conf.add
 DATA = aqo--1.0.sql aqo--1.0--1.1.sql
 DATA_built = aqo--1.1.sql
 
+TAP_TESTS = 1
+
 MODULE_big = aqo
 ifdef USE_PGXS
 PG_CONFIG = pg_config
