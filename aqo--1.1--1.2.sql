@@ -3,7 +3,7 @@ DECLARE
 	res text;
 BEGIN
 	SELECT conname
-		FROM pg_constraint
+		FROM pg_catalog.pg_constraint
 		WHERE conrelid = relid AND contype = 'u'
 	INTO res;
 
@@ -13,9 +13,10 @@ $$ LANGUAGE plpgsql;
 
 DO $$
 BEGIN
-	EXECUTE format('ALTER TABLE public.aqo_data DROP CONSTRAINT %s',
-				   aqo_migrate_to_1_2_get_pk('public.aqo_data'::regclass),
-				   'aqo_queries_query_hash_idx');
+	EXECUTE pg_catalog.format(
+					'ALTER TABLE public.aqo_data DROP CONSTRAINT %s',
+					aqo_migrate_to_1_2_get_pk('public.aqo_data'::regclass),
+					'aqo_queries_query_hash_idx');
 END
 $$;
 
