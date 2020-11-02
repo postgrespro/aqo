@@ -17,6 +17,8 @@ REGRESS =	aqo_disabled \
 
 EXTRA_REGRESS_OPTS=--temp-config=$(top_srcdir)/$(subdir)/conf.add
 
+TAP_TESTS = 1
+
 DATA = aqo--1.0.sql aqo--1.0--1.1.sql aqo--1.1--1.2.sql
 DATA_built = aqo--1.2.sql
 
