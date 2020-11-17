@@ -58,7 +58,6 @@
 
 #include "aqo.h"
 #include "access/parallel.h"
-#include "access/table.h"
 #include "commands/extension.h"
 
 #define CREATE_EXTENSION_STARTSTRING_0 \

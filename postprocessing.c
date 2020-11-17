@@ -18,8 +18,6 @@
 
 #include "aqo.h"
 #include "access/parallel.h"
-#include "optimizer/optimizer.h"
-#include "utils/queryenvironment.h"
 
 static double cardinality_sum_errors;
 static int	cardinality_num_objects;

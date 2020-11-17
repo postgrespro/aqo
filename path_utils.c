@@ -13,7 +13,6 @@
  */
 
 #include "aqo.h"
-#include "optimizer/optimizer.h"
 
 /*
  * Returns list of marginal selectivities using as an arguments for each clause

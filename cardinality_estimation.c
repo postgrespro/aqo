@@ -16,7 +16,6 @@
  */
 
 #include "aqo.h"
-#include "optimizer/optimizer.h"
 
 /*
  * General method for prediction the cardinality of given relation.

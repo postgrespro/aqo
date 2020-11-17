@@ -18,8 +18,6 @@
 #include "aqo.h"
 
 #include "access/heapam.h"
-#include "access/table.h"
-#include "access/tableam.h"
 
 HTAB *deactivated_queries = NULL;
 
