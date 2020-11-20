@@ -13,14 +13,12 @@ REGRESS =	aqo_disabled \
 			aqo_intelligent \
 			aqo_forced \
 			aqo_learn \
-			schema
+			schema \
+			aqo_CVE-2020-14350
 
 EXTRA_REGRESS_OPTS=--temp-config=$(top_srcdir)/$(subdir)/conf.add
 
-DATA = aqo--1.0.sql aqo--1.0--1.1.sql
-DATA_built = aqo--1.1.sql
-
-TAP_TESTS = 1
+DATA = aqo--1.0.sql aqo--1.0--1.1.sql aqo--1.1.sql
 
 MODULE_big = aqo
 ifdef USE_PGXS
@@ -34,6 +32,3 @@ include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
 endif
 
-
-$(DATA_built): $(DATA)
-	cat $+ > $@
