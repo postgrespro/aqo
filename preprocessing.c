@@ -134,6 +134,8 @@ aqo_planner(Query *parse,
 	  */
 	if ((parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT &&
 		parse->commandType != CMD_UPDATE && parse->commandType != CMD_DELETE) ||
+		strstr(application_name, "postgres_fdw") != NULL || /* Prevent distributed deadlocks */
+		strstr(application_name, "pgfdw:") != NULL || /* caused by fdw */
 		get_extension_oid("aqo", true) == InvalidOid ||
 		creating_extension ||
 		IsParallelWorker() ||
