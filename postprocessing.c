@@ -252,7 +252,9 @@ learnOnPlanState(PlanState *p, void *context)
 			ctx->relidslist = list_copy(p->plan->path_relids);
 
 		if (p->instrument && (p->righttree != NULL || p->lefttree == NULL ||
-							  p->plan->path_clauses != NIL))
+							  p->plan->path_clauses != NIL ||
+							  IsA(p, ForeignScanState) ||
+							  IsA(p, AppendState) || IsA(p, MergeAppendState)))
 		{
 			double learn_rows = 0.;
 			double predicted = 0.;
