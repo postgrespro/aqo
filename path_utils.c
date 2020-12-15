@@ -113,6 +113,7 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 									selectivities);
 			break;
 		case T_GatherPath:
+		case T_GatherMergePath:
 			return get_path_clauses(((GatherPath *) path)->subpath, root,
 									selectivities);
 			break;
