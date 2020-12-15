@@ -234,7 +234,9 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 	slot = MakeSingleTupleTableSlot(query_index_scan->heapRelation->rd_att,
 														&TTSOpsBufferHeapTuple);
 	find_ok = index_getnext_slot(query_index_scan, ForwardScanDirection, slot);
-	Assert(find_ok);
+	if (!find_ok)
+		elog(PANIC, "Query isn't found in AQO learning database.");
+
 	tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
 	Assert(shouldFree != true);
 
