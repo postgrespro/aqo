@@ -749,59 +749,99 @@ RemoveFromQueryContext(QueryDesc *queryDesc)
 	pfree(enr);
 }
 
+void
+print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
+{
+	int wrkrs = 1;
+	double error = -1.;
+
+	if (!aqo_details || !plan || !ps->instrument)
+		return;
+
+	if (ps->worker_instrument && IsParallelTuplesProcessing(plan))
+	{
+		int i;
+
+		for (i = 0; i < ps->worker_instrument->num_workers; i++)
+		{
+			Instrumentation *instrument = &ps->worker_instrument->instrument[i];
+
+			if (instrument->nloops <= 0)
+				continue;
+
+			wrkrs++;
+		}
+	}
+
+	if (plan->predicted_cardinality > 0.)
+	{
+		error = 100. * (plan->predicted_cardinality - (rows*wrkrs))
+									/ plan->predicted_cardinality;
+		appendStringInfo(es->str,
+						 " (AQO: cardinality=%.0lf, error=%.0lf%%",
+						 plan->predicted_cardinality, error);
+	}
+	else
+		appendStringInfo(es->str, " (AQO not used");
+
+	if (aqo_show_hash)
+		appendStringInfo(es->str, ", fss hash = %d", plan->fss_hash);
+	appendStringInfoChar(es->str, ')');
+}
+
 /*
  * Prints if the plan was constructed with AQO.
  */
-void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
-			   ExplainState *es, const char *queryString,
-			   ParamListInfo params, const instr_time *planduration,
-			   QueryEnvironment *queryEnv)
+void
+print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
+				   ExplainState *es, const char *queryString,
+				   ParamListInfo params, const instr_time *planduration,
+				   QueryEnvironment *queryEnv)
 {
 	if (prev_ExplainOnePlan_hook)
 		prev_ExplainOnePlan_hook(plannedstmt, into, es, queryString,
-								params, planduration, queryEnv);
+								 params, planduration, queryEnv);
 
-#ifdef AQO_EXPLAIN
+	if (!aqo_details)
+		return;
+
 	/* Report to user about aqo state only in verbose mode */
-	if (es->verbose)
+	ExplainPropertyBool("Using aqo", query_context.use_aqo, es);
+
+	switch (aqo_mode)
 	{
-		ExplainPropertyBool("Using aqo", query_context.use_aqo, es);
-
-		switch (aqo_mode)
-		{
-		case AQO_MODE_INTELLIGENT:
-			ExplainPropertyText("AQO mode", "INTELLIGENT", es);
-			break;
-		case AQO_MODE_FORCED:
-			ExplainPropertyText("AQO mode", "FORCED", es);
-			break;
-		case AQO_MODE_CONTROLLED:
-			ExplainPropertyText("AQO mode", "CONTROLLED", es);
-			break;
-		case AQO_MODE_LEARN:
-			ExplainPropertyText("AQO mode", "LEARN", es);
-			break;
-		case AQO_MODE_FROZEN:
-			ExplainPropertyText("AQO mode", "FROZEN", es);
-			break;
-		case AQO_MODE_DISABLED:
-			ExplainPropertyText("AQO mode", "DISABLED", es);
-			break;
-		default:
-			elog(ERROR, "Bad AQO state");
-			break;
-		}
-
-		/*
-		 * Query hash provides an user the conveniently use of the AQO
-		 * auxiliary functions.
-		 */
-		if (aqo_mode != AQO_MODE_DISABLED || force_collect_stat)
-		{
-			ExplainPropertyInteger("Query hash", NULL,
-												query_context.query_hash, es);
-			ExplainPropertyInteger("JOINS", NULL, njoins, es);
-		}
+	case AQO_MODE_INTELLIGENT:
+		ExplainPropertyText("AQO mode", "INTELLIGENT", es);
+		break;
+	case AQO_MODE_FORCED:
+		ExplainPropertyText("AQO mode", "FORCED", es);
+		break;
+	case AQO_MODE_CONTROLLED:
+		ExplainPropertyText("AQO mode", "CONTROLLED", es);
+		break;
+	case AQO_MODE_LEARN:
+		ExplainPropertyText("AQO mode", "LEARN", es);
+		break;
+	case AQO_MODE_FROZEN:
+		ExplainPropertyText("AQO mode", "FROZEN", es);
+		break;
+	case AQO_MODE_DISABLED:
+		ExplainPropertyText("AQO mode", "DISABLED", es);
+		break;
+	default:
+		elog(ERROR, "Bad AQO state");
+		break;
 	}
-#endif
+
+	/*
+	 * Query hash provides an user the conveniently use of the AQO
+	 * auxiliary functions.
+	 */
+	if (aqo_mode != AQO_MODE_DISABLED || force_collect_stat)
+	{
+		if (aqo_show_hash)
+			ExplainPropertyInteger("Query hash", NULL,
+									query_context.query_hash, es);
+		ExplainPropertyInteger("JOINS", NULL, njoins, es);
+	}
 }
