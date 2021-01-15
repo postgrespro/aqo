@@ -254,6 +254,8 @@ extern planner_hook_type prev_planner_hook;
 extern ExecutorStart_hook_type prev_ExecutorStart_hook;
 extern ExecutorEnd_hook_type prev_ExecutorEnd_hook;
 extern set_baserel_rows_estimate_hook_type
+										prev_set_foreign_rows_estimate_hook;
+extern set_baserel_rows_estimate_hook_type
 										prev_set_baserel_rows_estimate_hook;
 extern get_parameterized_baserel_size_hook_type
 									prev_get_parameterized_baserel_size_hook;
