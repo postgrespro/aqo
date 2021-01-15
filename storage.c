@@ -235,7 +235,8 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 														&TTSOpsBufferHeapTuple);
 	find_ok = index_getnext_slot(query_index_scan, ForwardScanDirection, slot);
 	if (!find_ok)
-		elog(PANIC, "Query isn't found in AQO learning database.");
+		elog(PANIC, "[AQO]: Update of non-existed query: query hash: %d, fss hash: %d, use aqo: %s",
+			 query_hash, fspace_hash, use_aqo ? "true" : "false");
 
 	tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
 	Assert(shouldFree != true);
