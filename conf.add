@@ -1,1 +1,3 @@
-shared_preload_libraries = 'aqo'
+autovacuum = off
+shared_preload_libraries = 'postgres_fdw, aqo'
+max_parallel_workers = 0 # switch off parallel workers because of unsteadiness

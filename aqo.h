@@ -174,6 +174,8 @@ typedef enum
 
 extern int	aqo_mode;
 extern bool	force_collect_stat;
+extern bool aqo_show_hash;
+extern bool aqo_details;
 
 /*
  * It is mostly needed for auto tuning of query. with auto tuning mode aqo
@@ -312,6 +314,10 @@ void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 						ExplainState *es, const char *queryString,
 						ParamListInfo params, const instr_time *planduration,
 						QueryEnvironment *queryEnv);
+extern void print_node_explain(ExplainState *es,
+							   PlanState *ps,
+							   Plan *plan,
+							   double rows);
 void disable_aqo_for_query(void);
 
 /* Cardinality estimation hooks */
