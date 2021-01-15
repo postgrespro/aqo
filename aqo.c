@@ -76,6 +76,7 @@ post_parse_analyze_hook_type				prev_post_parse_analyze_hook;
 planner_hook_type							prev_planner_hook;
 ExecutorStart_hook_type						prev_ExecutorStart_hook;
 ExecutorEnd_hook_type						prev_ExecutorEnd_hook;
+set_baserel_rows_estimate_hook_type			prev_set_foreign_rows_estimate_hook;
 set_baserel_rows_estimate_hook_type			prev_set_baserel_rows_estimate_hook;
 get_parameterized_baserel_size_hook_type	prev_get_parameterized_baserel_size_hook;
 set_joinrel_size_estimates_hook_type		prev_set_joinrel_size_estimates_hook;
@@ -126,6 +127,7 @@ _PG_init(void)
 	prev_ExecutorEnd_hook						= ExecutorEnd_hook;
 	ExecutorEnd_hook							= aqo_ExecutorEnd;
 	prev_set_baserel_rows_estimate_hook			= set_baserel_rows_estimate_hook;
+	set_foreign_rows_estimate_hook				= aqo_set_baserel_rows_estimate;
 	set_baserel_rows_estimate_hook				= aqo_set_baserel_rows_estimate;
 	prev_get_parameterized_baserel_size_hook	= get_parameterized_baserel_size_hook;
 	get_parameterized_baserel_size_hook			= aqo_get_parameterized_baserel_size;
