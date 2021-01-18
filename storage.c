@@ -968,9 +968,13 @@ my_index_insert(Relation indexRelation,
 #if PG_VERSION_NUM < 100000
 	return index_insert(indexRelation, values, isnull, heap_t_ctid,
 						heapRelation, checkUnique);
-#else
+#elif PG_VERSION_NUM < 140000
 	return index_insert(indexRelation, values, isnull, heap_t_ctid,
 						heapRelation, checkUnique,
+						BuildIndexInfo(indexRelation));
+#else
+	return index_insert(indexRelation, values, isnull, heap_t_ctid,
+						heapRelation, checkUnique, false,
 						BuildIndexInfo(indexRelation));
 #endif
 }
