@@ -2,7 +2,7 @@
  * aqo.c
  *		Adaptive query optimization extension
  *
- * Copyright (c) 2016-2020, Postgres Professional
+ * Copyright (c) 2016-2021, Postgres Professional
  *
  * IDENTIFICATION
  *	  aqo/aqo.c
