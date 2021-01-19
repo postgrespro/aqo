@@ -5,7 +5,7 @@
  *
  *******************************************************************************
  *
- * Copyright (c) 2016-2020, Postgres Professional
+ * Copyright (c) 2016-2021, Postgres Professional
  *
  * IDENTIFICATION
  *	  aqo/utils.c
