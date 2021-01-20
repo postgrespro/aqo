@@ -43,23 +43,16 @@ SELECT x FROM frgn;
 (4 rows)
 
 -- Push down base filters. Use verbose mode to see filters.
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE))
+SELECT x FROM frgn WHERE x < 10;
+ERROR:  syntax error at or near ")"
+LINE 1: ...LAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE))
+                                                                      ^
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
 SELECT x FROM frgn WHERE x < 10;
                              QUERY PLAN                             
 --------------------------------------------------------------------
  Foreign Scan on public.frgn (actual rows=1 loops=1) (AQO not used)
-   Output: x
-   Remote SQL: SELECT x FROM public.local WHERE ((x < 10))
- Using aqo: true
- AQO mode: LEARN
- JOINS: 0
-(6 rows)
-
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
-SELECT x FROM frgn WHERE x < 10;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
- Foreign Scan on public.frgn (actual rows=1 loops=1) (AQO: cardinality=1, error=0%)
    Output: x
    Remote SQL: SELECT x FROM public.local WHERE ((x < 10))
  Using aqo: true
@@ -97,20 +90,42 @@ SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
  JOINS: 0
 (13 rows)
 
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
 SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
-                             QUERY PLAN                              
----------------------------------------------------------------------
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
  Foreign Scan (actual rows=1 loops=1) (AQO: cardinality=1, error=0%)
+   Output: a.x, b.x
+   Relations: (public.frgn a) INNER JOIN (public.frgn b)
+   Remote SQL: SELECT r1.x, r2.x FROM (public.local r1 INNER JOIN public.local r2 ON (((r1.x = r2.x))))
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(7 rows)
+
+-- TODO: Non-mergejoinable join condition.
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Foreign Scan (actual rows=0 loops=1) (AQO not used)
    Relations: (frgn a) INNER JOIN (frgn b)
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
 (5 rows)
 
--- Non-mergejoinable join condition
---EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
---SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
---EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
---SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
+ Foreign Scan (actual rows=0 loops=1) (AQO not used)
+   Output: a.x, b.x
+   Relations: (public.frgn a) INNER JOIN (public.frgn b)
+   Remote SQL: SELECT r1.x, r2.x FROM (public.local r1 INNER JOIN public.local r2 ON (((r1.x < r2.x))))
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(7 rows)
+
 DROP EXTENSION aqo;
