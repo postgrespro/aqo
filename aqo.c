@@ -135,7 +135,7 @@ _PG_init(void)
 	);
 
 	DefineCustomBoolVariable(
-							 "aqo.details",
+							 "aqo.show_details",
 							 "Show AQO state on a query.",
 							 NULL,
 							 &aqo_details,
