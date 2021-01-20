@@ -7,7 +7,7 @@
 CREATE EXTENSION aqo;
 CREATE EXTENSION postgres_fdw;
 SET aqo.mode = 'learn';
-SET aqo.details = 'true'; -- show AQO info for each node and entire query.
+SET aqo.show_details = 'true'; -- show AQO info for each node and entire query.
 SET aqo.show_hash = 'false'; -- a hash value is system-depended. Ignore it.
 
 DO $d$
