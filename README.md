@@ -9,6 +9,11 @@ complicated queries.
 ## Installation
 
 The module works with PostgreSQL 9.6 and above.
+To avoid compatibility issues, the following branches in the git-repository are allocated:
+* `stable9_6`.
+* `stable11` - for PG v10 and v11.
+* `stable12` - for PG v12.
+* the `master` branch of the AQO repository correctly works with PGv13 and the PostgreSQL `master` branch.
 
 The module contains a patch and an extension. Patch has to be applied to the
 sources of PostgresSQL. Patch affects header files, that is why PostgreSQL
@@ -28,7 +33,7 @@ make check                                              # check whether it works
 ```
 
 Tag `version` at the patch name corresponds to suitable PostgreSQL release.
-For PostgreSQL 10 use aqo_pg10.patch; for PostgreSQL 11 use aqo_pg11.patch and so on.
+For PostgreSQL 9.6 use the 'aqo_pg9_6.patch' file; PostgreSQL 10 use aqo_pg10.patch; for PostgreSQL 11 use aqo_pg11.patch and so on.
 Also, you can see git tags at the master branch for more accurate definition of
 suitable PostgreSQL version.
 
@@ -50,7 +55,7 @@ of per-database.
 
 The typical case is follows: you have complicated query, which executes too
 long. `EXPLAIN ANALYZE` shows, that the possible reason is bad cardinality
-estimnation.
+estimation.
 
 Example:
 ```
@@ -127,16 +132,16 @@ When the plan stops changing, you can often observe performance improvement:
 (23 rows)
 ```
 
-The settings system in AQO works with normalized queries, i. e. queries with
-removed constants. For example, the normalized version of
+The settings system in AQO works with normalised queries, i. e. queries with
+removed constants. For example, the normalised version of
 `SELECT * FROM tbl WHERE a < 25 AND b = 'str';`
 is
 `SELECT * FROM tbl WHERE a < CONST and b = CONST;`
 
-So the queries have equal normalization if and only if they differ only
+So the queries have equal normalisation if and only if they differ only
 in their constants.
 
-Each normalized query has its own hash. The correspondence between normalized
+Each normalised query has its own hash. The correspondence between normalised
 query hash and query text is stored in aqo_query_texts table:
 ```
 SELECT * FROM aqo_query_texts;
@@ -173,6 +178,10 @@ from queries execution statistics (which is not recommended, especially
 if the data tends to change significantly), you can do
 `UPDATE SET aqo_learn=false WHERE query_hash = <query_hash>;`
 before commit.
+
+The extension includes two GUC's to display the executed cardinality predictions for a query.
+The `aqo.show_details = 'on'` (default - off) allows to see the aqo cardinality prediction results for each node of a query plan and an AQO summary.
+The `aqo.show_hash = 'on'` (default - off) will print hash signature for each plan node and overall query. It is system-specific information and should be used for situational analysis.
 
 The more detailed reference of AQO settings mechanism is available further.
 
