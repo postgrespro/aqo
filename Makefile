@@ -16,6 +16,8 @@ REGRESS =	aqo_disabled \
 			schema \
 			aqo_CVE-2020-14350
 
+fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw
+PG_CPPFLAGS += -I$(libpq_srcdir) -I$(fdw_srcdir)
 EXTRA_REGRESS_OPTS=--temp-config=$(top_srcdir)/$(subdir)/conf.add
 
 DATA = aqo--1.0.sql aqo--1.0--1.1.sql aqo--1.1--1.2.sql aqo--1.2.sql
