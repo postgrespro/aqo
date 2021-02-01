@@ -1,5 +1,17 @@
+diff --git a/contrib/Makefile b/contrib/Makefile
+index 92184ed487..ac8abbfd03 100644
+--- a/contrib/Makefile
++++ b/contrib/Makefile
+@@ -7,6 +7,7 @@ include $(top_builddir)/src/Makefile.global
+ SUBDIRS = \
+ 		adminpack	\
+ 		amcheck		\
++		aqo	\
+ 		auth_delay	\
+ 		auto_explain	\
+ 		bloom		\
 diff --git a/src/backend/commands/explain.c b/src/backend/commands/explain.c
-index 92969636b7..d05b07e037 100644
+index a40bc14ec5..28ec281a70 100644
 --- a/src/backend/commands/explain.c
 +++ b/src/backend/commands/explain.c
 @@ -24,6 +24,7 @@
@@ -20,7 +32,7 @@ index 92969636b7..d05b07e037 100644
  
  /* OR-able flags for ExplainXMLTag() */
  #define X_OPENING 0
-@@ -596,6 +600,10 @@ ExplainOnePlan(PlannedStmt *plannedstmt, IntoClause *into, ExplainState *es,
+@@ -597,6 +601,10 @@ ExplainOnePlan(PlannedStmt *plannedstmt, IntoClause *into, ExplainState *es,
  		ExplainPropertyFloat("Execution Time", "ms", 1000.0 * totaltime, 3,
  							 es);
  
@@ -31,7 +43,7 @@ index 92969636b7..d05b07e037 100644
  	ExplainCloseGroup("Query", NULL, true, es);
  }
  
-@@ -1523,6 +1531,38 @@ ExplainNode(PlanState *planstate, List *ancestors,
+@@ -1521,6 +1529,38 @@ ExplainNode(PlanState *planstate, List *ancestors,
  				appendStringInfo(es->str,
  								 " (actual rows=%.0f loops=%.0f)",
  								 rows, nloops);
@@ -71,7 +83,7 @@ index 92969636b7..d05b07e037 100644
  		else
  		{
 diff --git a/src/backend/nodes/copyfuncs.c b/src/backend/nodes/copyfuncs.c
-index 78deade89b..b1470147e9 100644
+index a0ef3ff140..603513340c 100644
 --- a/src/backend/nodes/copyfuncs.c
 +++ b/src/backend/nodes/copyfuncs.c
 @@ -126,6 +126,12 @@ CopyPlanFields(const Plan *from, Plan *newnode)
@@ -88,21 +100,22 @@ index 78deade89b..b1470147e9 100644
  	COPY_BITMAPSET_FIELD(allParam);
  }
 diff --git a/src/backend/optimizer/path/costsize.c b/src/backend/optimizer/path/costsize.c
-index a2a9b1f7be..4b766b9885 100644
+index 8d2a016656..a4e9c109b7 100644
 --- a/src/backend/optimizer/path/costsize.c
 +++ b/src/backend/optimizer/path/costsize.c
-@@ -96,6 +96,10 @@
+@@ -96,6 +96,11 @@
  #include "utils/spccache.h"
  #include "utils/tuplesort.h"
  
 +set_baserel_rows_estimate_hook_type set_baserel_rows_estimate_hook = NULL;
++set_foreign_rows_estimate_hook_type set_foreign_rows_estimate_hook = NULL;
 +get_parameterized_baserel_size_hook_type get_parameterized_baserel_size_hook = NULL;
 +get_parameterized_joinrel_size_hook_type get_parameterized_joinrel_size_hook = NULL;
 +set_joinrel_size_estimates_hook_type set_joinrel_size_estimates_hook = NULL;
  
  #define LOG2(x)  (log(x) / 0.693147180559945)
  
-@@ -176,7 +180,6 @@ static Cost append_nonpartial_cost(List *subpaths, int numpaths,
+@@ -176,7 +181,6 @@ static Cost append_nonpartial_cost(List *subpaths, int numpaths,
  static void set_rel_width(PlannerInfo *root, RelOptInfo *rel);
  static double relation_byte_size(double tuples, int width);
  static double page_size(double tuples, int width);
@@ -110,7 +123,7 @@ index a2a9b1f7be..4b766b9885 100644
  
  
  /*
-@@ -254,7 +257,7 @@ cost_seqscan(Path *path, PlannerInfo *root,
+@@ -254,7 +258,7 @@ cost_seqscan(Path *path, PlannerInfo *root,
  	/* Adjust costing for parallelism, if used. */
  	if (path->parallel_workers > 0)
  	{
@@ -119,7 +132,7 @@ index a2a9b1f7be..4b766b9885 100644
  
  		/* The CPU cost is divided among all the workers. */
  		cpu_run_cost /= parallel_divisor;
-@@ -733,7 +736,7 @@ cost_index(IndexPath *path, PlannerInfo *root, double loop_count,
+@@ -733,7 +737,7 @@ cost_index(IndexPath *path, PlannerInfo *root, double loop_count,
  	/* Adjust costing for parallelism, if used. */
  	if (path->path.parallel_workers > 0)
  	{
@@ -128,7 +141,7 @@ index a2a9b1f7be..4b766b9885 100644
  
  		path->path.rows = clamp_row_est(path->path.rows / parallel_divisor);
  
-@@ -1014,7 +1017,7 @@ cost_bitmap_heap_scan(Path *path, PlannerInfo *root, RelOptInfo *baserel,
+@@ -1014,7 +1018,7 @@ cost_bitmap_heap_scan(Path *path, PlannerInfo *root, RelOptInfo *baserel,
  	/* Adjust costing for parallelism, if used. */
  	if (path->parallel_workers > 0)
  	{
@@ -137,7 +150,7 @@ index a2a9b1f7be..4b766b9885 100644
  
  		/* The CPU cost is divided among all the workers. */
  		cpu_run_cost /= parallel_divisor;
-@@ -1960,7 +1963,7 @@ cost_append(AppendPath *apath)
+@@ -1960,7 +1964,7 @@ cost_append(AppendPath *apath)
  	else						/* parallel-aware */
  	{
  		int			i = 0;
@@ -146,7 +159,7 @@ index a2a9b1f7be..4b766b9885 100644
  
  		/* Parallel-aware Append never produces ordered output. */
  		Assert(apath->path.pathkeys == NIL);
-@@ -1994,7 +1997,7 @@ cost_append(AppendPath *apath)
+@@ -1994,7 +1998,7 @@ cost_append(AppendPath *apath)
  			{
  				double		subpath_parallel_divisor;
  
@@ -155,7 +168,7 @@ index a2a9b1f7be..4b766b9885 100644
  				apath->path.rows += subpath->rows * (subpath_parallel_divisor /
  													 parallel_divisor);
  				apath->path.total_cost += subpath->total_cost;
-@@ -2517,7 +2520,7 @@ final_cost_nestloop(PlannerInfo *root, NestPath *path,
+@@ -2517,7 +2521,7 @@ final_cost_nestloop(PlannerInfo *root, NestPath *path,
  	/* For partial paths, scale row estimate. */
  	if (path->path.parallel_workers > 0)
  	{
@@ -164,7 +177,7 @@ index a2a9b1f7be..4b766b9885 100644
  
  		path->path.rows =
  			clamp_row_est(path->path.rows / parallel_divisor);
-@@ -2963,7 +2966,7 @@ final_cost_mergejoin(PlannerInfo *root, MergePath *path,
+@@ -2965,7 +2969,7 @@ final_cost_mergejoin(PlannerInfo *root, MergePath *path,
  	/* For partial paths, scale row estimate. */
  	if (path->jpath.path.parallel_workers > 0)
  	{
@@ -173,7 +186,7 @@ index a2a9b1f7be..4b766b9885 100644
  
  		path->jpath.path.rows =
  			clamp_row_est(path->jpath.path.rows / parallel_divisor);
-@@ -3297,7 +3300,7 @@ initial_cost_hashjoin(PlannerInfo *root, JoinCostWorkspace *workspace,
+@@ -3299,7 +3303,7 @@ initial_cost_hashjoin(PlannerInfo *root, JoinCostWorkspace *workspace,
  	 * number, so we need to undo the division.
  	 */
  	if (parallel_hash)
@@ -182,7 +195,7 @@ index a2a9b1f7be..4b766b9885 100644
  
  	/*
  	 * Get hash table size that executor would use for inner relation.
-@@ -3393,7 +3396,7 @@ final_cost_hashjoin(PlannerInfo *root, HashPath *path,
+@@ -3395,7 +3399,7 @@ final_cost_hashjoin(PlannerInfo *root, HashPath *path,
  	/* For partial paths, scale row estimate. */
  	if (path->jpath.path.parallel_workers > 0)
  	{
@@ -191,10 +204,19 @@ index a2a9b1f7be..4b766b9885 100644
  
  		path->jpath.path.rows =
  			clamp_row_est(path->jpath.path.rows / parallel_divisor);
-@@ -4387,6 +4390,49 @@ approx_tuple_count(PlannerInfo *root, JoinPath *path, List *quals)
+@@ -4388,6 +4392,57 @@ approx_tuple_count(PlannerInfo *root, JoinPath *path, List *quals)
+ 	return clamp_row_est(tuples);
  }
  
- 
++void
++set_foreign_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
++{
++	if (set_foreign_rows_estimate_hook)
++		(*set_foreign_rows_estimate_hook) (root, rel);
++	else
++		rel->rows = 1000;			/* entirely bogus default estimate */
++}
++
 +/*
 + * set_baserel_rows_estimate
 + *		Set the rows estimate for the given base relation.
@@ -237,11 +259,10 @@ index a2a9b1f7be..4b766b9885 100644
 +
 +	rel->rows = clamp_row_est(nrows);
 +}
-+
+ 
  /*
   * set_baserel_size_estimates
-  *		Set the size estimates for the given base relation.
-@@ -4403,19 +4449,10 @@ approx_tuple_count(PlannerInfo *root, JoinPath *path, List *quals)
+@@ -4405,19 +4460,10 @@ approx_tuple_count(PlannerInfo *root, JoinPath *path, List *quals)
  void
  set_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel)
  {
@@ -262,7 +283,7 @@ index a2a9b1f7be..4b766b9885 100644
  
  	cost_qual_eval(&rel->baserestrictcost, rel->baserestrictinfo, root);
  
-@@ -4426,13 +4463,33 @@ set_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel)
+@@ -4428,13 +4474,33 @@ set_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel)
   * get_parameterized_baserel_size
   *		Make a size estimate for a parameterized scan of a base relation.
   *
@@ -298,7 +319,7 @@ index a2a9b1f7be..4b766b9885 100644
  {
  	List	   *allclauses;
  	double		nrows;
-@@ -4462,6 +4519,36 @@ get_parameterized_baserel_size(PlannerInfo *root, RelOptInfo *rel,
+@@ -4464,6 +4530,36 @@ get_parameterized_baserel_size(PlannerInfo *root, RelOptInfo *rel,
   * set_joinrel_size_estimates
   *		Set the size estimates for the given join relation.
   *
@@ -335,7 +356,7 @@ index a2a9b1f7be..4b766b9885 100644
   * The rel's targetlist must have been constructed already, and a
   * restriction clause list that matches the given component rels must
   * be provided.
-@@ -4481,11 +4568,11 @@ get_parameterized_baserel_size(PlannerInfo *root, RelOptInfo *rel,
+@@ -4483,11 +4579,11 @@ get_parameterized_baserel_size(PlannerInfo *root, RelOptInfo *rel,
   * build_joinrel_tlist, and baserestrictcost is not used for join rels.
   */
  void
@@ -352,7 +373,7 @@ index a2a9b1f7be..4b766b9885 100644
  {
  	rel->rows = calc_joinrel_size_estimate(root,
  										   rel,
-@@ -4501,6 +4588,35 @@ set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
+@@ -4503,6 +4599,35 @@ set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
   * get_parameterized_joinrel_size
   *		Make a size estimate for a parameterized scan of a join relation.
   *
@@ -388,7 +409,7 @@ index a2a9b1f7be..4b766b9885 100644
   * 'rel' is the joinrel under consideration.
   * 'outer_path', 'inner_path' are (probably also parameterized) Paths that
   *		produce the relations being joined.
-@@ -4513,11 +4629,11 @@ set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
+@@ -4515,11 +4640,11 @@ set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
   * set_joinrel_size_estimates must have been applied already.
   */
  double
@@ -405,7 +426,16 @@ index a2a9b1f7be..4b766b9885 100644
  {
  	double		nrows;
  
-@@ -5474,14 +5590,25 @@ page_size(double tuples, int width)
+@@ -5194,7 +5319,7 @@ set_foreign_size_estimates(PlannerInfo *root, RelOptInfo *rel)
+ 	/* Should only be applied to base relations */
+ 	Assert(rel->relid > 0);
+ 
+-	rel->rows = 1000;			/* entirely bogus default estimate */
++	set_foreign_rows_estimate(root, rel);
+ 
+ 	cost_qual_eval(&rel->baserestrictcost, rel->baserestrictinfo, root);
+ 
+@@ -5476,14 +5601,25 @@ page_size(double tuples, int width)
  	return ceil(relation_byte_size(tuples, width) / BLCKSZ);
  }
  
@@ -434,7 +464,7 @@ index a2a9b1f7be..4b766b9885 100644
  
  	/*
  	 * Early experience with parallel query suggests that when there is only
-@@ -5498,7 +5625,7 @@ get_parallel_divisor(Path *path)
+@@ -5500,7 +5636,7 @@ get_parallel_divisor(Path *path)
  	{
  		double		leader_contribution;
  
@@ -444,7 +474,7 @@ index a2a9b1f7be..4b766b9885 100644
  			parallel_divisor += leader_contribution;
  	}
 diff --git a/src/backend/optimizer/plan/createplan.c b/src/backend/optimizer/plan/createplan.c
-index 608d5adfed..222a7a34f3 100644
+index 83e8b34b1b..9e4e4b365b 100644
 --- a/src/backend/optimizer/plan/createplan.c
 +++ b/src/backend/optimizer/plan/createplan.c
 @@ -70,6 +70,8 @@
@@ -465,7 +495,7 @@ index 608d5adfed..222a7a34f3 100644
  static void copy_plan_costsize(Plan *dest, Plan *src);
  static void label_sort_with_costsize(PlannerInfo *root, Sort *plan,
  									 double limit_tuples);
-@@ -1094,7 +1096,7 @@ create_append_plan(PlannerInfo *root, AppendPath *best_path, int flags)
+@@ -1097,7 +1099,7 @@ create_append_plan(PlannerInfo *root, AppendPath *best_path, int flags)
  																	  false)),
  									NULL);
  
@@ -474,7 +504,7 @@ index 608d5adfed..222a7a34f3 100644
  
  		return plan;
  	}
-@@ -1241,7 +1243,7 @@ create_append_plan(PlannerInfo *root, AppendPath *best_path, int flags)
+@@ -1244,7 +1246,7 @@ create_append_plan(PlannerInfo *root, AppendPath *best_path, int flags)
  	plan->first_partial_plan = best_path->first_partial_path;
  	plan->part_prune_info = partpruneinfo;
  
@@ -483,7 +513,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	/*
  	 * If prepare_sort_from_pathkeys added sort columns, but we were told to
-@@ -1287,7 +1289,7 @@ create_merge_append_plan(PlannerInfo *root, MergeAppendPath *best_path,
+@@ -1290,7 +1292,7 @@ create_merge_append_plan(PlannerInfo *root, MergeAppendPath *best_path,
  	 * prepare_sort_from_pathkeys on it before we do so on the individual
  	 * child plans, to make cross-checking the sort info easier.
  	 */
@@ -492,7 +522,7 @@ index 608d5adfed..222a7a34f3 100644
  	plan->targetlist = tlist;
  	plan->qual = NIL;
  	plan->lefttree = NULL;
-@@ -1440,7 +1442,7 @@ create_group_result_plan(PlannerInfo *root, GroupResultPath *best_path)
+@@ -1443,7 +1445,7 @@ create_group_result_plan(PlannerInfo *root, GroupResultPath *best_path)
  
  	plan = make_result(tlist, (Node *) quals, NULL);
  
@@ -501,7 +531,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return plan;
  }
-@@ -1465,7 +1467,7 @@ create_project_set_plan(PlannerInfo *root, ProjectSetPath *best_path)
+@@ -1468,7 +1470,7 @@ create_project_set_plan(PlannerInfo *root, ProjectSetPath *best_path)
  
  	plan = make_project_set(tlist, subplan);
  
@@ -510,7 +540,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return plan;
  }
-@@ -1493,7 +1495,7 @@ create_material_plan(PlannerInfo *root, MaterialPath *best_path, int flags)
+@@ -1496,7 +1498,7 @@ create_material_plan(PlannerInfo *root, MaterialPath *best_path, int flags)
  
  	plan = make_material(subplan);
  
@@ -519,7 +549,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return plan;
  }
-@@ -1692,7 +1694,7 @@ create_unique_plan(PlannerInfo *root, UniquePath *best_path, int flags)
+@@ -1695,7 +1697,7 @@ create_unique_plan(PlannerInfo *root, UniquePath *best_path, int flags)
  	}
  
  	/* Copy cost data from Path to Plan */
@@ -528,7 +558,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return plan;
  }
-@@ -1725,7 +1727,7 @@ create_gather_plan(PlannerInfo *root, GatherPath *best_path)
+@@ -1728,7 +1730,7 @@ create_gather_plan(PlannerInfo *root, GatherPath *best_path)
  							  best_path->single_copy,
  							  subplan);
  
@@ -537,7 +567,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	/* use parallel mode for parallel plans. */
  	root->glob->parallelModeNeeded = true;
-@@ -1754,7 +1756,7 @@ create_gather_merge_plan(PlannerInfo *root, GatherMergePath *best_path)
+@@ -1757,7 +1759,7 @@ create_gather_merge_plan(PlannerInfo *root, GatherMergePath *best_path)
  	gm_plan = makeNode(GatherMerge);
  	gm_plan->plan.targetlist = tlist;
  	gm_plan->num_workers = best_path->num_workers;
@@ -546,7 +576,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	/* Assign the rescan Param. */
  	gm_plan->rescan_param = assign_special_exec_param(root);
-@@ -1882,7 +1884,7 @@ create_projection_plan(PlannerInfo *root, ProjectionPath *best_path, int flags)
+@@ -1885,7 +1887,7 @@ create_projection_plan(PlannerInfo *root, ProjectionPath *best_path, int flags)
  		/* We need a Result node */
  		plan = (Plan *) make_result(tlist, NULL, subplan);
  
@@ -555,7 +585,7 @@ index 608d5adfed..222a7a34f3 100644
  	}
  
  	return plan;
-@@ -1983,7 +1985,7 @@ create_sort_plan(PlannerInfo *root, SortPath *best_path, int flags)
+@@ -1986,7 +1988,7 @@ create_sort_plan(PlannerInfo *root, SortPath *best_path, int flags)
  								   IS_OTHER_REL(best_path->subpath->parent) ?
  								   best_path->path.parent->relids : NULL);
  
@@ -564,7 +594,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return plan;
  }
-@@ -2022,7 +2024,7 @@ create_group_plan(PlannerInfo *root, GroupPath *best_path)
+@@ -2025,7 +2027,7 @@ create_group_plan(PlannerInfo *root, GroupPath *best_path)
  												  subplan->targetlist),
  					  subplan);
  
@@ -573,7 +603,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return plan;
  }
-@@ -2050,7 +2052,7 @@ create_upper_unique_plan(PlannerInfo *root, UpperUniquePath *best_path, int flag
+@@ -2053,7 +2055,7 @@ create_upper_unique_plan(PlannerInfo *root, UpperUniquePath *best_path, int flag
  									 best_path->path.pathkeys,
  									 best_path->numkeys);
  
@@ -582,7 +612,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return plan;
  }
-@@ -2093,7 +2095,7 @@ create_agg_plan(PlannerInfo *root, AggPath *best_path)
+@@ -2096,7 +2098,7 @@ create_agg_plan(PlannerInfo *root, AggPath *best_path)
  					best_path->numGroups,
  					subplan);
  
@@ -591,7 +621,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return plan;
  }
-@@ -2294,7 +2296,7 @@ create_groupingsets_plan(PlannerInfo *root, GroupingSetsPath *best_path)
+@@ -2297,7 +2299,7 @@ create_groupingsets_plan(PlannerInfo *root, GroupingSetsPath *best_path)
  						subplan);
  
  		/* Copy cost data from Path to Plan */
@@ -600,7 +630,7 @@ index 608d5adfed..222a7a34f3 100644
  	}
  
  	return (Plan *) plan;
-@@ -2350,7 +2352,7 @@ create_minmaxagg_plan(PlannerInfo *root, MinMaxAggPath *best_path)
+@@ -2353,7 +2355,7 @@ create_minmaxagg_plan(PlannerInfo *root, MinMaxAggPath *best_path)
  
  	plan = make_result(tlist, (Node *) best_path->quals, NULL);
  
@@ -609,7 +639,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	/*
  	 * During setrefs.c, we'll need to replace references to the Agg nodes
-@@ -2466,7 +2468,7 @@ create_windowagg_plan(PlannerInfo *root, WindowAggPath *best_path)
+@@ -2472,7 +2474,7 @@ create_windowagg_plan(PlannerInfo *root, WindowAggPath *best_path)
  						  wc->inRangeNullsFirst,
  						  subplan);
  
@@ -618,7 +648,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return plan;
  }
-@@ -2502,7 +2504,7 @@ create_setop_plan(PlannerInfo *root, SetOpPath *best_path, int flags)
+@@ -2508,7 +2510,7 @@ create_setop_plan(PlannerInfo *root, SetOpPath *best_path, int flags)
  					  best_path->firstFlag,
  					  numGroups);
  
@@ -627,7 +657,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return plan;
  }
-@@ -2538,7 +2540,7 @@ create_recursiveunion_plan(PlannerInfo *root, RecursiveUnionPath *best_path)
+@@ -2544,7 +2546,7 @@ create_recursiveunion_plan(PlannerInfo *root, RecursiveUnionPath *best_path)
  								best_path->distinctList,
  								numGroups);
  
@@ -636,7 +666,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return plan;
  }
-@@ -2561,7 +2563,7 @@ create_lockrows_plan(PlannerInfo *root, LockRowsPath *best_path,
+@@ -2567,7 +2569,7 @@ create_lockrows_plan(PlannerInfo *root, LockRowsPath *best_path,
  
  	plan = make_lockrows(subplan, best_path->rowMarks, best_path->epqParam);
  
@@ -645,7 +675,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return plan;
  }
-@@ -2622,7 +2624,7 @@ create_modifytable_plan(PlannerInfo *root, ModifyTablePath *best_path)
+@@ -2628,7 +2630,7 @@ create_modifytable_plan(PlannerInfo *root, ModifyTablePath *best_path)
  							best_path->onconflict,
  							best_path->epqParam);
  
@@ -654,7 +684,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return plan;
  }
-@@ -2646,7 +2648,7 @@ create_limit_plan(PlannerInfo *root, LimitPath *best_path, int flags)
+@@ -2652,7 +2654,7 @@ create_limit_plan(PlannerInfo *root, LimitPath *best_path, int flags)
  					  best_path->limitOffset,
  					  best_path->limitCount);
  
@@ -663,7 +693,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return plan;
  }
-@@ -2692,7 +2694,7 @@ create_seqscan_plan(PlannerInfo *root, Path *best_path,
+@@ -2698,7 +2700,7 @@ create_seqscan_plan(PlannerInfo *root, Path *best_path,
  							 scan_clauses,
  							 scan_relid);
  
@@ -672,7 +702,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return scan_plan;
  }
-@@ -2738,7 +2740,7 @@ create_samplescan_plan(PlannerInfo *root, Path *best_path,
+@@ -2744,7 +2746,7 @@ create_samplescan_plan(PlannerInfo *root, Path *best_path,
  								scan_relid,
  								tsc);
  
@@ -681,7 +711,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return scan_plan;
  }
-@@ -2916,7 +2918,7 @@ create_indexscan_plan(PlannerInfo *root,
+@@ -2922,7 +2924,7 @@ create_indexscan_plan(PlannerInfo *root,
  											indexorderbyops,
  											best_path->indexscandir);
  
@@ -690,7 +720,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return scan_plan;
  }
-@@ -3031,7 +3033,7 @@ create_bitmap_scan_plan(PlannerInfo *root,
+@@ -3037,7 +3039,7 @@ create_bitmap_scan_plan(PlannerInfo *root,
  									 bitmapqualorig,
  									 baserelid);
  
@@ -699,7 +729,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return scan_plan;
  }
-@@ -3351,7 +3353,7 @@ create_tidscan_plan(PlannerInfo *root, TidPath *best_path,
+@@ -3357,7 +3359,7 @@ create_tidscan_plan(PlannerInfo *root, TidPath *best_path,
  							 scan_relid,
  							 tidquals);
  
@@ -708,7 +738,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return scan_plan;
  }
-@@ -3401,7 +3403,7 @@ create_subqueryscan_plan(PlannerInfo *root, SubqueryScanPath *best_path,
+@@ -3407,7 +3409,7 @@ create_subqueryscan_plan(PlannerInfo *root, SubqueryScanPath *best_path,
  								  scan_relid,
  								  subplan);
  
@@ -717,7 +747,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return scan_plan;
  }
-@@ -3444,7 +3446,7 @@ create_functionscan_plan(PlannerInfo *root, Path *best_path,
+@@ -3450,7 +3452,7 @@ create_functionscan_plan(PlannerInfo *root, Path *best_path,
  	scan_plan = make_functionscan(tlist, scan_clauses, scan_relid,
  								  functions, rte->funcordinality);
  
@@ -726,7 +756,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return scan_plan;
  }
-@@ -3487,7 +3489,7 @@ create_tablefuncscan_plan(PlannerInfo *root, Path *best_path,
+@@ -3493,7 +3495,7 @@ create_tablefuncscan_plan(PlannerInfo *root, Path *best_path,
  	scan_plan = make_tablefuncscan(tlist, scan_clauses, scan_relid,
  								   tablefunc);
  
@@ -735,7 +765,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return scan_plan;
  }
-@@ -3531,7 +3533,7 @@ create_valuesscan_plan(PlannerInfo *root, Path *best_path,
+@@ -3537,7 +3539,7 @@ create_valuesscan_plan(PlannerInfo *root, Path *best_path,
  	scan_plan = make_valuesscan(tlist, scan_clauses, scan_relid,
  								values_lists);
  
@@ -744,7 +774,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return scan_plan;
  }
-@@ -3624,7 +3626,7 @@ create_ctescan_plan(PlannerInfo *root, Path *best_path,
+@@ -3630,7 +3632,7 @@ create_ctescan_plan(PlannerInfo *root, Path *best_path,
  	scan_plan = make_ctescan(tlist, scan_clauses, scan_relid,
  							 plan_id, cte_param_id);
  
@@ -753,7 +783,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return scan_plan;
  }
-@@ -3663,7 +3665,7 @@ create_namedtuplestorescan_plan(PlannerInfo *root, Path *best_path,
+@@ -3669,7 +3671,7 @@ create_namedtuplestorescan_plan(PlannerInfo *root, Path *best_path,
  	scan_plan = make_namedtuplestorescan(tlist, scan_clauses, scan_relid,
  										 rte->enrname);
  
@@ -762,7 +792,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return scan_plan;
  }
-@@ -3701,7 +3703,7 @@ create_resultscan_plan(PlannerInfo *root, Path *best_path,
+@@ -3707,7 +3709,7 @@ create_resultscan_plan(PlannerInfo *root, Path *best_path,
  
  	scan_plan = make_result(tlist, (Node *) scan_clauses, NULL);
  
@@ -771,7 +801,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return scan_plan;
  }
-@@ -3761,7 +3763,7 @@ create_worktablescan_plan(PlannerInfo *root, Path *best_path,
+@@ -3767,7 +3769,7 @@ create_worktablescan_plan(PlannerInfo *root, Path *best_path,
  	scan_plan = make_worktablescan(tlist, scan_clauses, scan_relid,
  								   cteroot->wt_param_id);
  
@@ -780,7 +810,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return scan_plan;
  }
-@@ -3821,7 +3823,7 @@ create_foreignscan_plan(PlannerInfo *root, ForeignPath *best_path,
+@@ -3827,7 +3829,7 @@ create_foreignscan_plan(PlannerInfo *root, ForeignPath *best_path,
  												outer_plan);
  
  	/* Copy cost data from Path to Plan; no need to make FDW do this */
@@ -789,7 +819,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	/* Copy foreign server OID; likewise, no need to make FDW do this */
  	scan_plan->fs_server = rel->serverid;
-@@ -3955,7 +3957,7 @@ create_customscan_plan(PlannerInfo *root, CustomPath *best_path,
+@@ -3961,7 +3963,7 @@ create_customscan_plan(PlannerInfo *root, CustomPath *best_path,
  	 * Copy cost data from Path to Plan; no need to make custom-plan providers
  	 * do this
  	 */
@@ -798,7 +828,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	/* Likewise, copy the relids that are represented by this custom scan */
  	cplan->custom_relids = best_path->path.parent->relids;
-@@ -4057,7 +4059,7 @@ create_nestloop_plan(PlannerInfo *root,
+@@ -4063,7 +4065,7 @@ create_nestloop_plan(PlannerInfo *root,
  							  best_path->jointype,
  							  best_path->inner_unique);
  
@@ -807,7 +837,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return join_plan;
  }
-@@ -4364,7 +4366,7 @@ create_mergejoin_plan(PlannerInfo *root,
+@@ -4370,7 +4372,7 @@ create_mergejoin_plan(PlannerInfo *root,
  							   best_path->skip_mark_restore);
  
  	/* Costs of sort and material steps are included in path cost already */
@@ -816,7 +846,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return join_plan;
  }
-@@ -4510,7 +4512,7 @@ create_hashjoin_plan(PlannerInfo *root,
+@@ -4543,7 +4545,7 @@ create_hashjoin_plan(PlannerInfo *root,
  							  best_path->jpath.jointype,
  							  best_path->jpath.inner_unique);
  
@@ -825,7 +855,7 @@ index 608d5adfed..222a7a34f3 100644
  
  	return join_plan;
  }
-@@ -5010,7 +5012,7 @@ order_qual_clauses(PlannerInfo *root, List *clauses)
+@@ -5043,7 +5045,7 @@ order_qual_clauses(PlannerInfo *root, List *clauses)
   * Also copy the parallel-related flags, which the executor *will* use.
   */
  static void
@@ -834,7 +864,7 @@ index 608d5adfed..222a7a34f3 100644
  {
  	dest->startup_cost = src->startup_cost;
  	dest->total_cost = src->total_cost;
-@@ -5018,6 +5020,9 @@ copy_generic_path_info(Plan *dest, Path *src)
+@@ -5051,6 +5053,9 @@ copy_generic_path_info(Plan *dest, Path *src)
  	dest->plan_width = src->pathtarget->width;
  	dest->parallel_aware = src->parallel_aware;
  	dest->parallel_safe = src->parallel_safe;
@@ -845,10 +875,10 @@ index 608d5adfed..222a7a34f3 100644
  
  /*
 diff --git a/src/backend/optimizer/util/relnode.c b/src/backend/optimizer/util/relnode.c
-index 6054bd2b53..1c8434174e 100644
+index 7758a49fa4..4f221a000b 100644
 --- a/src/backend/optimizer/util/relnode.c
 +++ b/src/backend/optimizer/util/relnode.c
-@@ -1233,6 +1233,7 @@ find_childrel_parents(PlannerInfo *root, RelOptInfo *rel)
+@@ -1246,6 +1246,7 @@ find_childrel_parents(PlannerInfo *root, RelOptInfo *rel)
  }
  
  
@@ -856,7 +886,7 @@ index 6054bd2b53..1c8434174e 100644
  /*
   * get_baserel_parampathinfo
   *		Get the ParamPathInfo for a parameterized path for a base relation,
-@@ -1301,6 +1302,10 @@ get_baserel_parampathinfo(PlannerInfo *root, RelOptInfo *baserel,
+@@ -1314,6 +1315,10 @@ get_baserel_parampathinfo(PlannerInfo *root, RelOptInfo *baserel,
  	ppi->ppi_req_outer = required_outer;
  	ppi->ppi_rows = rows;
  	ppi->ppi_clauses = pclauses;
@@ -867,7 +897,7 @@ index 6054bd2b53..1c8434174e 100644
  	baserel->ppilist = lappend(baserel->ppilist, ppi);
  
  	return ppi;
-@@ -1526,6 +1531,10 @@ get_joinrel_parampathinfo(PlannerInfo *root, RelOptInfo *joinrel,
+@@ -1539,6 +1544,10 @@ get_joinrel_parampathinfo(PlannerInfo *root, RelOptInfo *joinrel,
  	ppi->ppi_req_outer = required_outer;
  	ppi->ppi_rows = rows;
  	ppi->ppi_clauses = NIL;
@@ -896,7 +926,7 @@ index f8b79ec120..b5eda01907 100644
  extern void ExplainQuery(ParseState *pstate, ExplainStmt *stmt, const char *queryString,
  						 ParamListInfo params, QueryEnvironment *queryEnv, DestReceiver *dest);
 diff --git a/src/include/nodes/pathnodes.h b/src/include/nodes/pathnodes.h
-index 441e64eca9..484bca379a 100644
+index 5de52edda4..2ec34b2b11 100644
 --- a/src/include/nodes/pathnodes.h
 +++ b/src/include/nodes/pathnodes.h
 @@ -710,6 +710,10 @@ typedef struct RelOptInfo
@@ -910,7 +940,7 @@ index 441e64eca9..484bca379a 100644
  	/* used for partitioned relations */
  	PartitionScheme part_scheme;	/* Partitioning scheme. */
  	int			nparts;			/* number of partitions */
-@@ -1069,6 +1073,10 @@ typedef struct ParamPathInfo
+@@ -1070,6 +1074,10 @@ typedef struct ParamPathInfo
  	Relids		ppi_req_outer;	/* rels supplying parameters used by path */
  	double		ppi_rows;		/* estimated number of result tuples */
  	List	   *ppi_clauses;	/* join clauses available from outer rels */
@@ -922,7 +952,7 @@ index 441e64eca9..484bca379a 100644
  
  
 diff --git a/src/include/nodes/plannodes.h b/src/include/nodes/plannodes.h
-index 70f8b8e22b..d188c2596a 100644
+index 8e6594e355..a5e3e2c366 100644
 --- a/src/include/nodes/plannodes.h
 +++ b/src/include/nodes/plannodes.h
 @@ -144,6 +144,19 @@ typedef struct Plan
@@ -946,10 +976,10 @@ index 70f8b8e22b..d188c2596a 100644
  	 * Information for management of parameter-change-driven rescanning
  	 *
 diff --git a/src/include/optimizer/cost.h b/src/include/optimizer/cost.h
-index 9b6bdbc518..2a0caa6474 100644
+index b3d0b4f6fb..902499bd4e 100644
 --- a/src/include/optimizer/cost.h
 +++ b/src/include/optimizer/cost.h
-@@ -39,6 +39,33 @@ typedef enum
+@@ -39,6 +39,37 @@ typedef enum
  }			ConstraintExclusionType;
  
  
@@ -958,6 +988,10 @@ index 9b6bdbc518..2a0caa6474 100644
 +															RelOptInfo *rel);
 +extern PGDLLIMPORT set_baserel_rows_estimate_hook_type
 +			set_baserel_rows_estimate_hook;
++typedef void (*set_foreign_rows_estimate_hook_type) (PlannerInfo *root,
++													RelOptInfo *rel);
++extern PGDLLIMPORT set_foreign_rows_estimate_hook_type
++												set_foreign_rows_estimate_hook;
 +typedef double (*get_parameterized_baserel_size_hook_type) (PlannerInfo *root,
 +															 RelOptInfo *rel,
 +														List *param_clauses);
@@ -983,11 +1017,12 @@ index 9b6bdbc518..2a0caa6474 100644
  /*
   * prototypes for costsize.c
   *	  routines to compute costs and sizes
-@@ -171,10 +198,21 @@ extern void compute_semi_anti_join_factors(PlannerInfo *root,
+@@ -169,10 +200,22 @@ extern void compute_semi_anti_join_factors(PlannerInfo *root,
  										   SpecialJoinInfo *sjinfo,
  										   List *restrictlist,
  										   SemiAntiJoinFactors *semifactors);
 +extern void set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel);
++extern void set_foreign_rows_estimate(PlannerInfo *root, RelOptInfo *rel);
 +extern void set_baserel_rows_estimate_standard(PlannerInfo *root, RelOptInfo *rel);
  extern void set_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel);
  extern double get_parameterized_baserel_size(PlannerInfo *root,
@@ -1005,7 +1040,7 @@ index 9b6bdbc518..2a0caa6474 100644
  extern double get_parameterized_joinrel_size(PlannerInfo *root,
  											 RelOptInfo *rel,
  											 Path *outer_path,
-@@ -186,6 +224,11 @@ extern void set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
+@@ -184,6 +227,11 @@ extern void set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
  									   RelOptInfo *inner_rel,
  									   SpecialJoinInfo *sjinfo,
  									   List *restrictlist);
@@ -1017,7 +1052,7 @@ index 9b6bdbc518..2a0caa6474 100644
  extern void set_subquery_size_estimates(PlannerInfo *root, RelOptInfo *rel);
  extern void set_function_size_estimates(PlannerInfo *root, RelOptInfo *rel);
  extern void set_values_size_estimates(PlannerInfo *root, RelOptInfo *rel);
-@@ -198,5 +241,7 @@ extern void set_foreign_size_estimates(PlannerInfo *root, RelOptInfo *rel);
+@@ -196,5 +244,7 @@ extern void set_foreign_size_estimates(PlannerInfo *root, RelOptInfo *rel);
  extern PathTarget *set_pathtarget_cost_width(PlannerInfo *root, PathTarget *target);
  extern double compute_bitmap_pages(PlannerInfo *root, RelOptInfo *baserel,
  								   Path *bitmapqual, int loop_count, Cost *cost, double *tuple);
@@ -1026,7 +1061,7 @@ index 9b6bdbc518..2a0caa6474 100644
  
  #endif							/* COST_H */
 diff --git a/src/include/optimizer/pathnode.h b/src/include/optimizer/pathnode.h
-index e70d6a3f18..21dbfee508 100644
+index 182ffeef4b..f3d4fa58a5 100644
 --- a/src/include/optimizer/pathnode.h
 +++ b/src/include/optimizer/pathnode.h
 @@ -18,6 +18,10 @@
@@ -1041,7 +1076,7 @@ index e70d6a3f18..21dbfee508 100644
   * prototypes for pathnode.c
   */
 diff --git a/src/include/optimizer/planmain.h b/src/include/optimizer/planmain.h
-index e7aaddd50d..56e58dee25 100644
+index 80dc4bf4e8..afb9e9454e 100644
 --- a/src/include/optimizer/planmain.h
 +++ b/src/include/optimizer/planmain.h
 @@ -24,6 +24,12 @@ extern double cursor_tuple_fraction;
