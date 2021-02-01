@@ -11,7 +11,7 @@ index 92184ed487..ac8abbfd03 100644
  		auto_explain	\
  		bloom		\
 diff --git a/src/backend/commands/explain.c b/src/backend/commands/explain.c
-index a40bc14ec5..28ec281a70 100644
+index a40bc14ec5..d157c3043e 100644
 --- a/src/backend/commands/explain.c
 +++ b/src/backend/commands/explain.c
 @@ -24,6 +24,7 @@
@@ -22,17 +22,20 @@ index a40bc14ec5..28ec281a70 100644
  #include "parser/parsetree.h"
  #include "rewrite/rewriteHandler.h"
  #include "storage/bufmgr.h"
-@@ -46,6 +47,9 @@ ExplainOneQuery_hook_type ExplainOneQuery_hook = NULL;
+@@ -46,6 +47,12 @@ ExplainOneQuery_hook_type ExplainOneQuery_hook = NULL;
  /* Hook for plugins to get control in explain_get_index_name() */
  explain_get_index_name_hook_type explain_get_index_name_hook = NULL;
  
 +/* Hook for plugins to get control in ExplainOnePlan() */
 +ExplainOnePlan_hook_type ExplainOnePlan_hook = NULL;
 +
++/* Hook for plugins to get control in ExplainOnePlan() */
++ExplainOneNode_hook_type ExplainOneNode_hook = NULL;
++
  
  /* OR-able flags for ExplainXMLTag() */
  #define X_OPENING 0
-@@ -597,6 +601,10 @@ ExplainOnePlan(PlannedStmt *plannedstmt, IntoClause *into, ExplainState *es,
+@@ -597,6 +604,10 @@ ExplainOnePlan(PlannedStmt *plannedstmt, IntoClause *into, ExplainState *es,
  		ExplainPropertyFloat("Execution Time", "ms", 1000.0 * totaltime, 3,
  							 es);
  
@@ -43,42 +46,13 @@ index a40bc14ec5..28ec281a70 100644
  	ExplainCloseGroup("Query", NULL, true, es);
  }
  
-@@ -1521,6 +1529,38 @@ ExplainNode(PlanState *planstate, List *ancestors,
+@@ -1521,6 +1532,9 @@ ExplainNode(PlanState *planstate, List *ancestors,
  				appendStringInfo(es->str,
  								 " (actual rows=%.0f loops=%.0f)",
  								 rows, nloops);
 +
-+#ifdef AQO_EXPLAIN
-+			if (es->verbose && plan && planstate->instrument)
-+			{
-+				int wrkrs = 1;
-+				double error = -1.;
-+
-+				if (planstate->worker_instrument && IsParallelTuplesProcessing(plan))
-+				{
-+					int i;
-+					for (i = 0; i < planstate->worker_instrument->num_workers; i++)
-+					{
-+						Instrumentation *instrument = &planstate->worker_instrument->instrument[i];
-+						if (instrument->nloops <= 0)
-+							continue;
-+						wrkrs++;
-+					}
-+				}
-+
-+				if (plan->predicted_cardinality > 0.)
-+				{
-+					error = 100. * (plan->predicted_cardinality - (rows*wrkrs))
-+												/ plan->predicted_cardinality;
-+					appendStringInfo(es->str,
-+					" (AQO: cardinality=%.0lf, error=%.0lf%%, fsspace_hash=%d)",
-+							plan->predicted_cardinality, error, plan->fss_hash);
-+				}
-+				else
-+					appendStringInfo(es->str, " (AQO not used, fsspace_hash=%d)",
-+																plan->fss_hash);
-+			}
-+#endif
++			if (ExplainOneNode_hook)
++				ExplainOneNode_hook(es, planstate, plan, rows);
  		}
  		else
  		{
@@ -909,10 +883,10 @@ index 7758a49fa4..4f221a000b 100644
  
  	return ppi;
 diff --git a/src/include/commands/explain.h b/src/include/commands/explain.h
-index f8b79ec120..b5eda01907 100644
+index f8b79ec120..f970971a4a 100644
 --- a/src/include/commands/explain.h
 +++ b/src/include/commands/explain.h
-@@ -62,6 +62,12 @@ extern PGDLLIMPORT ExplainOneQuery_hook_type ExplainOneQuery_hook;
+@@ -62,6 +62,19 @@ extern PGDLLIMPORT ExplainOneQuery_hook_type ExplainOneQuery_hook;
  typedef const char *(*explain_get_index_name_hook_type) (Oid indexId);
  extern PGDLLIMPORT explain_get_index_name_hook_type explain_get_index_name_hook;
  
@@ -922,6 +896,13 @@ index f8b79ec120..b5eda01907 100644
 +			   ParamListInfo params, const instr_time *planduration,
 +			   QueryEnvironment *queryEnv);
 +extern PGDLLIMPORT ExplainOnePlan_hook_type ExplainOnePlan_hook;
++
++/* Explain a plan node info */
++typedef void (*ExplainOneNode_hook_type) (ExplainState *es,
++										 PlanState *ps,
++										 Plan *plan,
++										 double rows);
++extern PGDLLIMPORT ExplainOneNode_hook_type ExplainOneNode_hook;
  
  extern void ExplainQuery(ParseState *pstate, ExplainStmt *stmt, const char *queryString,
  						 ParamListInfo params, QueryEnvironment *queryEnv, DestReceiver *dest);

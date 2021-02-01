@@ -1,0 +1,74 @@
+-- Tests on cardinality estimation of FDW-queries:
+-- simple ForeignScan.
+-- JOIN push-down (check push of baserestrictinfo and joininfo)
+-- Aggregate push-down
+-- Push-down of groupings with HAVING clause.
+CREATE EXTENSION aqo;
+CREATE EXTENSION postgres_fdw;
+SET aqo.mode = 'learn';
+SET aqo.show_details = 'true'; -- show AQO info for each node and entire query.
+SET aqo.show_hash = 'false'; -- a hash value is system-depended. Ignore it.
+DO $d$
+    BEGIN
+        EXECUTE $$CREATE SERVER loopback FOREIGN DATA WRAPPER postgres_fdw
+            OPTIONS (dbname '$$||current_database()||$$',
+                     port '$$||current_setting('port')||$$'
+            )$$;
+    END;
+$d$;
+CREATE USER MAPPING FOR PUBLIC SERVER loopback;
+CREATE TABLE local (x int);
+CREATE FOREIGN TABLE frgn(x int) SERVER loopback OPTIONS (table_name 'local');
+INSERT INTO frgn (x) VALUES (1);
+ANALYZE local;
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT x FROM frgn;
+                         QUERY PLAN                          
+-------------------------------------------------------------
+ Foreign Scan on frgn (actual rows=1 loops=1) (AQO not used)
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(4 rows)
+
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT x FROM frgn;
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Foreign Scan on frgn (actual rows=1 loops=1) (AQO: cardinality=1, error=0%)
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(4 rows)
+
+-- Push down base filters.
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE) SELECT x FROM frgn WHERE x < 10;
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Foreign Scan on public.frgn (actual rows=1 loops=1) (AQO not used)
+   Output: x
+   Remote SQL: SELECT x FROM public.local WHERE ((x < 10))
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(6 rows)
+
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE) SELECT x FROM frgn WHERE x < 10;
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
+ Foreign Scan on public.frgn (actual rows=1 loops=1) (AQO: cardinality=1, error=0%)
+   Output: x
+   Remote SQL: SELECT x FROM public.local WHERE ((x < 10))
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(6 rows)
+
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT x FROM frgn WHERE x < -10; -- AQO ignores constants
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Foreign Scan on frgn (actual rows=0 loops=1) (AQO: cardinality=1, error=100%)
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(4 rows)
+
+DROP EXTENSION aqo;

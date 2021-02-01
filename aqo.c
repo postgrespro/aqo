@@ -18,6 +18,8 @@ void _PG_init(void);
 /* Strategy of determining feature space for new queries. */
 int		aqo_mode;
 bool	force_collect_stat;
+bool	aqo_show_hash;
+bool	aqo_details;
 
 /* GUC variables */
 static const struct config_enum_entry format_options[] = {
@@ -83,6 +85,7 @@ set_joinrel_size_estimates_hook_type		prev_set_joinrel_size_estimates_hook;
 get_parameterized_joinrel_size_hook_type	prev_get_parameterized_joinrel_size_hook;
 copy_generic_path_info_hook_type			prev_copy_generic_path_info_hook;
 ExplainOnePlan_hook_type					prev_ExplainOnePlan_hook;
+ExplainOneNode_hook_type					prev_ExplainOneNode_hook;
 
 /*****************************************************************************
  *
@@ -116,7 +119,33 @@ _PG_init(void)
 							 NULL,
 							 NULL,
 							 NULL
-		);
+	);
+
+	DefineCustomBoolVariable(
+							 "aqo.show_hash",
+							 "Show query and node hash on explain.",
+							 "Hash value depend on each instance and is not good to enable it in regression or TAP tests.",
+							 &aqo_show_hash,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL
+	);
+
+	DefineCustomBoolVariable(
+							 "aqo.show_details",
+							 "Show AQO state on a query.",
+							 NULL,
+							 &aqo_details,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL
+	);
 
 	prev_planner_hook							= planner_hook;
 	planner_hook								= aqo_planner;
@@ -139,6 +168,8 @@ _PG_init(void)
 	copy_generic_path_info_hook					= aqo_copy_generic_path_info;
 	prev_ExplainOnePlan_hook					= ExplainOnePlan_hook;
 	ExplainOnePlan_hook							= print_into_explain;
+	prev_ExplainOneNode_hook					= ExplainOneNode_hook;
+	ExplainOneNode_hook							= print_node_explain;
 	parampathinfo_postinit_hook					= ppi_hook;
 
 	init_deactivated_queries_storage();
