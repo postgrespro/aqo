@@ -32,7 +32,7 @@ installed with `make install`.
 
 ```
 cd postgresql-9.6													# enter postgresql source directory
-git clone https://github.com/postgrespro/aqo.git stable11					# clone aqo into contrib
+git clone https://github.com/postgrespro/aqo.git contrib/aqo			# clone aqo into contrib
 patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg<ver>.patch	# patch postgresql
 make clean && make && make install									# recompile postgresql
 cd contrib/aqo														# enter aqo directory
