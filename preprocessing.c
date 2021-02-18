@@ -124,6 +124,7 @@ aqo_planner(Query *parse,
 	bool		query_is_stored;
 	Datum		query_params[5];
 	bool		query_nulls[5] = {false, false, false, false, false};
+	LOCKTAG		tag;
 
 	selectivity_cache_clear();
 
@@ -162,6 +163,13 @@ aqo_planner(Query *parse,
 									cursorOptions,
 									boundParams);
 	}
+
+	/*
+	 * find-add query and query text must be atomic operation to prevent
+	 * concurrent insertions.
+	 */
+	init_lock_tag(&tag, (uint32) query_context.query_hash, (uint32) 0);
+	LockAcquire(&tag, ExclusiveLock, false, false);
 
 	query_is_stored = find_query(query_context.query_hash, &query_params[0],
 															&query_nulls[0]);
@@ -217,9 +225,18 @@ aqo_planner(Query *parse,
 
 		if (query_context.adding_query || force_collect_stat)
 		{
-			add_query(query_context.query_hash, query_context.learn_aqo,
-					  query_context.use_aqo, query_context.fspace_hash,
-					  query_context.auto_tuning);
+			/*
+			 * Add query into the AQO knowledge base. To process an error with
+			 * concurrent addition from another backend we will try to restart
+			 * preprocessing routine.
+			 */
+			update_query(query_context.query_hash,
+							  query_context.fspace_hash,
+							  query_context.learn_aqo,
+							  query_context.use_aqo,
+							  query_context.auto_tuning);
+
+
 			add_query_text(query_context.query_hash, query_text);
 		}
 	}
@@ -273,6 +290,8 @@ aqo_planner(Query *parse,
 		}
 	}
 
+	LockRelease(&tag, ExclusiveLock, false);
+
 	/*
 	 * This mode is possible here, because force collect statistics uses AQO
 	 * machinery.
@@ -319,6 +338,22 @@ isQueryUsingSystemRelation(Query *query)
 	return isQueryUsingSystemRelation_walker((Node *) query, NULL);
 }
 
+static bool
+IsAQORelation(Relation rel)
+{
+	char *relname = NameStr(rel->rd_rel->relname);
+
+	if (strcmp(relname, "aqo_data") == 0 ||
+		strcmp(relname, "aqo_query_texts") == 0 ||
+		strcmp(relname, "aqo_query_stat") == 0 ||
+		strcmp(relname, "aqo_queries") == 0 ||
+		strcmp(relname, "aqo_ignorance") == 0
+	   )
+	   return true;
+
+	return false;
+}
+
 bool
 isQueryUsingSystemRelation_walker(Node *node, void *context)
 {
@@ -338,9 +373,10 @@ isQueryUsingSystemRelation_walker(Node *node, void *context)
 			{
 				Relation	rel = table_open(rte->relid, AccessShareLock);
 				bool		is_catalog = IsCatalogRelation(rel);
+				bool		is_aqo_rel = IsAQORelation(rel);
 
 				table_close(rel, AccessShareLock);
-				if (is_catalog)
+				if (is_catalog || is_aqo_rel)
 					return true;
 			}
 		}
