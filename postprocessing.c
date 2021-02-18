@@ -755,7 +755,7 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
 	int wrkrs = 1;
 	double error = -1.;
 
-	if (!aqo_details || !plan || !ps->instrument)
+	if (!aqo_show_details || !plan || !ps->instrument)
 		return;
 
 	if (ps->worker_instrument && IsParallelTuplesProcessing(plan))
@@ -802,7 +802,7 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 		prev_ExplainOnePlan_hook(plannedstmt, into, es, queryString,
 								 params, planduration, queryEnv);
 
-	if (!aqo_details)
+	if (!aqo_show_details)
 		return;
 
 	/* Report to user about aqo state only in verbose mode */

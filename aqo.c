@@ -19,7 +19,7 @@ void _PG_init(void);
 int		aqo_mode;
 bool	force_collect_stat;
 bool	aqo_show_hash;
-bool	aqo_details;
+bool	aqo_show_details;
 
 /* GUC variables */
 static const struct config_enum_entry format_options[] = {
@@ -138,7 +138,7 @@ _PG_init(void)
 							 "aqo.show_details",
 							 "Show AQO state on a query.",
 							 NULL,
-							 &aqo_details,
+							 &aqo_show_details,
 							 false,
 							 PGC_USERSET,
 							 0,
