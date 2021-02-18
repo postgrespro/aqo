@@ -175,7 +175,7 @@ typedef enum
 extern int	aqo_mode;
 extern bool	force_collect_stat;
 extern bool aqo_show_hash;
-extern bool aqo_details;
+extern bool aqo_show_details;
 
 /*
  * It is mostly needed for auto tuning of query. with auto tuning mode aqo
