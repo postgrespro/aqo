@@ -94,9 +94,9 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 {
 	int			fss_hash;
 	int			nfeatures;
-	double	  *matrix[aqo_K];
-	double	   targets[aqo_K];
-	double	   *features;
+	double		*matrix[aqo_K];
+	double		targets[aqo_K];
+	double		*features;
 	double		target;
 	int			i;
 
@@ -138,14 +138,14 @@ restore_selectivities(List *clauselist,
 					  JoinType join_type,
 					  bool was_parametrized)
 {
-	List	   *lst = NIL;
-	ListCell   *l;
+	List		*lst = NIL;
+	ListCell	*l;
 	int			i = 0;
 	bool		parametrized_sel;
 	int			nargs;
-	int		   *args_hash;
-	int		   *eclass_hash;
-	double	   *cur_sel;
+	int			*args_hash;
+	int			*eclass_hash;
+	double		*cur_sel;
 	int			cur_hash;
 	int			cur_relid;
 
@@ -290,7 +290,7 @@ learnOnPlanState(PlanState *p, void *context)
 				}
 				else
 					/* This node does not required to sum tuples of each worker
-					 * to calculate produced rows.  */
+					 * to calculate produced rows. */
 					learn_rows = p->instrument->ntuples / p->instrument->nloops;
 
 				if (p->plan->predicted_cardinality > 0.)
