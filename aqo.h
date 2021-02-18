@@ -267,6 +267,7 @@ extern get_parameterized_joinrel_size_hook_type
 									prev_get_parameterized_joinrel_size_hook;
 extern copy_generic_path_info_hook_type prev_copy_generic_path_info_hook;
 extern ExplainOnePlan_hook_type prev_ExplainOnePlan_hook;
+extern ExplainOneNode_hook_type prev_ExplainOneNode_hook;
 
 extern void ppi_hook(ParamPathInfo *ppi);
 
@@ -281,44 +282,42 @@ int get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash);
 
 
 /* Storage interaction */
-bool find_query(int query_hash,
-				Datum *search_values,
-				bool *search_nulls);
-bool add_query(int query_hash, bool learn_aqo, bool use_aqo,
-			   int fspace_hash, bool auto_tuning);
-bool update_query(int query_hash, bool learn_aqo, bool use_aqo,
-				  int fspace_hash, bool auto_tuning);
-bool add_query_text(int query_hash, const char *query_text);
-bool load_fss(int fss_hash, int ncols,
-		 double **matrix, double *targets, int *rows);
-extern bool update_fss(int fss_hash, int nrows, int ncols,
+extern bool find_query(int qhash, Datum *search_values, bool *search_nulls);
+extern bool update_query(int qhash, int fhash,
+						 bool learn_aqo, bool use_aqo, bool auto_tuning);
+extern bool add_query_text(int query_hash, const char *query_text);
+extern bool load_fss(int fhash, int fss_hash,
+					 int ncols, double **matrix, double *targets, int *rows);
+extern bool update_fss(int fhash, int fss_hash, int nrows, int ncols,
 					   double **matrix, double *targets);
 QueryStat *get_aqo_stat(int query_hash);
 void update_aqo_stat(int query_hash, QueryStat * stat);
+extern bool my_index_insert(Relation indexRelation,	Datum *values, bool *isnull,
+							ItemPointer heap_t_ctid, Relation heapRelation,
+							IndexUniqueCheck checkUnique);
 void init_deactivated_queries_storage(void);
 void fini_deactivated_queries_storage(void);
 bool query_is_deactivated(int query_hash);
 void add_deactivated_query(int query_hash);
 
 /* Query preprocessing hooks */
-void get_query_text(ParseState *pstate, Query *query);
-PlannedStmt *call_default_planner(Query *parse,
-								  const char *query_string,
-								  int cursorOptions,
-								  ParamListInfo boundParams);
-PlannedStmt *aqo_planner(Query *parse,
-						 const char *query_string,
-						 int cursorOptions,
-						 ParamListInfo boundParams);
-void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
-						ExplainState *es, const char *queryString,
-						ParamListInfo params, const instr_time *planduration,
-						QueryEnvironment *queryEnv);
-extern void print_node_explain(ExplainState *es,
-							   PlanState *ps,
-							   Plan *plan,
+extern void get_query_text(ParseState *pstate, Query *query);
+extern PlannedStmt *call_default_planner(Query *parse,
+										 const char *query_string,
+										 int cursorOptions,
+										 ParamListInfo boundParams);
+extern PlannedStmt *aqo_planner(Query *parse,
+								const char *query_string,
+								int cursorOptions,
+								ParamListInfo boundParams);
+extern void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
+							   ExplainState *es, const char *queryString,
+							   ParamListInfo params,
+							   const instr_time *planduration,
+							   QueryEnvironment *queryEnv);
+extern void print_node_explain(ExplainState *es, PlanState *ps, Plan *plan,
 							   double rows);
-void disable_aqo_for_query(void);
+extern void disable_aqo_for_query(void);
 
 /* Cardinality estimation hooks */
 extern void aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel);
@@ -364,7 +363,7 @@ extern int OkNNr_learn(int matrix_rows, int matrix_cols,
 			double *features, double target);
 
 /* Automatic query tuning */
-void		automatical_query_tuning(int query_hash, QueryStat * stat);
+extern void automatical_query_tuning(int query_hash, QueryStat * stat);
 
 /* Utilities */
 int			int_cmp(const void *a, const void *b);
@@ -376,11 +375,13 @@ QueryStat  *palloc_query_stat(void);
 void		pfree_query_stat(QueryStat *stat);
 
 /* Selectivity cache for parametrized baserels */
-void cache_selectivity(int clause_hash,
-				  int relid,
-				  int global_relid,
-				  double selectivity);
-double	   *selectivity_cache_find_global_relid(int clause_hash, int global_relid);
-void		selectivity_cache_clear(void);
+extern void cache_selectivity(int clause_hash, int relid, int global_relid,
+							  double selectivity);
+extern double *selectivity_cache_find_global_relid(int clause_hash,
+												   int global_relid);
+extern void selectivity_cache_clear(void);
+
+extern Oid get_aqo_schema(void);
+extern void init_lock_tag(LOCKTAG *tag, uint32 key1, uint32 key2);
 
 #endif

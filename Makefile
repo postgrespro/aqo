@@ -6,7 +6,9 @@ PGFILEDESC = "AQO - adaptive query optimization"
 MODULES = aqo
 OBJS = aqo.o auto_tuning.o cardinality_estimation.o cardinality_hooks.o \
 hash.o machine_learning.o path_utils.o postprocessing.o preprocessing.o \
-selectivity_cache.o storage.o utils.o $(WIN32RES)
+selectivity_cache.o storage.o utils.o ignorance.o $(WIN32RES)
+
+TAP_TESTS = 1
 
 REGRESS =	aqo_disabled \
 			aqo_controlled \
@@ -15,7 +17,8 @@ REGRESS =	aqo_disabled \
 			aqo_learn \
 			schema \
 			aqo_fdw \
-			aqo_CVE-2020-14350
+			aqo_CVE-2020-14350 \
+			gucs
 
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw
 PG_CPPFLAGS += -I$(libpq_srcdir) -I$(fdw_srcdir)

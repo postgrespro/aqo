@@ -25,13 +25,12 @@ SELECT * FROM test;
 -- Exclude fields with hash values from the queries. Hash is depend on
 -- nodefuncs code which is highly PostgreSQL version specific.
 SELECT query_text FROM public.aqo_query_texts;
-                   query_text                   
-------------------------------------------------
+                 query_text                 
+--------------------------------------------
  COMMON feature space (do not delete!)
  INSERT INTO test (data) VALUES ('string');
  SELECT * FROM test;
- SELECT query_text FROM public.aqo_query_texts;
-(4 rows)
+(3 rows)
 
 SELECT learn_aqo, use_aqo, auto_tuning FROM public.aqo_queries;
  learn_aqo | use_aqo | auto_tuning 
@@ -39,9 +38,7 @@ SELECT learn_aqo, use_aqo, auto_tuning FROM public.aqo_queries;
  f         | f       | f
  t         | f       | t
  t         | f       | t
- t         | f       | t
- t         | f       | t
-(5 rows)
+(3 rows)
 
 DROP SCHEMA IF EXISTS test1 CASCADE;
 NOTICE:  drop cascades to 2 other objects
