@@ -187,8 +187,11 @@ automatical_query_tuning(int query_hash, QueryStat * stat)
 	}
 
 	if (num_iterations <= auto_tuning_max_iterations || p_use > 0.5)
-		update_query(query_hash, query_context.learn_aqo, query_context.use_aqo,
-											query_context.fspace_hash, true);
+		update_query(query_hash,
+					 query_context.fspace_hash,
+					 query_context.learn_aqo,
+					 query_context.use_aqo,
+					 true);
 	else
-		update_query(query_hash, false, false, query_context.fspace_hash, false);
+		update_query(query_hash, query_context.fspace_hash, false, false, false);
 }

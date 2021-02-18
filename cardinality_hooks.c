@@ -156,7 +156,8 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	relids = list_make1_int(relid);
 
 	restrict_clauses = list_copy(rel->baserestrictinfo);
-	predicted = predict_for_relation(restrict_clauses, selectivities, relids, &fss);
+	predicted = predict_for_relation(restrict_clauses, selectivities,
+									 relids, &fss);
 	rel->fss_hash = fss;
 
 	if (predicted >= 0)

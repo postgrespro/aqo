@@ -1,0 +1,93 @@
+CREATE EXTENSION aqo;
+SET aqo.mode = 'learn';
+SET aqo.show_details = true;
+CREATE TABLE t(x int);
+INSERT INTO t (x) (SELECT * FROM generate_series(1, 100) AS gs);
+ANALYZE t;
+EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+	SELECT x FROM t;
+                          QUERY PLAN                           
+---------------------------------------------------------------
+ Seq Scan on public.t (actual rows=100 loops=1) (AQO not used)
+   Output: x
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(5 rows)
+
+EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+	SELECT x FROM t;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Seq Scan on public.t (actual rows=100 loops=1) (AQO: cardinality=100, error=0%)
+   Output: x
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(5 rows)
+
+DROP EXTENSION aqo;
+SET aqo.log_ignorance = 'on';
+SET aqo.log_ignorance = 'off';
+SET aqo.log_ignorance = 'off';
+SET aqo.log_ignorance = 'on';
+\d
+       List of relations
+ Schema | Name | Type  | Owner  
+--------+------+-------+--------
+ public | t    | table | andrey
+(1 row)
+
+CREATE EXTENSION aqo;
+SET aqo.log_ignorance = 'off';
+SET aqo.log_ignorance = 'on';
+SET aqo.log_ignorance = 'on';
+\d aqo_ignorance
+             Table "public.aqo_ignorance"
+  Column   |  Type   | Collation | Nullable | Default 
+-----------+---------+-----------+----------+---------
+ qhash     | integer |           |          | 
+ fhash     | integer |           |          | 
+ fss_hash  | integer |           |          | 
+ node_type | integer |           |          | 
+ node      | text    |           |          | 
+Indexes:
+    "aqo_ignorance_idx" UNIQUE, btree (qhash, fhash, fss_hash)
+
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT * FROM t;
+                       QUERY PLAN                       
+--------------------------------------------------------
+ Seq Scan on t (actual rows=100 loops=1) (AQO not used)
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(4 rows)
+
+SELECT node_type FROM aqo_ignorance; -- SeqScan on t must be existed in ignorance table
+ node_type 
+-----------
+        19
+(1 row)
+
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM t;
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Seq Scan on t (actual rows=100 loops=1) (AQO: cardinality=100, error=0%)
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(4 rows)
+
+SELECT node_type FROM aqo_ignorance; -- SeqScan on t must be excluded from ignorance table
+ node_type 
+-----------
+(0 rows)
+
+-- This GUC can be changed by an admin only.
+CREATE ROLE noadmin;
+SET ROLE noadmin;
+SET aqo.log_ignorance = 'off';
+ERROR:  permission denied to set parameter "aqo.log_ignorance"
+RESET ROLE;
+DROP EXTENSION aqo;

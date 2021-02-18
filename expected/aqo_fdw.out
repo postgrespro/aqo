@@ -128,4 +128,10 @@ SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
  JOINS: 0
 (7 rows)
 
-DROP EXTENSION aqo;
+DROP EXTENSION aqo CASCADE;
+DROP EXTENSION postgres_fdw CASCADE;
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to server loopback
+drop cascades to user mapping for public on server loopback
+drop cascades to foreign table frgn
+DROP TABLE local;
