@@ -794,20 +794,24 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
 		}
 	}
 
+	appendStringInfoChar(es->str, '\n');
+	Assert(es->format == EXPLAIN_FORMAT_TEXT);
+	if (es->str->len == 0 || es->str->data[es->str->len - 1] == '\n')
+		appendStringInfoSpaces(es->str, es->indent * 2);
+
 	if (plan->predicted_cardinality > 0.)
 	{
 		error = 100. * (plan->predicted_cardinality - (rows*wrkrs))
 									/ plan->predicted_cardinality;
 		appendStringInfo(es->str,
-						 " (AQO: cardinality=%.0lf, error=%.0lf%%",
+						 "AQO: rows=%.0lf, error=%.0lf%%",
 						 plan->predicted_cardinality, error);
 	}
 	else
-		appendStringInfo(es->str, " (AQO not used");
+		appendStringInfo(es->str, "AQO not used");
 
 	if (aqo_show_hash)
-		appendStringInfo(es->str, ", fss hash = %d", plan->fss_hash);
-	appendStringInfoChar(es->str, ')');
+		appendStringInfo(es->str, ", fss=%d", plan->fss_hash);
 
 	if (prev_ExplainOneNode_hook)
 		prev_ExplainOneNode_hook(es, ps, plan, rows);
