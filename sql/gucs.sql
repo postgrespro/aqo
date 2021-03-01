@@ -17,7 +17,7 @@ SET aqo.log_ignorance = 'on';
 SET aqo.log_ignorance = 'off';
 SET aqo.log_ignorance = 'off';
 SET aqo.log_ignorance = 'on';
-\d
+
 CREATE EXTENSION aqo;
 SET aqo.log_ignorance = 'off';
 SET aqo.log_ignorance = 'on';
