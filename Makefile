@@ -18,7 +18,8 @@ REGRESS =	aqo_disabled \
 			schema \
 			aqo_fdw \
 			aqo_CVE-2020-14350 \
-			gucs
+			gucs \
+			forced_stat_collection
 
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw
 PG_CPPFLAGS += -I$(libpq_srcdir) -I$(fdw_srcdir)
