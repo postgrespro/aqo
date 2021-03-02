@@ -152,7 +152,6 @@ aqo_planner(Query *parse,
 	}
 
 	INSTR_TIME_SET_CURRENT(query_context.query_starttime);
-
 	query_context.query_hash = get_query_hash(parse, query_text);
 
 	if (query_is_deactivated(query_context.query_hash))
