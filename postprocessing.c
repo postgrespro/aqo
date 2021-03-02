@@ -236,8 +236,85 @@ learnOnPlanState(PlanState *p, void *context)
 {
 	aqo_obj_stat *ctx = (aqo_obj_stat *) context;
 	aqo_obj_stat SubplanCtx = {NIL, NIL, NIL, ctx->learn};
+	double predicted = 0.;
+	double learn_rows = 0.;
+
+	if (!p->instrument)
+		return true;
 
 	planstate_tree_walker(p, learnOnPlanState, (void *) &SubplanCtx);
+
+	if (p->instrument->nloops > 0.)
+	{
+		/* If we can strongly calculate produced rows, do it. */
+		if (p->worker_instrument && IsParallelTuplesProcessing(p->plan))
+		{
+			double wnloops = 0.;
+			double wntuples = 0.;
+			int i;
+
+			for (i = 0; i < p->worker_instrument->num_workers; i++)
+			{
+				double t = p->worker_instrument->instrument[i].ntuples;
+				double l = p->worker_instrument->instrument[i].nloops;
+
+				if (l <= 0)
+					continue;
+
+				wntuples += t;
+				wnloops += l;
+				learn_rows += t/l;
+			}
+
+			Assert(p->instrument->nloops >= wnloops);
+			Assert(p->instrument->ntuples >= wntuples);
+			if (p->instrument->nloops - wnloops > 0.5)
+				learn_rows += (p->instrument->ntuples - wntuples) /
+								(p->instrument->nloops - wnloops);
+		}
+		else
+			/* This node does not required to sum tuples of each worker
+			 * to calculate produced rows. */
+			learn_rows = p->instrument->ntuples / p->instrument->nloops;
+	}
+
+	/* Calculate predicted cardinality */
+	if (p->plan->predicted_cardinality > 0.)
+	{
+		Assert(query_context.use_aqo);
+
+		/* AQO made prediction. use it. */
+		predicted = p->plan->predicted_cardinality;
+	}
+	else if (IsParallelTuplesProcessing(p->plan))
+		/*
+		 * AQO didn't make a prediction and we need to calculate real number
+		 * of tuples passed because of parallel workers.
+		 */
+		predicted = p->plan->plan_rows *
+						get_parallel_divisor(p->plan->path_parallel_workers);
+	else
+		/* No AQO prediction. Parallel workers not used for this plan node. */
+		predicted = p->plan->plan_rows;
+
+	if (!ctx->learn && query_context.collect_stat)
+	{
+		double p,l;
+
+		/* Special case of forced gathering of statistics. */
+		Assert(predicted >= 0 && learn_rows >= 0);
+		p = (predicted < 1) ? 0 : log(predicted);
+		l = (learn_rows < 1) ? 0 : log(learn_rows);
+		cardinality_sum_errors += fabs(p - l);
+		cardinality_num_objects += 1;
+		return false;
+	}
+	else if (!ctx->learn)
+		return true;
+
+	/* It is needed for correct exp(result) calculation. */
+	predicted = clamp_row_est(predicted);
+	learn_rows = clamp_row_est(learn_rows);
 
 	/*
 	 * Some nodes inserts after planning step (See T_Hash node type).
@@ -269,60 +346,15 @@ learnOnPlanState(PlanState *p, void *context)
 							  IsA(p, ForeignScanState) ||
 							  IsA(p, AppendState) || IsA(p, MergeAppendState)))
 		{
-			double learn_rows = 0.;
-			double predicted = 0.;
-
-			if (p->instrument->nloops > 0.)
-			{
-				/* If we can strongly calculate produced rows, do it. */
-				if (p->worker_instrument && IsParallelTuplesProcessing(p->plan))
-				{
-					double wnloops = 0.;
-					double wntuples = 0.;
-					int i;
-
-					for (i = 0; i < p->worker_instrument->num_workers; i++)
-					{
-						double t = p->worker_instrument->instrument[i].ntuples;
-						double l = p->worker_instrument->instrument[i].nloops;
-
-						if (l <= 0)
-							continue;
-
-						wntuples += t;
-						wnloops += l;
-						learn_rows += t/l;
-					}
-
-					Assert(p->instrument->nloops >= wnloops);
-					Assert(p->instrument->ntuples >= wntuples);
-					if (p->instrument->nloops - wnloops > 0.5)
-						learn_rows += (p->instrument->ntuples - wntuples) /
-											(p->instrument->nloops - wnloops);
-				}
-				else
-					/* This node does not required to sum tuples of each worker
-					 * to calculate produced rows. */
-					learn_rows = p->instrument->ntuples / p->instrument->nloops;
-
-				if (p->plan->predicted_cardinality > 0.)
-					predicted = p->plan->predicted_cardinality;
-				else if (IsParallelTuplesProcessing(p->plan))
-					predicted = p->plan->plan_rows *
-						get_parallel_divisor(p->plan->path_parallel_workers);
-				else
-					predicted = p->plan->plan_rows;
-
-				/* It is needed for correct exp(result) calculation. */
-				predicted = clamp_row_est(predicted);
-				learn_rows = clamp_row_est(learn_rows);
-			}
-			else
+			if (p->instrument->nloops <= 0.)
 			{
 				/*
 				 * LAV: I found two cases for this code:
 				 * 1. if query returns with error.
-				 * 2. plan node has never visited.
+				 * 2. plan node has never visited. In this case we can not teach
+				 * AQO because ntuples value is equal to 0 and we will got
+				 * learn rows == 1. It is false knowledge: at another place of
+				 * a plan, scanning of the node may produce many tuples.
 				 * Both cases can't be used to learning AQO because give an
 				 * incorrect number of rows.
 				 */
@@ -330,17 +362,6 @@ learnOnPlanState(PlanState *p, void *context)
 			}
 
 			Assert(predicted >= 1 && learn_rows >= 1);
-			cardinality_sum_errors += fabs(log(predicted) - log(learn_rows));
-			cardinality_num_objects += 1;
-
-			/*
-			 * A subtree was not visited. In this case we can not teach AQO
-			 * because ntuples value is equal to 0 and we will got
-			 * learn rows == 1.
-			 * It is false knowledge: at another place of a plan, scanning of
-			 * the node may produce many tuples.
-			 */
-			Assert(p->instrument->nloops >= 1);
 
 			if (ctx->learn)
 				learn_sample(SubplanCtx.clauselist, SubplanCtx.selectivities,
@@ -356,7 +377,10 @@ learnOnPlanState(PlanState *p, void *context)
 }
 
 /*
- * Updates given row of query statistics.
+ * Updates given row of query statistics:
+ * et - execution time
+ * pt - planning time
+ * ce - cardinality error
  */
 void
 update_query_stat_row(double *et, int *et_size,
@@ -412,7 +436,8 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 	bool use_aqo;
 
 	use_aqo = !IsParallelWorker() && (query_context.use_aqo ||
-								query_context.learn_aqo || force_collect_stat);
+									  query_context.learn_aqo ||
+									  force_collect_stat);
 
 	if (use_aqo)
 	{
@@ -477,11 +502,15 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		query_context.collect_stat = false;
 	}
 
-	if ((query_context.learn_aqo || query_context.collect_stat) &&
-		!HasNeverExecutedNodes(queryDesc->planstate, NULL))
+	if ((query_context.learn_aqo &&
+		!HasNeverExecutedNodes(queryDesc->planstate, NULL)) ||
+		(!query_context.learn_aqo && query_context.collect_stat))
 	{
 		aqo_obj_stat ctx = {NIL, NIL, NIL, query_context.learn_aqo};
 
+		/*
+		 * Analyze plan if AQO need to learn or need to collect statistics only.
+		 */
 		learnOnPlanState(queryDesc->planstate, (void *) &ctx);
 		list_free(ctx.clauselist);
 		list_free(ctx.relidslist);
@@ -507,7 +536,9 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 
 		if (stat != NULL)
 		{
+			/* Calculate AQO statistics. */
 			if (query_context.use_aqo)
+				/* For the case, when query executed with AQO predictions. */
 				update_query_stat_row(stat->execution_time_with_aqo,
 									 &stat->execution_time_with_aqo_size,
 									 stat->planning_time_with_aqo,
@@ -519,6 +550,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 									 cardinality_error,
 									 &stat->executions_with_aqo);
 			else
+				/* For the case, when query executed without AQO predictions. */
 				update_query_stat_row(stat->execution_time_without_aqo,
 									 &stat->execution_time_without_aqo_size,
 									 stat->planning_time_without_aqo,
@@ -541,6 +573,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		if (!query_context.adding_query && query_context.auto_tuning)
 			automatical_query_tuning(query_context.query_hash, stat);
 
+		/* Write AQO statistics to the aqo_query_stat table */
 		update_aqo_stat(query_context.fspace_hash, stat);
 		pfree_query_stat(stat);
 	}
@@ -777,7 +810,9 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
 	double error = -1.;
 
 	if (!aqo_show_details || !plan || !ps->instrument)
-		return;
+		goto explain_end;
+
+	Assert(es->format == EXPLAIN_FORMAT_TEXT);
 
 	if (ps->worker_instrument && IsParallelTuplesProcessing(plan))
 	{
@@ -810,7 +845,8 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
 	else
 		appendStringInfo(es->str, "AQO not used");
 
-	if (aqo_show_hash)
+explain_end:
+	if (plan && aqo_show_hash)
 		appendStringInfo(es->str, ", fss=%d", plan->fss_hash);
 
 	if (prev_ExplainOneNode_hook)

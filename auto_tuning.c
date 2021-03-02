@@ -177,11 +177,26 @@ automatical_query_tuning(int query_hash, QueryStat * stat)
 						   stat->planning_time_without_aqo_size);
 
 		p_use = t_not_aqo / (t_not_aqo + t_aqo);
+
+		/*
+		 * Here p_use<0.5 and p_use->0, if AQO decreases performance,
+		 * Otherwise, p_use>0.5 and p_use->1.
+		 */
+
 		p_use = 1 / (1 + exp((p_use - 0.5) / unstability));
+
+		/*
+		 * Here p_use in (0.5..max) if AQO decreases preformance.
+		 * p_use in (0..0.5), otherwise.
+		 */
+
 		p_use -= 1 / (1 + exp(-0.5 / unstability));
 		p_use /= 1 - 2 / (1 + exp(-0.5 / unstability));
 
-		/* borrowed from drandom() in float.c */
+		/*
+		 * If our decision is using AQO for this query class, then learn on new
+		 * queries of this type. Otherwise, turn off.
+		 */
 		query_context.use_aqo = (random() / ((double) MAX_RANDOM_VALUE + 1)) < p_use;
 		query_context.learn_aqo = query_context.use_aqo;
 	}
