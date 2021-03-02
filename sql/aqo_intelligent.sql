@@ -110,11 +110,6 @@ SELECT count(*) FROM tmp1;
 DROP TABLE tmp1;
 
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
-WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
-SELECT count(*) FROM tmp1;
-DROP TABLE tmp1;
-
-CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
 WHERE a < 5 AND b < 5 AND c < 5 AND d < 5;
 SELECT count(*) FROM tmp1;
 DROP TABLE tmp1;
