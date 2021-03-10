@@ -115,7 +115,8 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 	fss_hash = get_fss_for_object(clauselist, selectivities, relidslist,
 								  &nfeatures, &features);
 
-	if (aqo_log_ignorance /* && load_fss(fhash, fss_hash, 0, NULL, NULL, NULL) */)
+	if (aqo_log_ignorance && plan->predicted_cardinality <= 0 &&
+		load_fss(fhash, fss_hash, 0, NULL, NULL, NULL) )
 	{
 		/*
 		 * If ignorance logging is enabled and the feature space was existed in

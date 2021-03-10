@@ -60,11 +60,10 @@ SELECT * FROM t;
  JOINS: 0
 (5 rows)
 
-SELECT node_type FROM aqo_ignorance; -- SeqScan on t must be existed in ignorance table
+SELECT node_type FROM aqo_ignorance;
  node_type 
 -----------
-        19
-(1 row)
+(0 rows)
 
 EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM t;
                QUERY PLAN                
@@ -76,7 +75,7 @@ EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM t;
  JOINS: 0
 (5 rows)
 
-SELECT node_type FROM aqo_ignorance; -- SeqScan on t must be excluded from ignorance table
+SELECT node_type FROM aqo_ignorance;
  node_type 
 -----------
 (0 rows)
