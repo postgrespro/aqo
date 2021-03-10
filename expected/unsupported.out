@@ -1,0 +1,41 @@
+CREATE EXTENSION aqo;
+SET aqo.mode = 'learn';
+SET aqo.show_details = 'on';
+DROP TABLE IF EXISTS t;
+CREATE TABLE t AS SELECT (gs.* / 50) AS x FROM generate_series(1,1000) AS gs;
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	SELECT * FROM t GROUP BY (x) HAVING x > 3;
+                  QUERY PLAN                   
+-----------------------------------------------
+ HashAggregate (actual rows=17 loops=1)
+   AQO not used
+   Group Key: x
+   Batches: 1  Memory Usage: 40kB
+   ->  Seq Scan on t (actual rows=801 loops=1)
+         AQO not used
+         Filter: (x > 3)
+         Rows Removed by Filter: 199
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(11 rows)
+
+-- Do not support having clauses for now.
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	SELECT * FROM t GROUP BY (x) HAVING x > 3;
+                  QUERY PLAN                   
+-----------------------------------------------
+ HashAggregate (actual rows=17 loops=1)
+   AQO not used
+   Group Key: x
+   Batches: 1  Memory Usage: 40kB
+   ->  Seq Scan on t (actual rows=801 loops=1)
+         AQO: rows=801, error=0%
+         Filter: (x > 3)
+         Rows Removed by Filter: 199
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(11 rows)
+
+DROP EXTENSION aqo;

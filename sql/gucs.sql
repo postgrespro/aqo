@@ -26,10 +26,10 @@ SET aqo.log_ignorance = 'on';
 
 EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 SELECT * FROM t;
-SELECT node_type FROM aqo_ignorance; -- SeqScan on t must be existed in ignorance table
+SELECT node_type FROM aqo_ignorance;
 
 EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM t;
-SELECT node_type FROM aqo_ignorance; -- SeqScan on t must be excluded from ignorance table
+SELECT node_type FROM aqo_ignorance;
 
 -- This GUC can be changed by an admin only.
 CREATE ROLE noadmin;
