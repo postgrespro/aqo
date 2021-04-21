@@ -69,7 +69,7 @@ static bool isQueryUsingSystemRelation_walker(Node *node, void *context);
  * Query text field in aqo_queries table is for user.
  */
 void
-get_query_text(ParseState *pstate, Query *query)
+get_query_text(ParseState *pstate, Query *query, JumbleState *jstate)
 {
 	MemoryContext	oldCxt;
 
@@ -83,7 +83,7 @@ get_query_text(ParseState *pstate, Query *query)
 	MemoryContextSwitchTo(oldCxt);
 
 	if (prev_post_parse_analyze_hook)
-		prev_post_parse_analyze_hook(pstate, query);
+		prev_post_parse_analyze_hook(pstate, query, jstate);
 }
 
 /*

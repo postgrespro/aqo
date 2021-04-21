@@ -301,7 +301,8 @@ bool query_is_deactivated(int query_hash);
 void add_deactivated_query(int query_hash);
 
 /* Query preprocessing hooks */
-extern void get_query_text(ParseState *pstate, Query *query);
+extern void get_query_text(ParseState *pstate, Query *query,
+						   JumbleState *jstate);
 extern PlannedStmt *call_default_planner(Query *parse,
 										 const char *query_string,
 										 int cursorOptions,
