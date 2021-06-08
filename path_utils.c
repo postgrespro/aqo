@@ -153,16 +153,22 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 			return get_path_clauses(((SetOpPath *) path)->subpath, root,
 									selectivities);
 			break;
+		case T_SubqueryScanPath:
+			/*
+			 * According to the SubqueryScanPath description, we need to use
+			 * path.parent->subroot as the planning context for interpretation
+			 * of the subpath.
+			 */
+			return get_path_clauses(((SubqueryScanPath *) path)->subpath,
+									path->parent->subroot,
+									selectivities);
+			break;
 		case T_LockRowsPath:
 			return get_path_clauses(((LockRowsPath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_LimitPath:
 			return get_path_clauses(((LimitPath *) path)->subpath, root,
-									selectivities);
-			break;
-		case T_SubqueryScanPath:
-			return get_path_clauses(((SubqueryScanPath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_AppendPath:
