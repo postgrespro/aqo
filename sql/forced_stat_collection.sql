@@ -31,6 +31,6 @@ SELECT * FROM aqo_data;
 SELECT learn_aqo,use_aqo,auto_tuning,cardinality_error_without_aqo ce,executions_without_aqo nex
 FROM aqo_queries JOIN aqo_query_stat USING (query_hash);
 
-SELECT query_text FROM aqo_query_texts ORDER BY (query_text);
+SELECT query_text FROM aqo_query_texts ORDER BY md5(query_text);
 
 DROP EXTENSION aqo;
