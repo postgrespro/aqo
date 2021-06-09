@@ -8,6 +8,7 @@ my $node = get_new_node('aqotest');
 $node->init;
 $node->append_conf('postgresql.conf', qq{
 						shared_preload_libraries = 'aqo'
+						log_statement = 'none'
 						aqo.mode = 'intelligent'
 						aqo.log_ignorance = 'on'
 					});
