@@ -139,15 +139,12 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	List	*restrict_clauses;
 	int fss = 0;
 
-	if (query_context.use_aqo || query_context.learn_aqo)
+	if (query_context.use_aqo)
 		selectivities = get_selectivities(root, rel->baserestrictinfo, 0,
 										  JOIN_INNER, NULL);
-
-	if (!query_context.use_aqo)
+	else
 	{
-		if (query_context.learn_aqo)
-			list_free_deep(selectivities);
-
+		rel->predicted_cardinality = -2.;
 		call_default_set_baserel_rows_estimate(root, rel);
 		return;
 	}
@@ -207,7 +204,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	int			current_hash;
 	int fss = 0;
 
-	if (query_context.use_aqo || query_context.learn_aqo)
+	if (query_context.use_aqo)
 	{
 		MemoryContext mcxt;
 
@@ -232,14 +229,9 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 		pfree(args_hash);
 		pfree(eclass_hash);
 	}
-
-	if (!query_context.use_aqo)
+	else
 	{
-		if (query_context.learn_aqo)
-		{
-			list_free_deep(selectivities);
-			list_free(allclauses);
-		}
+		predicted_ppi_rows = -3.;
 		return call_default_get_parameterized_baserel_size(root, rel,
 														   param_clauses);
 	}
@@ -281,15 +273,12 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	List	   *current_selectivities = NULL;
 	int fss = 0;
 
-	if (query_context.use_aqo || query_context.learn_aqo)
+	if (query_context.use_aqo)
 		current_selectivities = get_selectivities(root, restrictlist, 0,
 												  sjinfo->jointype, sjinfo);
-
-	if (!query_context.use_aqo)
+	else
 	{
-		if (query_context.learn_aqo)
-			list_free_deep(current_selectivities);
-
+		rel->predicted_cardinality = -2.;
 		call_default_set_joinrel_size_estimates(root, rel,
 												outer_rel,
 												inner_rel,
@@ -352,15 +341,12 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	List	   *current_selectivities = NULL;
 	int			fss = 0;
 
-	if (query_context.use_aqo || query_context.learn_aqo)
+	if (query_context.use_aqo)
 		current_selectivities = get_selectivities(root, restrict_clauses, 0,
 												  sjinfo->jointype, sjinfo);
-
-	if (!query_context.use_aqo)
+	else
 	{
-		if (query_context.learn_aqo)
-			list_free_deep(current_selectivities);
-
+		predicted_ppi_rows = -3.;
 		return call_default_get_parameterized_joinrel_size(root, rel,
 														   outer_path,
 														   inner_path,
