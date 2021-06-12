@@ -1,0 +1,17 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ ci-test ]
+  pull_request:
+    branches: [ ci-test ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: git
+      run: git clone https://git.postgresql.org/git/postgresql.git
