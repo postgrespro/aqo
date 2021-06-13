@@ -17,11 +17,14 @@ jobs:
       run: |
         git config --global user.email "ci@postgrespro.ri"
         git config --global user.name "CI PgPro admin"
+        cd ../
+        ls
         git clone https://github.com/postgres/postgres.git pg
         cd pg
         git checkout master
-        git subtree add --prefix=contrib/aqo https://github.com/postgrespro/aqo.git master
-        patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_master.patch
+ #       git subtree add --prefix=contrib/aqo https://github.com/postgrespro/aqo.git master
+ #       patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_master.patch
         ./configure --prefix=`pwd`/tmp_install
-        make -C contrib/aqo check
-        make -C contrib/aqo installcheck
+        make
+ #       make -C contrib/aqo check
+ #       make -C contrib/aqo installcheck
