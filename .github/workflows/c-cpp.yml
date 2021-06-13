@@ -2,9 +2,9 @@ name: 'C/C++ CI for the stable11'
 
 on:
   push:
-    branches: [ stable11-ci ]
+    branches: [ stable11 ]
   pull_request:
-    branches: [ stable11-ci ]
+    branches: [ stable11 ]
 
 jobs:
   build:
