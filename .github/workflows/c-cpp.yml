@@ -1,4 +1,4 @@
-name: C/C++ CI for the master
+name: 'C/C++ CI for the stable11'
 
 on:
   push:
