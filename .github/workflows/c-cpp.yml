@@ -22,6 +22,6 @@ jobs:
         git checkout master
         git subtree add --prefix=contrib/aqo https://github.com/postgrespro/aqo.git master
         patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_master.patch
-        ./configure
+        ./configure --prefix=`pwd`/tmp_install
         make -C contrib/aqo check
         make -C contrib/aqo installcheck
