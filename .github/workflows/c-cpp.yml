@@ -22,6 +22,6 @@ jobs:
         git checkout REL9_6_STABLE
         ./configure --prefix=`pwd`/tmp_install
         git subtree add --prefix=contrib/aqo https://github.com/postgrespro/aqo.git $GITHUB_REF
-        patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo9_6.patch
+        patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg9_6.patch
         make -j4 > /dev/null && make -j4 -C contrib > /dev/null
         make -C contrib/aqo check
