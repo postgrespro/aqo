@@ -13,6 +13,7 @@ jobs:
 
     steps:
     - name: pg
+    - run: echo "Deploying to production server on branch $GITHUB_REF"
       run: |
         git config --global user.email "ci@postgrespro.ru"
         git config --global user.name "CI PgPro admin"
@@ -20,7 +21,7 @@ jobs:
         cd pg
         git checkout master
         ./configure --prefix=`pwd`/tmp_install
-        git subtree add --prefix=contrib/aqo https://github.com/postgrespro/aqo.git ${{ github.repository }}
+        git subtree add --prefix=contrib/aqo https://github.com/postgrespro/aqo.git $GITHUB_REF
         patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_master.patch
         make -j4 > /dev/null && make -j4 -C contrib > /dev/null
         make -C contrib/aqo check
