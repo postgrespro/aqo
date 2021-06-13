@@ -13,7 +13,7 @@ jobs:
 
     steps:
     - name: pg
-    - run: echo "Deploying to production server on branch $GITHUB_REF"
+      run: echo "Deploying to production server on branch $GITHUB_REF"
       run: |
         git config --global user.email "ci@postgrespro.ru"
         git config --global user.name "CI PgPro admin"
