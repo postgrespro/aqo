@@ -14,4 +14,12 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: git
-      run: git clone https://git.postgresql.org/git/postgresql.git
+      run: |
+        git clone https://git.postgresql.org/git/postgresql.git pg
+        cd pg
+        git checkout master
+        git subtree add --prefix=contrib/aqo git@github.com:postgrespro/aqo.git master
+        patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_master.patch
+        ./configure
+        make -C contrib/aqo check
+        make -C contrib/aqo installcheck
