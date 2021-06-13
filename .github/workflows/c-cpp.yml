@@ -1,0 +1,29 @@
+name: 'C/C++ CI for the stable12 branch'
+
+on:
+  push:
+    branches: [ stable12* ]
+  pull_request:
+    branches: [ stable12* ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Install additional packages
+      run: sudo apt-get install -y libperl-dev libipc-run-perl
+    - name: pg
+      run: |
+        echo "Deploying to production server on branch $GITHUB_REF"
+        git config --global user.email "ci@postgrespro.ru"
+        git config --global user.name "CI PgPro admin"
+        git clone https://github.com/postgres/postgres.git pg
+        cd pg
+        git checkout REL_12_STABLE
+        ./configure --prefix=`pwd`/tmp_install
+        git subtree add --prefix=contrib/aqo https://github.com/postgrespro/aqo.git $GITHUB_REF
+        patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg13.patch
+        make -j4 > /dev/null && make -j4 -C contrib > /dev/null
+        make -C contrib/aqo check
