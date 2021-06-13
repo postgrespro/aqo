@@ -12,7 +12,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
     - name: pg
       run: |
         git config --global user.email "ci@postgrespro.ru"
@@ -21,7 +20,7 @@ jobs:
         cd pg
         git checkout master
         ./configure --prefix=`pwd`/tmp_install
-        git subtree add --prefix=contrib/aqo https://github.com/postgrespro/aqo.git $CI_COMMIT_REF_NAME
+        git subtree add --prefix=contrib/aqo https://github.com/postgrespro/aqo.git ${{ github.repository }}
         patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_master.patch
         make -j4 > /dev/null && make -j4 -C contrib > /dev/null
         make -C contrib/aqo check
