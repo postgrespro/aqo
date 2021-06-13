@@ -26,7 +26,7 @@ jobs:
         make -j4 > /dev/null && make -j4 -C contrib > /dev/null
         make -C contrib/aqo check
         
-        git checkout HEAD
+        git reset --hard HEAD
         git clean -fdx
         
         # Test for PG10
