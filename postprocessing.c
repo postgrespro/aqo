@@ -18,9 +18,11 @@
 
 #include "aqo.h"
 #include "access/parallel.h"
+#include "ignorance.h"
 #include "optimizer/optimizer.h"
 #include "postgres_fdw.h"
 #include "utils/queryenvironment.h"
+
 
 typedef struct
 {
@@ -41,29 +43,29 @@ static char *PlanStateInfo = "PlanStateInfo";
 
 
 /* Query execution statistics collecting utilities */
-static void atomic_fss_learn_step(int fss_hash, int ncols,
-					  double **matrix, double *targets,
-					  double *features, double target);
+static void atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
+								  double **matrix, double *targets,
+								  double *features, double target);
 static void learn_sample(List *clauselist,
-			 List *selectivities,
-			 List *relidslist,
-			 double true_cardinality,
-			 double predicted_cardinality);
+						 List *selectivities,
+						 List *relidslist,
+						 double true_cardinality,
+						 Plan *plan);
 static List *restore_selectivities(List *clauselist,
-					  List *relidslist,
-					  JoinType join_type,
-					  bool was_parametrized);
+								   List *relidslist,
+								   JoinType join_type,
+								   bool was_parametrized);
 static void update_query_stat_row(double *et, int *et_size,
-					  double *pt, int *pt_size,
-					  double *ce, int *ce_size,
-					  double planning_time,
-					  double execution_time,
-					  double cardinality_error,
-					  int64 *n_exec);
-static void StoreToQueryContext(QueryDesc *queryDesc);
+								  double *pt, int *pt_size,
+								  double *ce, int *ce_size,
+								  double planning_time,
+								  double execution_time,
+								  double cardinality_error,
+								  int64 *n_exec);
+static void StoreToQueryEnv(QueryDesc *queryDesc);
 static void StorePlanInternals(QueryDesc *queryDesc);
-static bool ExtractFromQueryContext(QueryDesc *queryDesc);
-static void RemoveFromQueryContext(QueryDesc *queryDesc);
+static bool ExtractFromQueryEnv(QueryDesc *queryDesc);
+static void RemoveFromQueryEnv(QueryDesc *queryDesc);
 
 /*
  * This is the critical section: only one runner is allowed to be inside this
@@ -71,55 +73,63 @@ static void RemoveFromQueryContext(QueryDesc *queryDesc);
  * matrix and targets are just preallocated memory for computations.
  */
 static void
-atomic_fss_learn_step(int fss_hash, int ncols,
+atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
 					  double **matrix, double *targets,
 					  double *features, double target)
 {
-	int	nrows;
+	LOCKTAG	tag;
+	int		nrows;
 
-	if (!load_fss(fss_hash, ncols, matrix, targets, &nrows))
+	init_lock_tag(&tag, (uint32) fhash, (uint32) fss_hash);
+	LockAcquire(&tag, ExclusiveLock, false, false);
+
+	if (!load_fss(fhash, fss_hash, ncols, matrix, targets, &nrows))
 		nrows = 0;
 
 	nrows = OkNNr_learn(nrows, ncols, matrix, targets, features, target);
-	update_fss(fss_hash, nrows, ncols, matrix, targets);
-}
+	update_fss(fhash, fss_hash, nrows, ncols, matrix, targets);
 
+	LockRelease(&tag, ExclusiveLock, false);
+}
 /*
  * For given object (i. e. clauselist, selectivities, relidslist, predicted and
  * true cardinalities) performs learning procedure.
  */
 static void
 learn_sample(List *clauselist, List *selectivities, List *relidslist,
-			 double true_cardinality, double predicted_cardinality)
+			 double true_cardinality, Plan *plan)
 {
-	int			fss_hash;
-	int			nfeatures;
-	double	  *matrix[aqo_K];
-	double	   targets[aqo_K];
-	double	   *features;
-	double		target;
-	int			i;
+	int		fhash = query_context.fspace_hash;
+	int		fss_hash;
+	int		nfeatures;
+	double	*matrix[aqo_K];
+	double	targets[aqo_K];
+	double	*features;
+	double	target;
+	int		i;
 
-/*
- * Suppress the optimization for debug purposes.
-	if (fabs(log(predicted_cardinality) - log(true_cardinality)) <
-		object_selection_prediction_threshold)
-	{
-		return;
-	}
-*/
 	target = log(true_cardinality);
 
 	fss_hash = get_fss_for_object(clauselist, selectivities, relidslist,
-					   &nfeatures, &features);
+								  &nfeatures, &features);
+
+	if (aqo_log_ignorance && load_fss(fhash, fss_hash, 0, NULL, NULL, NULL))
+	{
+		/*
+		 * If ignorance logging is enabled and the feature space was existed in
+		 * the ML knowledge base, log this issue.
+		 */
+		update_ignorance(query_context.query_hash, fhash, fss_hash, plan);
+	}
 
 	if (nfeatures > 0)
 		for (i = 0; i < aqo_K; ++i)
 			matrix[i] = palloc(sizeof(double) * nfeatures);
 
-	/* Here should be critical section */
-	atomic_fss_learn_step(fss_hash, nfeatures, matrix, targets, features, target);
-	/* Here should be the end of critical section */
+	/* Critical section */
+	atomic_fss_learn_step(fhash, fss_hash,
+						  nfeatures, matrix, targets, features, target);
+	/* End of critical section */
 
 	if (nfeatures > 0)
 		for (i = 0; i < aqo_K; ++i)
@@ -208,6 +218,7 @@ HasNeverExecutedNodes(PlanState *ps, void *context)
 
 	return planstate_tree_walker(ps, HasNeverExecutedNodes, NULL);
 }
+
 /*
  * Walks over obtained PlanState tree, collects relation objects with their
  * clauses, selectivities and relids and passes each object to learn_sample.
@@ -332,13 +343,27 @@ learnOnPlanState(PlanState *p, void *context)
 
 			if (ctx->learn)
 				learn_sample(SubplanCtx.clauselist, SubplanCtx.selectivities,
-								p->plan->path_relids, learn_rows, predicted);
+							 p->plan->path_relids, learn_rows,
+							 p->plan);
+		}
+		else if (aqo_log_ignorance && p->instrument && ctx->learn)
+		{
+			int nfeatures;
+			double *features;
+			int fss_hash = get_fss_for_object(SubplanCtx.clauselist,
+											  SubplanCtx.selectivities,
+											  p->plan->path_relids,
+											  &nfeatures, &features);
+
+			update_ignorance(query_context.query_hash,
+							 query_context.fspace_hash,
+							 fss_hash, p->plan);
 		}
 	}
 
 	ctx->clauselist = list_concat(ctx->clauselist, SubplanCtx.clauselist);
 	ctx->selectivities = list_concat(ctx->selectivities,
-												SubplanCtx.selectivities);
+													SubplanCtx.selectivities);
 	return false;
 }
 
@@ -414,7 +439,7 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 			queryDesc->instrument_options |= INSTRUMENT_ROWS;
 
 		/* Save all query-related parameters into the query context. */
-		StoreToQueryContext(queryDesc);
+		StoreToQueryEnv(queryDesc);
 	}
 
 	if (prev_ExecutorStart_hook)
@@ -440,11 +465,12 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	QueryStat *stat = NULL;
 	instr_time endtime;
 	EphemeralNamedRelation enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
+	LOCKTAG tag;
 
 	cardinality_sum_errors = 0.;
 	cardinality_num_objects = 0;
 
-	if (!ExtractFromQueryContext(queryDesc))
+	if (!ExtractFromQueryEnv(queryDesc))
 		/* AQO keep all query-related preferences at the query context.
 		 * It is needed to prevent from possible recursive changes, at
 		 * preprocessing stage of subqueries.
@@ -473,6 +499,11 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		list_free(ctx.relidslist);
 		list_free(ctx.selectivities);
 	}
+
+	/* Prevent concurrent updates. */
+	init_lock_tag(&tag, (uint32) query_context.query_hash,
+				  (uint32) query_context.fspace_hash);
+	LockAcquire(&tag, ExclusiveLock, false, false);
 
 	if (query_context.collect_stat)
 	{
@@ -525,7 +556,9 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		update_aqo_stat(query_context.fspace_hash, stat);
 		pfree_query_stat(stat);
 	}
-	RemoveFromQueryContext(queryDesc);
+
+	LockRelease(&tag, ExclusiveLock, false);
+	RemoveFromQueryEnv(queryDesc);
 
 end:
 	if (prev_ExecutorEnd_hook)
@@ -644,7 +677,7 @@ aqo_copy_generic_path_info(PlannerInfo *root, Plan *dest, Path *src)
  * top-level query.
  */
 static void
-StoreToQueryContext(QueryDesc *queryDesc)
+StoreToQueryEnv(QueryDesc *queryDesc)
 {
 	EphemeralNamedRelation	enr;
 	int	qcsize = sizeof(QueryContextData);
@@ -712,7 +745,7 @@ StorePlanInternals(QueryDesc *queryDesc)
  * Restore AQO data, related to the query.
  */
 static bool
-ExtractFromQueryContext(QueryDesc *queryDesc)
+ExtractFromQueryEnv(QueryDesc *queryDesc)
 {
 	EphemeralNamedRelation	enr;
 
@@ -735,7 +768,7 @@ ExtractFromQueryContext(QueryDesc *queryDesc)
 }
 
 static void
-RemoveFromQueryContext(QueryDesc *queryDesc)
+RemoveFromQueryEnv(QueryDesc *queryDesc)
 {
 	EphemeralNamedRelation enr = get_ENR(queryDesc->queryEnv, AQOPrivateData);
 	unregister_ENR(queryDesc->queryEnv, AQOPrivateData);
@@ -755,7 +788,7 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
 	int wrkrs = 1;
 	double error = -1.;
 
-	if (!aqo_details || !plan || !ps->instrument)
+	if (!aqo_show_details || !plan || !ps->instrument)
 		return;
 
 	if (ps->worker_instrument && IsParallelTuplesProcessing(plan))
@@ -802,7 +835,7 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 		prev_ExplainOnePlan_hook(plannedstmt, into, es, queryString,
 								 params, planduration, queryEnv);
 
-	if (!aqo_details)
+	if (!aqo_show_details)
 		return;
 
 	/* Report to user about aqo state only in verbose mode */

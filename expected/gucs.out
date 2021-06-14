@@ -1,0 +1,170 @@
+CREATE EXTENSION aqo;
+SET aqo.mode = 'learn';
+SET aqo.show_details = true;
+CREATE TABLE t(x int);
+INSERT INTO t (x) (SELECT * FROM generate_series(1, 100) AS gs);
+ANALYZE t;
+EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+	SELECT x FROM t;
+                          QUERY PLAN                           
+---------------------------------------------------------------
+ Seq Scan on public.t (actual rows=100 loops=1) (AQO not used)
+   Output: x
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(5 rows)
+
+EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+	SELECT x FROM t;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Seq Scan on public.t (actual rows=100 loops=1) (AQO: cardinality=100, error=0%)
+   Output: x
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(5 rows)
+
+DROP EXTENSION aqo;
+SET aqo.log_ignorance = 'on';
+SET aqo.log_ignorance = 'off';
+SET aqo.log_ignorance = 'off';
+SET aqo.log_ignorance = 'on';
+\d aqo_ignorance
+CREATE EXTENSION aqo;
+SET aqo.log_ignorance = 'off';
+SET aqo.log_ignorance = 'on';
+SET aqo.log_ignorance = 'on';
+\d aqo_ignorance
+             Table "public.aqo_ignorance"
+  Column   |  Type   | Collation | Nullable | Default 
+-----------+---------+-----------+----------+---------
+ qhash     | integer |           |          | 
+ fhash     | integer |           |          | 
+ fss_hash  | integer |           |          | 
+ node_type | integer |           |          | 
+ node      | text    |           |          | 
+Indexes:
+    "aqo_ignorance_idx" UNIQUE, btree (qhash, fhash, fss_hash)
+
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+	SELECT * FROM t;
+                       QUERY PLAN                       
+--------------------------------------------------------
+ Seq Scan on t (actual rows=100 loops=1) (AQO not used)
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(4 rows)
+
+SELECT count(*) FROM t;
+ count 
+-------
+   100
+(1 row)
+
+SELECT * FROM t ORDER BY (x) LIMIT 1;
+ x 
+---
+ 1
+(1 row)
+
+(SELECT * FROM t LIMIT 1) UNION ALL (SELECT * FROM t LIMIT 1); -- Append must be included in ignorance table for now
+ x 
+---
+ 1
+ 1
+(2 rows)
+
+SELECT node_type FROM aqo_ignorance; -- See ignorance table
+ node_type 
+-----------
+        19
+(1 row)
+
+-- Just repeat
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM t;
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Seq Scan on t (actual rows=100 loops=1) (AQO: cardinality=100, error=0%)
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(4 rows)
+
+SELECT count(*) FROM t;
+ count 
+-------
+   100
+(1 row)
+
+SELECT * FROM t ORDER BY (x) LIMIT 1;
+ x 
+---
+ 1
+(1 row)
+
+(SELECT * FROM t LIMIT 1) UNION ALL (SELECT * FROM t LIMIT 1);
+ x 
+---
+ 1
+ 1
+(2 rows)
+
+SELECT node_type FROM aqo_ignorance; -- See the ignorance table. There shouldn't be Sort and Agg nodes.
+ node_type 
+-----------
+        13
+(1 row)
+
+-- TODO: The SeqScan node got into the ignorance table: at planning stage we
+-- don't know anything about it and made negative prediction. But on the
+-- learning stage we wrote into fss table on learning on the first scan node.
+-- Second scan node was detected as an abnormal node.
+-- This GUC can be changed by an admin only.
+CREATE ROLE noadmin;
+SET ROLE noadmin;
+SET aqo.log_ignorance = 'off';
+ERROR:  permission denied to set parameter "aqo.log_ignorance"
+RESET ROLE;
+SET aqo.query_text_limit = 35;
+SELECT count(*) FROM t WHERE x < 1; -- Crop query text
+ count 
+-------
+     0
+(1 row)
+
+SET aqo.query_text_limit = 0;
+SELECT count(*) FROM t WHERE x > 1; -- Store full query text
+ count 
+-------
+    99
+(1 row)
+
+SET aqo.query_text_limit = 2147483647;
+SELECT count(*) FROM t WHERE x = 1; -- ERROR: invalid memory alloc
+ERROR:  invalid memory alloc request size 2147483647
+SET aqo.query_text_limit = 8192;
+SELECT count(*) FROM t WHERE x = 1; -- Store full query text
+ count 
+-------
+     1
+(1 row)
+
+-- See stored query texts
+SELECT query_text FROM aqo_query_texts ORDER BY md5(query_text);
+                           query_text                           
+----------------------------------------------------------------
+ SELECT count(*) FROM t WHERE x = 1;
+ COMMON feature space (do not delete!)
+ SELECT * FROM t ORDER BY (x) LIMIT 1;
+ SELECT count(*) FROM t WHERE x < 
+ SELECT count(*) FROM t WHERE x > 1;
+ (SELECT * FROM t LIMIT 1) UNION ALL (SELECT * FROM t LIMIT 1);
+ SELECT count(*) FROM t;
+ EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)         +
+         SELECT * FROM t;
+(8 rows)
+
+DROP EXTENSION aqo;
