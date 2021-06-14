@@ -40,7 +40,8 @@ predict_for_relation(List *restrict_clauses, List *selectivities,
 		for (i = 0; i < aqo_K; ++i)
 			matrix[i] = palloc0(sizeof(**matrix) * nfeatures);
 
-	if (load_fss(*fss_hash, nfeatures, matrix, targets, &rows))
+	if (load_fss(query_context.fspace_hash, *fss_hash, nfeatures, matrix,
+				 targets, &rows))
 		result = OkNNr_predict(rows, nfeatures, matrix, targets, features);
 	else
 	{

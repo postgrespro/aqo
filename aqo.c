@@ -9,17 +9,35 @@
  */
 
 #include "aqo.h"
+#include "ignorance.h"
+
+#include "access/table.h"
+#include "catalog/pg_extension.h"
+#include "commands/extension.h"
+
 
 PG_MODULE_MAGIC;
-
 void _PG_init(void);
 
+
+#define AQO_MODULE_MAGIC	(1234)
 
 /* Strategy of determining feature space for new queries. */
 int		aqo_mode;
 bool	force_collect_stat;
-bool	aqo_show_hash;
-bool	aqo_details;
+
+/*
+ * Show special info in EXPLAIN mode.
+ *
+ * aqo_show_hash - show query class (hash) and a feature space value (hash)
+ * of each plan node. This is instance-dependent value and can't be used
+ * in regression and TAP tests.
+ *
+ * aqo_show_details - show AQO settings for this class and prediction
+ * for each plan node.
+ */
+bool   aqo_show_hash;
+bool   aqo_show_details;
 
 /* GUC variables */
 static const struct config_enum_entry format_options[] = {
@@ -138,13 +156,39 @@ _PG_init(void)
 							 "aqo.show_details",
 							 "Show AQO state on a query.",
 							 NULL,
-							 &aqo_details,
+							 &aqo_show_details,
 							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,
 							 NULL,
 							 NULL
+	);
+
+	DefineCustomBoolVariable(
+							 "aqo.log_ignorance",
+							 "Log in a special table all feature spaces for which the AQO prediction was not successful.",
+							 NULL,
+							 &aqo_log_ignorance,
+							 false,
+							 PGC_SUSET,
+							 0,
+							 NULL,
+							 set_ignorance,
+							 NULL
+	);
+
+	DefineCustomIntVariable("aqo.query_text_limit",
+							"Sets the maximum size of logged query text.",
+							"Zero logs full query text.",
+							&aqo_query_text_limit,
+							1024,
+							0, INT_MAX,
+							PGC_SUSET,
+							0,
+							NULL,
+							NULL,
+							NULL
 	);
 
 	prev_planner_hook							= planner_hook;
@@ -190,4 +234,67 @@ invalidate_deactivated_queries_cache(PG_FUNCTION_ARGS)
 	fini_deactivated_queries_storage();
 	init_deactivated_queries_storage();
 	PG_RETURN_POINTER(NULL);
+}
+
+/*
+ * Return AQO schema's Oid or InvalidOid if that's not possible.
+ */
+Oid
+get_aqo_schema(void)
+{
+	Oid				result;
+	Relation		rel;
+	SysScanDesc		scandesc;
+	HeapTuple		tuple;
+	ScanKeyData		entry[1];
+	Oid				ext_oid;
+
+	/* It's impossible to fetch pg_aqo's schema now */
+	if (!IsTransactionState())
+		return InvalidOid;
+
+	ext_oid = get_extension_oid("aqo", true);
+	if (ext_oid == InvalidOid)
+		return InvalidOid; /* exit if pg_aqo does not exist */
+
+	ScanKeyInit(&entry[0],
+#if PG_VERSION_NUM >= 120000
+				Anum_pg_extension_oid,
+#else
+				ObjectIdAttributeNumber,
+#endif
+				BTEqualStrategyNumber, F_OIDEQ,
+				ObjectIdGetDatum(ext_oid));
+
+	rel = heap_open(ExtensionRelationId, AccessShareLock);
+	scandesc = systable_beginscan(rel, ExtensionOidIndexId, true,
+								  NULL, 1, entry);
+
+	tuple = systable_getnext(scandesc);
+
+	/* We assume that there can be at most one matching tuple */
+	if (HeapTupleIsValid(tuple))
+		result = ((Form_pg_extension) GETSTRUCT(tuple))->extnamespace;
+	else
+		result = InvalidOid;
+
+	systable_endscan(scandesc);
+
+	heap_close(rel, AccessShareLock);
+
+	return result;
+}
+
+/*
+ * Init userlock
+ */
+void
+init_lock_tag(LOCKTAG *tag, uint32 key1, uint32 key2)
+{
+	tag->locktag_field1 = AQO_MODULE_MAGIC;
+	tag->locktag_field2 = key1;
+	tag->locktag_field3 = key2;
+	tag->locktag_field4 = 0;
+	tag->locktag_type = LOCKTAG_USERLOCK;
+	tag->locktag_lockmethodid = USER_LOCKMETHOD;
 }
