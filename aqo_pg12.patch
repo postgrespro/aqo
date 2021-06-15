@@ -11,7 +11,7 @@ index 92184ed487..ac8abbfd03 100644
  		auto_explain	\
  		bloom		\
 diff --git a/src/backend/commands/explain.c b/src/backend/commands/explain.c
-index a40bc14ec5..d157c3043e 100644
+index ab60c73c91..2f876d40c4 100644
 --- a/src/backend/commands/explain.c
 +++ b/src/backend/commands/explain.c
 @@ -24,6 +24,7 @@
@@ -448,7 +448,7 @@ index 8d2a016656..a4e9c109b7 100644
  			parallel_divisor += leader_contribution;
  	}
 diff --git a/src/backend/optimizer/plan/createplan.c b/src/backend/optimizer/plan/createplan.c
-index 83e8b34b1b..9e4e4b365b 100644
+index 66c5e3ee80..bf4e28c17e 100644
 --- a/src/backend/optimizer/plan/createplan.c
 +++ b/src/backend/optimizer/plan/createplan.c
 @@ -70,6 +70,8 @@
@@ -550,7 +550,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	/* Assign the rescan Param. */
  	gm_plan->rescan_param = assign_special_exec_param(root);
-@@ -1885,7 +1887,7 @@ create_projection_plan(PlannerInfo *root, ProjectionPath *best_path, int flags)
+@@ -1886,7 +1888,7 @@ create_projection_plan(PlannerInfo *root, ProjectionPath *best_path, int flags)
  		/* We need a Result node */
  		plan = (Plan *) make_result(tlist, NULL, subplan);
  
@@ -559,7 +559,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  	}
  
  	return plan;
-@@ -1986,7 +1988,7 @@ create_sort_plan(PlannerInfo *root, SortPath *best_path, int flags)
+@@ -1987,7 +1989,7 @@ create_sort_plan(PlannerInfo *root, SortPath *best_path, int flags)
  								   IS_OTHER_REL(best_path->subpath->parent) ?
  								   best_path->path.parent->relids : NULL);
  
@@ -568,7 +568,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return plan;
  }
-@@ -2025,7 +2027,7 @@ create_group_plan(PlannerInfo *root, GroupPath *best_path)
+@@ -2026,7 +2028,7 @@ create_group_plan(PlannerInfo *root, GroupPath *best_path)
  												  subplan->targetlist),
  					  subplan);
  
@@ -577,7 +577,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return plan;
  }
-@@ -2053,7 +2055,7 @@ create_upper_unique_plan(PlannerInfo *root, UpperUniquePath *best_path, int flag
+@@ -2054,7 +2056,7 @@ create_upper_unique_plan(PlannerInfo *root, UpperUniquePath *best_path, int flag
  									 best_path->path.pathkeys,
  									 best_path->numkeys);
  
@@ -586,7 +586,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return plan;
  }
-@@ -2096,7 +2098,7 @@ create_agg_plan(PlannerInfo *root, AggPath *best_path)
+@@ -2097,7 +2099,7 @@ create_agg_plan(PlannerInfo *root, AggPath *best_path)
  					best_path->numGroups,
  					subplan);
  
@@ -595,7 +595,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return plan;
  }
-@@ -2297,7 +2299,7 @@ create_groupingsets_plan(PlannerInfo *root, GroupingSetsPath *best_path)
+@@ -2298,7 +2300,7 @@ create_groupingsets_plan(PlannerInfo *root, GroupingSetsPath *best_path)
  						subplan);
  
  		/* Copy cost data from Path to Plan */
@@ -604,7 +604,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  	}
  
  	return (Plan *) plan;
-@@ -2353,7 +2355,7 @@ create_minmaxagg_plan(PlannerInfo *root, MinMaxAggPath *best_path)
+@@ -2354,7 +2356,7 @@ create_minmaxagg_plan(PlannerInfo *root, MinMaxAggPath *best_path)
  
  	plan = make_result(tlist, (Node *) best_path->quals, NULL);
  
@@ -613,7 +613,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	/*
  	 * During setrefs.c, we'll need to replace references to the Agg nodes
-@@ -2472,7 +2474,7 @@ create_windowagg_plan(PlannerInfo *root, WindowAggPath *best_path)
+@@ -2473,7 +2475,7 @@ create_windowagg_plan(PlannerInfo *root, WindowAggPath *best_path)
  						  wc->inRangeNullsFirst,
  						  subplan);
  
@@ -622,7 +622,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return plan;
  }
-@@ -2508,7 +2510,7 @@ create_setop_plan(PlannerInfo *root, SetOpPath *best_path, int flags)
+@@ -2509,7 +2511,7 @@ create_setop_plan(PlannerInfo *root, SetOpPath *best_path, int flags)
  					  best_path->firstFlag,
  					  numGroups);
  
@@ -631,7 +631,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return plan;
  }
-@@ -2544,7 +2546,7 @@ create_recursiveunion_plan(PlannerInfo *root, RecursiveUnionPath *best_path)
+@@ -2545,7 +2547,7 @@ create_recursiveunion_plan(PlannerInfo *root, RecursiveUnionPath *best_path)
  								best_path->distinctList,
  								numGroups);
  
@@ -640,7 +640,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return plan;
  }
-@@ -2567,7 +2569,7 @@ create_lockrows_plan(PlannerInfo *root, LockRowsPath *best_path,
+@@ -2568,7 +2570,7 @@ create_lockrows_plan(PlannerInfo *root, LockRowsPath *best_path,
  
  	plan = make_lockrows(subplan, best_path->rowMarks, best_path->epqParam);
  
@@ -649,7 +649,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return plan;
  }
-@@ -2628,7 +2630,7 @@ create_modifytable_plan(PlannerInfo *root, ModifyTablePath *best_path)
+@@ -2629,7 +2631,7 @@ create_modifytable_plan(PlannerInfo *root, ModifyTablePath *best_path)
  							best_path->onconflict,
  							best_path->epqParam);
  
@@ -658,7 +658,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return plan;
  }
-@@ -2652,7 +2654,7 @@ create_limit_plan(PlannerInfo *root, LimitPath *best_path, int flags)
+@@ -2653,7 +2655,7 @@ create_limit_plan(PlannerInfo *root, LimitPath *best_path, int flags)
  					  best_path->limitOffset,
  					  best_path->limitCount);
  
@@ -667,7 +667,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return plan;
  }
-@@ -2698,7 +2700,7 @@ create_seqscan_plan(PlannerInfo *root, Path *best_path,
+@@ -2699,7 +2701,7 @@ create_seqscan_plan(PlannerInfo *root, Path *best_path,
  							 scan_clauses,
  							 scan_relid);
  
@@ -676,7 +676,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return scan_plan;
  }
-@@ -2744,7 +2746,7 @@ create_samplescan_plan(PlannerInfo *root, Path *best_path,
+@@ -2745,7 +2747,7 @@ create_samplescan_plan(PlannerInfo *root, Path *best_path,
  								scan_relid,
  								tsc);
  
@@ -685,7 +685,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return scan_plan;
  }
-@@ -2922,7 +2924,7 @@ create_indexscan_plan(PlannerInfo *root,
+@@ -2923,7 +2925,7 @@ create_indexscan_plan(PlannerInfo *root,
  											indexorderbyops,
  											best_path->indexscandir);
  
@@ -694,7 +694,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return scan_plan;
  }
-@@ -3037,7 +3039,7 @@ create_bitmap_scan_plan(PlannerInfo *root,
+@@ -3038,7 +3040,7 @@ create_bitmap_scan_plan(PlannerInfo *root,
  									 bitmapqualorig,
  									 baserelid);
  
@@ -703,7 +703,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return scan_plan;
  }
-@@ -3357,7 +3359,7 @@ create_tidscan_plan(PlannerInfo *root, TidPath *best_path,
+@@ -3358,7 +3360,7 @@ create_tidscan_plan(PlannerInfo *root, TidPath *best_path,
  							 scan_relid,
  							 tidquals);
  
@@ -712,7 +712,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return scan_plan;
  }
-@@ -3407,7 +3409,7 @@ create_subqueryscan_plan(PlannerInfo *root, SubqueryScanPath *best_path,
+@@ -3408,7 +3410,7 @@ create_subqueryscan_plan(PlannerInfo *root, SubqueryScanPath *best_path,
  								  scan_relid,
  								  subplan);
  
@@ -721,7 +721,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return scan_plan;
  }
-@@ -3450,7 +3452,7 @@ create_functionscan_plan(PlannerInfo *root, Path *best_path,
+@@ -3451,7 +3453,7 @@ create_functionscan_plan(PlannerInfo *root, Path *best_path,
  	scan_plan = make_functionscan(tlist, scan_clauses, scan_relid,
  								  functions, rte->funcordinality);
  
@@ -730,7 +730,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return scan_plan;
  }
-@@ -3493,7 +3495,7 @@ create_tablefuncscan_plan(PlannerInfo *root, Path *best_path,
+@@ -3494,7 +3496,7 @@ create_tablefuncscan_plan(PlannerInfo *root, Path *best_path,
  	scan_plan = make_tablefuncscan(tlist, scan_clauses, scan_relid,
  								   tablefunc);
  
@@ -739,7 +739,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return scan_plan;
  }
-@@ -3537,7 +3539,7 @@ create_valuesscan_plan(PlannerInfo *root, Path *best_path,
+@@ -3538,7 +3540,7 @@ create_valuesscan_plan(PlannerInfo *root, Path *best_path,
  	scan_plan = make_valuesscan(tlist, scan_clauses, scan_relid,
  								values_lists);
  
@@ -748,7 +748,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return scan_plan;
  }
-@@ -3630,7 +3632,7 @@ create_ctescan_plan(PlannerInfo *root, Path *best_path,
+@@ -3631,7 +3633,7 @@ create_ctescan_plan(PlannerInfo *root, Path *best_path,
  	scan_plan = make_ctescan(tlist, scan_clauses, scan_relid,
  							 plan_id, cte_param_id);
  
@@ -757,7 +757,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return scan_plan;
  }
-@@ -3669,7 +3671,7 @@ create_namedtuplestorescan_plan(PlannerInfo *root, Path *best_path,
+@@ -3670,7 +3672,7 @@ create_namedtuplestorescan_plan(PlannerInfo *root, Path *best_path,
  	scan_plan = make_namedtuplestorescan(tlist, scan_clauses, scan_relid,
  										 rte->enrname);
  
@@ -766,7 +766,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return scan_plan;
  }
-@@ -3707,7 +3709,7 @@ create_resultscan_plan(PlannerInfo *root, Path *best_path,
+@@ -3708,7 +3710,7 @@ create_resultscan_plan(PlannerInfo *root, Path *best_path,
  
  	scan_plan = make_result(tlist, (Node *) scan_clauses, NULL);
  
@@ -775,7 +775,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return scan_plan;
  }
-@@ -3767,7 +3769,7 @@ create_worktablescan_plan(PlannerInfo *root, Path *best_path,
+@@ -3768,7 +3770,7 @@ create_worktablescan_plan(PlannerInfo *root, Path *best_path,
  	scan_plan = make_worktablescan(tlist, scan_clauses, scan_relid,
  								   cteroot->wt_param_id);
  
@@ -784,7 +784,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return scan_plan;
  }
-@@ -3827,7 +3829,7 @@ create_foreignscan_plan(PlannerInfo *root, ForeignPath *best_path,
+@@ -3828,7 +3830,7 @@ create_foreignscan_plan(PlannerInfo *root, ForeignPath *best_path,
  												outer_plan);
  
  	/* Copy cost data from Path to Plan; no need to make FDW do this */
@@ -793,7 +793,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	/* Copy foreign server OID; likewise, no need to make FDW do this */
  	scan_plan->fs_server = rel->serverid;
-@@ -3961,7 +3963,7 @@ create_customscan_plan(PlannerInfo *root, CustomPath *best_path,
+@@ -3962,7 +3964,7 @@ create_customscan_plan(PlannerInfo *root, CustomPath *best_path,
  	 * Copy cost data from Path to Plan; no need to make custom-plan providers
  	 * do this
  	 */
@@ -802,7 +802,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	/* Likewise, copy the relids that are represented by this custom scan */
  	cplan->custom_relids = best_path->path.parent->relids;
-@@ -4063,7 +4065,7 @@ create_nestloop_plan(PlannerInfo *root,
+@@ -4064,7 +4066,7 @@ create_nestloop_plan(PlannerInfo *root,
  							  best_path->jointype,
  							  best_path->inner_unique);
  
@@ -811,7 +811,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return join_plan;
  }
-@@ -4370,7 +4372,7 @@ create_mergejoin_plan(PlannerInfo *root,
+@@ -4371,7 +4373,7 @@ create_mergejoin_plan(PlannerInfo *root,
  							   best_path->skip_mark_restore);
  
  	/* Costs of sort and material steps are included in path cost already */
@@ -820,7 +820,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return join_plan;
  }
-@@ -4543,7 +4545,7 @@ create_hashjoin_plan(PlannerInfo *root,
+@@ -4544,7 +4546,7 @@ create_hashjoin_plan(PlannerInfo *root,
  							  best_path->jpath.jointype,
  							  best_path->jpath.inner_unique);
  
@@ -829,7 +829,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  
  	return join_plan;
  }
-@@ -5043,7 +5045,7 @@ order_qual_clauses(PlannerInfo *root, List *clauses)
+@@ -5044,7 +5046,7 @@ order_qual_clauses(PlannerInfo *root, List *clauses)
   * Also copy the parallel-related flags, which the executor *will* use.
   */
  static void
@@ -838,7 +838,7 @@ index 83e8b34b1b..9e4e4b365b 100644
  {
  	dest->startup_cost = src->startup_cost;
  	dest->total_cost = src->total_cost;
-@@ -5051,6 +5053,9 @@ copy_generic_path_info(Plan *dest, Path *src)
+@@ -5052,6 +5054,9 @@ copy_generic_path_info(Plan *dest, Path *src)
  	dest->plan_width = src->pathtarget->width;
  	dest->parallel_aware = src->parallel_aware;
  	dest->parallel_safe = src->parallel_safe;
@@ -907,7 +907,7 @@ index f8b79ec120..f970971a4a 100644
  extern void ExplainQuery(ParseState *pstate, ExplainStmt *stmt, const char *queryString,
  						 ParamListInfo params, QueryEnvironment *queryEnv, DestReceiver *dest);
 diff --git a/src/include/nodes/pathnodes.h b/src/include/nodes/pathnodes.h
-index 5de52edda4..2ec34b2b11 100644
+index b6d4b0eda0..3d630c7139 100644
 --- a/src/include/nodes/pathnodes.h
 +++ b/src/include/nodes/pathnodes.h
 @@ -710,6 +710,10 @@ typedef struct RelOptInfo
@@ -1073,3 +1073,19 @@ index 80dc4bf4e8..afb9e9454e 100644
  /*
   * prototypes for plan/planmain.c
   */
+diff --git a/src/tools/msvc/Mkvcbuild.pm b/src/tools/msvc/Mkvcbuild.pm
+index 131a4c76c4..a836764110 100644
+--- a/src/tools/msvc/Mkvcbuild.pm
++++ b/src/tools/msvc/Mkvcbuild.pm
+@@ -36,7 +36,10 @@ my @contrib_uselibpq = ('dblink', 'oid2name', 'postgres_fdw', 'vacuumlo');
+ my @contrib_uselibpgport   = ('oid2name', 'pg_standby', 'vacuumlo');
+ my @contrib_uselibpgcommon = ('oid2name', 'pg_standby', 'vacuumlo');
+ my $contrib_extralibs      = undef;
+-my $contrib_extraincludes = { 'dblink' => ['src/backend'] };
++my $contrib_extraincludes = {
++							'aqo' => ['contrib/postgres_fdw'],
++							'dblink' => ['src/backend']
++							};
+ my $contrib_extrasource = {
+ 	'cube' => [ 'contrib/cube/cubescan.l', 'contrib/cube/cubeparse.y' ],
+ 	'seg'  => [ 'contrib/seg/segscan.l',   'contrib/seg/segparse.y' ],
