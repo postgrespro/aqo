@@ -71,24 +71,28 @@ SELECT x FROM frgn WHERE x < -10; -- AQO ignores constants
 (4 rows)
 
 -- Trivial JOIN push-down.
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (COSTS OFF)
 SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Merge Join (actual rows=1 loops=1) (AQO not used)
+             QUERY PLAN             
+------------------------------------
+ Merge Join
    Merge Cond: (a.x = b.x)
-   ->  Sort (actual rows=1 loops=1) (AQO not used)
+   ->  Sort
          Sort Key: a.x
-         Sort Method: quicksort  Memory: 25kB
-         ->  Foreign Scan on frgn a (actual rows=1 loops=1) (AQO not used)
-   ->  Sort (actual rows=1 loops=1) (AQO not used)
+         ->  Foreign Scan on frgn a
+   ->  Sort
          Sort Key: b.x
-         Sort Method: quicksort  Memory: 25kB
-         ->  Foreign Scan on frgn b (actual rows=1 loops=1) (AQO not used)
+         ->  Foreign Scan on frgn b
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(13 rows)
+(11 rows)
+
+SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
+ x | x 
+---+---
+ 1 | 1
+(1 row)
 
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
 SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
