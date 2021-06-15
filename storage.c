@@ -214,7 +214,7 @@ update_query(int qhash, int fhash,
  * Returns false if the operation failed, true otherwise.
  */
 bool
-add_query_text(int qhash, char *query_text)
+add_query_text(int qhash)
 {
 	RangeVar   *rv;
 	Relation	hrel;

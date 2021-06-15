@@ -286,7 +286,7 @@ int			get_clause_hash(Expr *clause, int nargs,
 extern bool find_query(int qhash, Datum *search_values, bool *search_nulls);
 extern bool update_query(int qhash, int fhash,
 						 bool learn_aqo, bool use_aqo, bool auto_tuning);
-extern bool add_query_text(int query_hash, char *query_text);
+extern bool add_query_text(int query_hash);
 extern bool load_fss(int fhash, int fss_hash,
 					 int ncols, double **matrix, double *targets, int *rows);
 extern bool update_fss(int fhash, int fss_hash, int nrows, int ncols,

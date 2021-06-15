@@ -71,16 +71,19 @@ static bool isQueryUsingSystemRelation_walker(Node *node, void *context);
 void
 get_query_text(ParseState *pstate, Query *query)
 {
-	MemoryContext	oldCxt;
-
 	/*
 	 * Duplicate query string into private AQO memory context for guard
 	 * from possible memory context switching.
 	 */
-	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
 	if (pstate)
+	{
+		MemoryContext oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
 		query_text = pstrdup(pstate->p_sourcetext);
-	MemoryContextSwitchTo(oldCxt);
+		MemoryContextSwitchTo(oldCxt);
+	}
+	else
+		/* Can't imagine such case. Still, throw an error. */
+		elog(ERROR, "[AQO]: Query text is not found in post-parse step");
 
 	if (prev_post_parse_analyze_hook)
 		prev_post_parse_analyze_hook(pstate, query);
@@ -97,7 +100,7 @@ call_default_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	else
 		return standard_planner(parse, cursorOptions, boundParams);
 }
-#include "tcop/tcopprot.h"
+
 /*
  * Before query optimization we determine machine learning settings
  * for the query.
@@ -218,8 +221,12 @@ aqo_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 							  query_context.use_aqo,
 							  query_context.auto_tuning);
 
-
-			add_query_text(query_context.query_hash, query_text);
+			/*
+			 * Add query text into the ML-knowledge base. Just for further
+			 * analysis. In the case of cached plans we could have NULL query text.
+			 */
+			if (query_text != NULL)
+				add_query_text(query_context.query_hash);
 		}
 	}
 	else
