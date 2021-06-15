@@ -25,6 +25,13 @@ REGRESS =	aqo_disabled \
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw
 PG_CPPFLAGS += -I$(libpq_srcdir) -I$(fdw_srcdir)
 EXTRA_REGRESS_OPTS=--temp-config=$(top_srcdir)/$(subdir)/conf.add
+EXTRA_CLEAN = $(pg_regress_clean_files) sql/tablespace.sql \
+	sql/misc.sql sql/largeobject.sql sql/create_function_2.sql \
+	sql/create_function_1.sql sql/copy.sql sql/constraints.sql \
+	expected/tablespace.out \
+	expected/misc.out expected/largeobject.out expected/largeobject_1.out \
+	expected/create_function_2.out expected/create_function_1.out \
+	expected/copy.out expected/copy_1.out expected/constraints.out
 EXTRA_INSTALL = contrib/postgres_fdw
 
 DATA = aqo--1.0.sql aqo--1.0--1.1.sql aqo--1.1--1.2.sql aqo--1.2.sql
@@ -40,3 +47,13 @@ include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
 endif
 
+aqo-regress:
+	$(with_temp_install) \
+    $(top_builddir)/src/test/regress/pg_regress \
+    --temp-instance=./tmp_check \
+    $(pg_regress_locale_flags) \
+    --bindir='' \
+	--dlpath=$(CURDIR)/$(top_builddir)/src/test/regress \
+	--inputdir=$(abs_top_srcdir)/src/test/regress \
+	--schedule=$(CURDIR)/schedule \
+	--load-extension=aqo
