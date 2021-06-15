@@ -14,7 +14,7 @@ jobs:
     steps:
     - name: Install additional packages
       run: sudo apt-get install -y libperl-dev libipc-run-perl
-    - name: pg
+    - name: check
       run: |
         echo "Deploying to production server on branch $GITHUB_REF"
         git config --global user.email "ci@postgrespro.ru"
@@ -24,6 +24,7 @@ jobs:
         git checkout REL_12_STABLE
         ./configure --prefix=`pwd`/tmp_install
         git subtree add --prefix=contrib/aqo https://github.com/postgrespro/aqo.git $GITHUB_REF
-        patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg13.patch
+        patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg12.patch
         make -j4 > /dev/null && make -j4 -C contrib > /dev/null
         make -C contrib/aqo check
+        make -C contrib/aqo aqo-regress
