@@ -111,6 +111,22 @@ ExplainOneNode_hook_type					prev_ExplainOneNode_hook;
  *
  *****************************************************************************/
 
+static void
+aqo_free_callback(ResourceReleasePhase phase,
+					 bool isCommit,
+					 bool isTopLevel,
+					 void *arg)
+{
+	if (phase != RESOURCE_RELEASE_AFTER_LOCKS)
+		return;
+
+	if (query_text != NULL)
+	{
+		pfree(query_text);
+		query_text = NULL;
+	}
+}
+
 void
 _PG_init(void)
 {
@@ -208,6 +224,7 @@ _PG_init(void)
 	AQOMemoryContext = AllocSetContextCreate(TopMemoryContext,
 											 "AQOMemoryContext",
 											 ALLOCSET_DEFAULT_SIZES);
+	RegisterResourceReleaseCallback(aqo_free_callback, NULL);
 }
 
 PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
