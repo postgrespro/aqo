@@ -130,7 +130,7 @@ aqo_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 		strstr(application_name, "pgfdw:") != NULL || /* caused by fdw */
 		get_extension_oid("aqo", true) == InvalidOid ||
 		creating_extension ||
-		IsParallelWorker() ||
+		IsInParallelMode() || IsParallelWorker() ||
 		(aqo_mode == AQO_MODE_DISABLED && !force_collect_stat) ||
 		isQueryUsingSystemRelation(parse) ||
 		RecoveryInProgress())
