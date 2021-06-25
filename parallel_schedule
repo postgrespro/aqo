@@ -1,5 +1,4 @@
 # ----------
-# src/test/regress/parallel_schedule
 #
 # By convention, we put no more than twenty tests in any one parallel group;
 # this limits the number of connections needed to run the tests.
@@ -8,12 +7,12 @@
 # run tablespace by itself, and first, because it forces a checkpoint;
 # we'd prefer not to have checkpoints later in the tests because that
 # interferes with crash-recovery testing.
-# test: tablespace
+test: tablespace
 
 # ----------
 # The first group of parallel tests
 # ----------
-
+ignore: txid
 test: boolean char name varchar text int2 int4 int8 oid float4 float8 bit numeric txid uuid enum money rangetypes pg_lsn regproc
 
 # ----------
@@ -70,6 +69,7 @@ test: sanity_check
 # Note: the ignore: line does not run random, just mark it as ignorable
 # ----------
 ignore: random
+ignore: update
 test: select_into select_distinct select_distinct_on select_implicit select_having case aggregates transactions random portals arrays btree_index hash_index update delete namespace prepared_xacts
 test: subselect union join
 
@@ -97,6 +97,7 @@ test: publication subscription
 # ----------
 # Another group of parallel tests
 # ----------
+ignore: combocid
 test: select_views portals_p2 foreign_key cluster dependency guc bitmapops combocid tsearch tsdicts foreign_data window xmlmap functional_deps advisory_lock indirect_toast equivclass
 
 # ----------
@@ -109,8 +110,7 @@ test: json jsonb json_encoding jsonpath jsonpath_encoding jsonb_jsonpath
 # NB: temp.sql does a reconnect which transiently uses 2 connections,
 # so keep this parallel group to at most 19 tests
 # ----------
-test: plancache limit plpgsql copy2 temp domain rangefuncs prepare conversion truncate alter_table sequence polymorphism rowtypes returning largeobject xml
-test: with
+test: plancache limit plpgsql copy2 temp domain rangefuncs prepare conversion truncate alter_table sequence polymorphism rowtypes returning largeobject xml with
 
 # ----------
 # Another group of parallel tests

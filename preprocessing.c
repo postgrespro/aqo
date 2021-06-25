@@ -61,6 +61,9 @@
 #include "access/table.h"
 #include "commands/extension.h"
 
+/* List of feature spaces, that are processing in this backend. */
+List *cur_classes = NIL;
+
 static bool isQueryUsingSystemRelation(Query *query);
 static bool isQueryUsingSystemRelation_walker(Node *node, void *context);
 
@@ -116,6 +119,7 @@ aqo_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	Datum		query_params[5];
 	bool		query_nulls[5] = {false, false, false, false, false};
 	LOCKTAG		tag;
+	MemoryContext oldCxt;
 
 	selectivity_cache_clear();
 
@@ -139,15 +143,24 @@ aqo_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 		return call_default_planner(parse, cursorOptions, boundParams);
 	}
 
-	INSTR_TIME_SET_CURRENT(query_context.query_starttime);
-
 	query_context.query_hash = get_query_hash(parse, query_text);
 
-	if (query_is_deactivated(query_context.query_hash))
+	if (query_is_deactivated(query_context.query_hash) ||
+		list_member_int(cur_classes, query_context.query_hash))
 	{
+		/* Disable AQO for deactivated query or for query belonged to a
+		 * feature space, that is processing yet (disallow invalidation
+		 * recursion, as an example).
+		 */
 		disable_aqo_for_query();
 		return call_default_planner(parse, cursorOptions, boundParams);
 	}
+
+	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
+	cur_classes = lappend_int(cur_classes, query_context.query_hash);
+	MemoryContextSwitchTo(oldCxt);
+
+	INSTR_TIME_SET_CURRENT(query_context.query_starttime);
 
 	/*
 	 * find-add query and query text must be atomic operation to prevent

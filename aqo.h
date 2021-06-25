@@ -385,4 +385,5 @@ void		selectivity_cache_clear(void);
 extern Oid get_aqo_schema(void);
 extern void init_lock_tag(LOCKTAG *tag, uint32 key1, uint32 key2);
 
+extern List *cur_classes;
 #endif
