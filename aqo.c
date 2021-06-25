@@ -125,6 +125,12 @@ aqo_free_callback(ResourceReleasePhase phase,
 		pfree(query_text);
 		query_text = NULL;
 	}
+
+	if (isTopLevel)
+	{
+		list_free(cur_classes);
+		cur_classes = NIL;
+	}
 }
 
 void

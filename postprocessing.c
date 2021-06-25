@@ -579,7 +579,11 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		pfree_query_stat(stat);
 	}
 
+	/* Allow concurrent queries to update this feature space. */
 	LockRelease(&tag, ExclusiveLock, false);
+
+	cur_classes = list_delete_int(cur_classes, query_context.query_hash);
+
 	RemoveFromQueryEnv(queryDesc);
 
 end:
