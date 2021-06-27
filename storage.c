@@ -125,6 +125,10 @@ update_query(int qhash, int fhash,
 	ScanKeyData		key;
 	SnapshotData	snap;
 
+	/* Couldn't allow to write if xact must be read-only. */
+	if (XactReadOnly)
+		return false;
+
 	reloid = RelnameGetRelid("aqo_queries_query_hash_idx");
 	if (!OidIsValid(reloid))
 	{
@@ -224,6 +228,10 @@ add_query_text(int qhash)
 	bool		isnull[2] = {false, false};
 	Oid			reloid;
 	char		*text_str;
+
+	/* Couldn't allow to write if xact must be read-only. */
+	if (XactReadOnly)
+		return false;
 
 	reloid = RelnameGetRelid("aqo_query_texts_query_hash_idx");
 	if (!OidIsValid(reloid))
@@ -385,6 +393,10 @@ update_fss(int fhash, int fsshash, int nrows, int ncols,
 	IndexScanDesc scan;
 	ScanKeyData	key[2];
 	bool result = true;
+
+	/* Couldn't allow to write if xact must be read-only. */
+	if (XactReadOnly)
+		return false;
 
 	reloid = RelnameGetRelid("aqo_fss_access_idx");
 	if (!OidIsValid(reloid))
@@ -574,6 +586,10 @@ update_aqo_stat(int qhash, QueryStat *stat)
 	Oid			reloid;
 	IndexScanDesc scan;
 	ScanKeyData	key;
+
+	/* Couldn't allow to write if xact must be read-only. */
+	if (XactReadOnly)
+		return;
 
 	reloid = RelnameGetRelid("aqo_query_stat_idx");
 	if (!OidIsValid(reloid))
