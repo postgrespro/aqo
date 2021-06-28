@@ -304,7 +304,13 @@ learnOnPlanState(PlanState *p, void *context)
 					 * to calculate produced rows.  */
 					learn_rows = p->instrument->ntuples / p->instrument->nloops;
 
-				if (p->plan->predicted_cardinality > 0.)
+				/*
+				 * Calculate predicted cardinality.
+				 * We could find a positive value of predicted cardinality in
+				 * the case of reusing plan caused by the rewriting procedure.
+				 * Also it may be caused by using of a generic plan.
+				 */
+				if (p->plan->predicted_cardinality > 0. && query_context.use_aqo)
 					predicted = p->plan->predicted_cardinality;
 				else if (IsParallelTuplesProcessing(p->plan))
 					predicted = p->plan->plan_rows *
