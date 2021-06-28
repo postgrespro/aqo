@@ -43,7 +43,7 @@ static bool my_simple_heap_update(Relation relation,
  * Returns whether the query with given hash is in aqo_queries.
  * If yes, returns the content of the first line with given hash.
  *
- * Use dirty snapshot to see all (include in-progess) data. We want to prevent
+ * Use dirty snapshot to see all (include in-progress) data. We want to prevent
  * wait in the XactLockTableWait routine.
  */
 bool
