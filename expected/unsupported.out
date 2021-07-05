@@ -38,4 +38,64 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
  JOINS: 0
 (11 rows)
 
+SELECT count(*) FROM t WHERE x = (SELECT avg(x) FROM t WHERE x = 1);
+ count 
+-------
+    50
+(1 row)
+
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	SELECT count(*) FROM t WHERE x = (
+		SELECT avg(x) FROM t WHERE x = 1
+	);
+                        QUERY PLAN                        
+----------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   AQO not used
+   InitPlan 1 (returns $0)
+     ->  Aggregate (actual rows=1 loops=1)
+           AQO not used
+           ->  Seq Scan on t t_1 (actual rows=50 loops=1)
+                 AQO: rows=50, error=0%
+                 Filter: (x = 1)
+                 Rows Removed by Filter: 950
+   ->  Seq Scan on t (actual rows=50 loops=1)
+         AQO: rows=50, error=0%
+         Filter: ((x)::numeric = $0)
+         Rows Removed by Filter: 950
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(16 rows)
+
+SELECT count(*) FROM t WHERE x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x);
+ count 
+-------
+  1000
+(1 row)
+
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	SELECT count(*) FROM t WHERE x = (
+		SELECT avg(x) FROM t t0 WHERE t0.x = t.x
+	);
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   AQO not used
+   ->  Seq Scan on t (actual rows=1000 loops=1)
+         AQO not used
+         Filter: ((x)::numeric = (SubPlan 1))
+         SubPlan 1
+           ->  Aggregate (actual rows=1 loops=1000)
+                 AQO not used
+                 ->  Seq Scan on t t0 (actual rows=50 loops=1000)
+                       AQO: rows=50, error=0%
+                       Filter: (x = t.x)
+                       Rows Removed by Filter: 950
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(15 rows)
+
+	
 DROP EXTENSION aqo;
