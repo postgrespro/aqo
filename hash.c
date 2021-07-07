@@ -18,6 +18,7 @@
  *	  aqo/hash.c
  *
  */
+#include "math.h"
 
 #include "aqo.h"
 
@@ -76,10 +77,12 @@ get_query_hash(Query *parse, const char *query_text)
  *		sets nfeatures
  *		creates and computes fss_hash
  *		transforms selectivities to features
+ *
+ * Special case for nfeatures == NULL: don't calculate features.
  */
 int
-get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
-				   int *nfeatures, double **features)
+get_fss_for_object(List *relidslist, List *clauselist,
+				   List *selectivities, int *nfeatures, double **features)
 {
 	int			n;
 	int		   *clause_hashes;
@@ -94,7 +97,7 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 	int			eclasses_hash;
 	int			relidslist_hash;
 	List	  **args;
-	ListCell   *l;
+	ListCell   *lc;
 	int			i,
 				j,
 				k,
@@ -104,21 +107,25 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 	int fss_hash;
 
 	n = list_length(clauselist);
+	Assert(n == list_length(selectivities));
 
 	get_eclasses(clauselist, &nargs, &args_hash, &eclass_hash);
 
 	clause_hashes = palloc(sizeof(*clause_hashes) * n);
 	clause_has_consts = palloc(sizeof(*clause_has_consts) * n);
 	sorted_clauses = palloc(sizeof(*sorted_clauses) * n);
-	*features = palloc0(sizeof(**features) * n);
+
+	if (nfeatures != NULL)
+		*features = palloc0(sizeof(**features) * n);
 
 	i = 0;
-	foreach(l, clauselist)
+	foreach(lc, clauselist)
 	{
-		clause_hashes[i] = get_clause_hash(
-										((RestrictInfo *) lfirst(l))->clause,
+		RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+
+		clause_hashes[i] = get_clause_hash(rinfo->clause,
 										   nargs, args_hash, eclass_hash);
-		args = get_clause_args_ptr(((RestrictInfo *) lfirst(l))->clause);
+		args = get_clause_args_ptr(rinfo->clause);
 		clause_has_consts[i] = (args != NULL && has_consts(*args));
 		i++;
 	}
@@ -127,11 +134,16 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 	inverse_idx = inverse_permutation(idx, n);
 
 	i = 0;
-	foreach(l, selectivities)
+	foreach(lc, selectivities)
 	{
-		(*features)[inverse_idx[i]] = log(*((double *) (lfirst(l))));
-		if ((*features)[inverse_idx[i]] < log_selectivity_lower_bound)
-			(*features)[inverse_idx[i]] = log_selectivity_lower_bound;
+		Selectivity *s = (Selectivity *) lfirst(lc);
+
+		if (nfeatures != NULL)
+		{
+			(*features)[inverse_idx[i]] = log(*s);
+			if ((*features)[inverse_idx[i]] < log_selectivity_lower_bound)
+				(*features)[inverse_idx[i]] = log_selectivity_lower_bound;
+		}
 		sorted_clauses[inverse_idx[i]] = clause_hashes[i];
 		i++;
 	}
@@ -146,19 +158,24 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 		for (j = i; j < n && sorted_clauses[j] == sorted_clauses[i]; ++j)
 			if (clause_has_consts[idx[j]] || k + 1 == m - i)
 			{
-				(*features)[j - sh] = (*features)[j];
+				if (nfeatures != NULL)
+					(*features)[j - sh] = (*features)[j];
 				sorted_clauses[j - sh] = sorted_clauses[j];
 			}
 			else
 				sh++;
-		qsort(&((*features)[i - old_sh]), j - sh - (i - old_sh),
-			  sizeof(**features), double_cmp);
+
+		if (nfeatures != NULL)
+			qsort(&((*features)[i - old_sh]), j - sh - (i - old_sh),
+				  sizeof(**features), double_cmp);
 		i = j;
 	}
 
-	*nfeatures = n - sh;
-	(*features) = repalloc(*features, (*nfeatures) * sizeof(**features));
-
+	if (nfeatures != NULL)
+	{
+		*nfeatures = n - sh;
+		(*features) = repalloc(*features, (*nfeatures) * sizeof(**features));
+	}
 	/*
 	 * Generate feature subspace hash.
 	 * XXX: Remember! that relidslist_hash isn't portable between postgres

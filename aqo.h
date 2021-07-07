@@ -270,8 +270,8 @@ extern void ppi_hook(ParamPathInfo *ppi);
 
 /* Hash functions */
 int get_query_hash(Query *parse, const char *query_text);
-extern int get_fss_for_object(List *clauselist, List *selectivities,
-							  List *relidslist, int *nfeatures,
+extern int get_fss_for_object(List *relidslist, List *clauselist,
+							  List *selectivities, int *nfeatures,
 							  double **features);
 void get_eclasses(List *clauselist, int *nargs, int **args_hash,
 				  int **eclass_hash);

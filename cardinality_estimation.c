@@ -33,8 +33,8 @@ predict_for_relation(List *restrict_clauses, List *selectivities,
 	int		rows;
 	int		i;
 
-	*fss_hash = get_fss_for_object(restrict_clauses, selectivities, relids,
-														&nfeatures, &features);
+	*fss_hash = get_fss_for_object(relids, restrict_clauses,
+								   selectivities, &nfeatures, &features);
 
 	if (nfeatures > 0)
 		for (i = 0; i < aqo_K; ++i)
