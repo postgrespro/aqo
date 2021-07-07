@@ -113,8 +113,8 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 	int		i;
 
 	target = log(true_cardinality);
-	fss_hash = get_fss_for_object(clauselist, selectivities, relidslist,
-								  &nfeatures, &features);
+	fss_hash = get_fss_for_object(relidslist, clauselist,
+								  selectivities, &nfeatures, &features);
 
 	if (aqo_log_ignorance && plan->predicted_cardinality <= 0 &&
 		load_fss(fhash, fss_hash, 0, NULL, NULL, NULL) )
