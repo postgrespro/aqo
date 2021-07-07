@@ -10,6 +10,7 @@
 
 #include "aqo.h"
 #include "ignorance.h"
+#include "path_utils.h"
 
 #include "access/relation.h"
 #include "access/table.h"

@@ -17,6 +17,12 @@
 #include "optimizer/optimizer.h"
 
 /*
+ * Hook on creation of a plan node. We need to store AQO-specific data to
+ * support learning stage.
+ */
+create_plan_hook_type prev_create_plan_hook = NULL;
+
+/*
  * Returns list of marginal selectivities using as an arguments for each clause
  * (root, clause, 0, jointype, NULL).
  * That is not quite correct for parameterized baserel and foreign key join
@@ -201,4 +207,64 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 			return cur;
 			break;
 	}
+}
+
+/*
+ * Converts path info into plan node for collecting it after query execution.
+ */
+void
+aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
+{
+	bool is_join_path;
+	Plan *plan = *dest;
+
+	if (prev_create_plan_hook)
+		prev_create_plan_hook(root, src, dest);
+
+	if (!query_context.use_aqo && !query_context.learn_aqo)
+		return;
+
+	is_join_path = (src->type == T_NestPath || src->type == T_MergePath ||
+					src->type == T_HashPath);
+
+	if (plan->had_path)
+	{
+		/*
+		 * The convention is that any extension that sets had_path is also
+		 * responsible for setting path_clauses, path_jointype, path_relids,
+		 * path_parallel_workers, and was_parameterized.
+		 */
+		return;
+	}
+
+	if (is_join_path)
+	{
+		plan->path_clauses = ((JoinPath *) src)->joinrestrictinfo;
+		plan->path_jointype = ((JoinPath *) src)->jointype;
+	}
+	else
+	{
+		plan->path_clauses = list_concat(
+									list_copy(src->parent->baserestrictinfo),
+						 src->param_info ? src->param_info->ppi_clauses : NIL);
+		plan->path_jointype = JOIN_INNER;
+	}
+
+	plan->path_relids = list_concat(plan->path_relids,
+								get_list_of_relids(root, src->parent->relids));
+	plan->path_parallel_workers = src->parallel_workers;
+	plan->was_parametrized = (src->param_info != NULL);
+
+	if (src->param_info)
+	{
+		plan->predicted_cardinality = src->param_info->predicted_ppi_rows;
+		plan->fss_hash = src->param_info->fss_ppi_hash;
+	}
+	else
+	{
+		plan->predicted_cardinality = src->parent->predicted_cardinality;
+		plan->fss_hash = src->parent->fss_hash;
+	}
+
+	plan->had_path = true;
 }
