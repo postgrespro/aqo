@@ -26,6 +26,7 @@
  */
 
 #include "aqo.h"
+#include "path_utils.h"
 
 double predicted_ppi_rows;
 double fss_ppi_hash;
