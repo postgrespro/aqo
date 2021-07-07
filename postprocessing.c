@@ -606,58 +606,60 @@ end:
  * Converts path info into plan node for collecting it after query execution.
  */
 void
-aqo_copy_generic_path_info(PlannerInfo *root, Plan *dest, Path *src)
+aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 {
 	bool is_join_path;
+	Plan *plan = *dest;
 
-	if (prev_copy_generic_path_info_hook)
-		prev_copy_generic_path_info_hook(root, dest, src);
+	if (prev_create_plan_hook)
+		prev_create_plan_hook(root, src, dest);
+
+	if (!query_context.use_aqo && !query_context.learn_aqo)
+		return;
 
 	is_join_path = (src->type == T_NestPath || src->type == T_MergePath ||
 					src->type == T_HashPath);
 
-	if (dest->had_path)
+	if (plan->had_path)
 	{
 		/*
 		 * The convention is that any extension that sets had_path is also
 		 * responsible for setting path_clauses, path_jointype, path_relids,
 		 * path_parallel_workers, and was_parameterized.
 		 */
-		Assert(dest->path_clauses && dest->path_jointype &&
-			 dest->path_relids && dest->path_parallel_workers);
 		return;
 	}
 
 	if (is_join_path)
 	{
-		dest->path_clauses = ((JoinPath *) src)->joinrestrictinfo;
-		dest->path_jointype = ((JoinPath *) src)->jointype;
+		plan->path_clauses = ((JoinPath *) src)->joinrestrictinfo;
+		plan->path_jointype = ((JoinPath *) src)->jointype;
 	}
 	else
 	{
-		dest->path_clauses = list_concat(
+		plan->path_clauses = list_concat(
 									list_copy(src->parent->baserestrictinfo),
 						 src->param_info ? src->param_info->ppi_clauses : NIL);
-		dest->path_jointype = JOIN_INNER;
+		plan->path_jointype = JOIN_INNER;
 	}
 
-	dest->path_relids = list_concat(dest->path_relids,
+	plan->path_relids = list_concat(plan->path_relids,
 								get_list_of_relids(root, src->parent->relids));
-	dest->path_parallel_workers = src->parallel_workers;
-	dest->was_parametrized = (src->param_info != NULL);
+	plan->path_parallel_workers = src->parallel_workers;
+	plan->was_parametrized = (src->param_info != NULL);
 
 	if (src->param_info)
 	{
-		dest->predicted_cardinality = src->param_info->predicted_ppi_rows;
-		dest->fss_hash = src->param_info->fss_ppi_hash;
+		plan->predicted_cardinality = src->param_info->predicted_ppi_rows;
+		plan->fss_hash = src->param_info->fss_ppi_hash;
 	}
 	else
 	{
-		dest->predicted_cardinality = src->parent->predicted_cardinality;
-		dest->fss_hash = src->parent->fss_hash;
+		plan->predicted_cardinality = src->parent->predicted_cardinality;
+		plan->fss_hash = src->parent->fss_hash;
 	}
 
-	dest->had_path = true;
+	plan->had_path = true;
 }
 
 /*
