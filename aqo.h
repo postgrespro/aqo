@@ -336,15 +336,6 @@ double aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 								   SpecialJoinInfo *sjinfo,
 								   List *restrict_clauses);
 
-/* Extracting path information utilities */
-List *get_selectivities(PlannerInfo *root,
-				  List *clauses,
-				  int varRelid,
-				  JoinType jointype,
-				  SpecialJoinInfo *sjinfo);
-List	   *get_list_of_relids(PlannerInfo *root, Relids relids);
-List	   *get_path_clauses(Path *path, PlannerInfo *root, List **selectivities);
-
 /* Cardinality estimation */
 double predict_for_relation(List *restrict_clauses, List *selectivities,
 					 List *relids, int *fss_hash);

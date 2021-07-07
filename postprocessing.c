@@ -18,6 +18,7 @@
 
 #include "aqo.h"
 #include "ignorance.h"
+#include "path_utils.h"
 
 #include "access/parallel.h"
 #include "optimizer/optimizer.h"

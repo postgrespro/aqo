@@ -13,6 +13,7 @@
  */
 
 #include "aqo.h"
+#include "path_utils.h"
 #include "optimizer/optimizer.h"
 
 /*
