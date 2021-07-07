@@ -135,7 +135,6 @@
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "optimizer/pathnode.h"
-#include "optimizer/planmain.h"
 #include "optimizer/planner.h"
 #include "optimizer/cost.h"
 #include "parser/analyze.h"
@@ -264,7 +263,6 @@ extern set_joinrel_size_estimates_hook_type
 										prev_set_joinrel_size_estimates_hook;
 extern get_parameterized_joinrel_size_hook_type
 									prev_get_parameterized_joinrel_size_hook;
-extern create_plan_hook_type prev_create_plan_hook;
 extern ExplainOnePlan_hook_type prev_ExplainOnePlan_hook;
 extern ExplainOneNode_hook_type prev_ExplainOneNode_hook;
 
@@ -342,7 +340,6 @@ double predict_for_relation(List *restrict_clauses, List *selectivities,
 
 /* Query execution statistics collecting hooks */
 void		aqo_ExecutorStart(QueryDesc *queryDesc, int eflags);
-void		aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest);
 void		aqo_ExecutorEnd(QueryDesc *queryDesc);
 
 /* Machine learning techniques */
