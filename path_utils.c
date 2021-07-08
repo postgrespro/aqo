@@ -14,6 +14,7 @@
 
 #include "aqo.h"
 #include "path_utils.h"
+#include "nodes/readfuncs.h"
 #include "optimizer/optimizer.h"
 
 /*
@@ -21,6 +22,64 @@
  * support learning stage.
  */
 create_plan_hook_type prev_create_plan_hook = NULL;
+
+static AQOPlanNode DefaultAQOPlanNode =
+{
+	.node.type = T_ExtensibleNode,
+	.node.extnodename = AQO_PLAN_NODE,
+	.had_path = false,
+	.relids = NIL,
+	.clauses = NIL,
+	.selectivities = NIL,
+	.jointype = -1,
+	.parallel_divisor = -1,
+	.was_parametrized = false,
+	.fss = INT_MAX,
+	.prediction = -1
+};
+
+static AQOPlanNode *
+create_aqo_plan_node()
+{
+	AQOPlanNode *node = (AQOPlanNode *) newNode(sizeof(AQOPlanNode),
+															T_ExtensibleNode);
+
+	memcpy(node, &DefaultAQOPlanNode, sizeof(AQOPlanNode));
+	return node;
+}
+
+AQOPlanNode *
+get_aqo_plan_node(Plan *plan, bool create)
+{
+	AQOPlanNode *node = NULL;
+	ListCell	*lc;
+
+	foreach(lc, plan->private)
+	{
+		AQOPlanNode *candidate = (AQOPlanNode *) lfirst(lc);
+
+		if (!IsA(candidate, ExtensibleNode))
+			continue;
+
+		if (strcmp(candidate->node.extnodename, AQO_PLAN_NODE) != 0)
+			continue;
+
+		node = candidate;
+		break;
+	}
+
+	if (node == NULL)
+	{
+		if (!create)
+			return &DefaultAQOPlanNode;
+
+		node = create_aqo_plan_node();
+		plan->private = lappend(plan->private, node);
+	}
+
+	Assert(node);
+	return node;
+}
 
 /*
  * Returns list of marginal selectivities using as an arguments for each clause
@@ -217,6 +276,7 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 {
 	bool is_join_path;
 	Plan *plan = *dest;
+	AQOPlanNode	*node;
 
 	if (prev_create_plan_hook)
 		prev_create_plan_hook(root, src, dest);
@@ -227,7 +287,8 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 	is_join_path = (src->type == T_NestPath || src->type == T_MergePath ||
 					src->type == T_HashPath);
 
-	if (plan->had_path)
+	node = get_aqo_plan_node(plan, true);
+	if (node->had_path)
 	{
 		/*
 		 * The convention is that any extension that sets had_path is also
@@ -239,32 +300,167 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 
 	if (is_join_path)
 	{
-		plan->path_clauses = ((JoinPath *) src)->joinrestrictinfo;
-		plan->path_jointype = ((JoinPath *) src)->jointype;
+		node->clauses = ((JoinPath *) src)->joinrestrictinfo;
+		node->jointype = ((JoinPath *) src)->jointype;
 	}
 	else
 	{
-		plan->path_clauses = list_concat(
+		node->clauses = list_concat(
 									list_copy(src->parent->baserestrictinfo),
 						 src->param_info ? src->param_info->ppi_clauses : NIL);
-		plan->path_jointype = JOIN_INNER;
+		node->jointype = JOIN_INNER;
 	}
 
-	plan->path_relids = list_concat(plan->path_relids,
+	node->relids = list_concat(node->relids,
 								get_list_of_relids(root, src->parent->relids));
-	plan->path_parallel_workers = src->parallel_workers;
-	plan->was_parametrized = (src->param_info != NULL);
+	if (src->parallel_workers > 0)
+		node->parallel_divisor = get_parallel_divisor(src);
+	node->was_parametrized = (src->param_info != NULL);
 
 	if (src->param_info)
 	{
-		plan->predicted_cardinality = src->param_info->predicted_ppi_rows;
-		plan->fss_hash = src->param_info->fss_ppi_hash;
+		node->prediction = src->param_info->predicted_ppi_rows;
+		node->fss = src->param_info->fss_ppi_hash;
 	}
 	else
 	{
-		plan->predicted_cardinality = src->parent->predicted_cardinality;
-		plan->fss_hash = src->parent->fss_hash;
+		node->prediction = src->parent->predicted_cardinality;
+		node->fss = src->parent->fss_hash;
 	}
 
-	plan->had_path = true;
+	node->had_path = true;
+}
+
+static void
+AQOnodeCopy(struct ExtensibleNode *enew, const struct ExtensibleNode *eold)
+{
+	AQOPlanNode *new = (AQOPlanNode *) enew;
+	AQOPlanNode *old = (AQOPlanNode *) eold;
+
+	Assert(IsA(old, ExtensibleNode));
+	Assert(strcmp(old->node.extnodename, AQO_PLAN_NODE) == 0);
+
+	/* Copy static fields in one command */
+	memcpy(new, old, sizeof(AQOPlanNode));
+
+	/* These lists couldn't contain AQO nodes. Use basic machinery */
+	new->relids = copyObject(old->relids);
+	new->clauses = copyObject(old->clauses);
+	new->selectivities = copyObject(old->selectivities);
+	enew = (ExtensibleNode *) new;
+}
+
+static bool
+AQOnodeEqual(const struct ExtensibleNode *a, const struct ExtensibleNode *b)
+{
+	return false;
+}
+
+#define WRITE_INT_FIELD(fldname) \
+	appendStringInfo(str, " :" CppAsString(fldname) " %d", node->fldname)
+
+/* Write a boolean field */
+#define WRITE_BOOL_FIELD(fldname) \
+	appendStringInfo(str, " :" CppAsString(fldname) " %s", \
+					 booltostr(node->fldname))
+
+#define WRITE_NODE_FIELD(fldname) \
+	(appendStringInfoString(str, " :" CppAsString(fldname) " "), \
+	 outNode(str, node->fldname))
+
+/* Write an enumerated-type field as an integer code */
+#define WRITE_ENUM_FIELD(fldname, enumtype) \
+	appendStringInfo(str, " :" CppAsString(fldname) " %d", \
+					 (int) node->fldname)
+
+/* Write a float field --- caller must give format to define precision */
+#define WRITE_FLOAT_FIELD(fldname,format) \
+	appendStringInfo(str, " :" CppAsString(fldname) " " format, node->fldname)
+
+static void
+AQOnodeOut(struct StringInfoData *str, const struct ExtensibleNode *enode)
+{
+	AQOPlanNode *node = (AQOPlanNode *) enode;
+
+	Assert(0);
+	WRITE_BOOL_FIELD(had_path);
+	WRITE_NODE_FIELD(relids);
+	WRITE_NODE_FIELD(clauses);
+	WRITE_NODE_FIELD(selectivities);
+
+	WRITE_ENUM_FIELD(jointype, JoinType);
+	WRITE_INT_FIELD(parallel_divisor);
+	WRITE_BOOL_FIELD(was_parametrized);
+
+	/* For Adaptive optimization DEBUG purposes */
+	WRITE_INT_FIELD(fss);
+	WRITE_FLOAT_FIELD(prediction, "%.0f");
+}
+
+/* Read an integer field (anything written as ":fldname %d") */
+#define READ_INT_FIELD(fldname) \
+	token = pg_strtok(&length);		/* skip :fldname */ \
+	token = pg_strtok(&length);		/* get field value */ \
+	local_node->fldname = atoi(token)
+
+/* Read an enumerated-type field that was written as an integer code */
+#define READ_ENUM_FIELD(fldname, enumtype) \
+	token = pg_strtok(&length);		/* skip :fldname */ \
+	token = pg_strtok(&length);		/* get field value */ \
+	local_node->fldname = (enumtype) atoi(token)
+
+/* Read a float field */
+#define READ_FLOAT_FIELD(fldname) \
+	token = pg_strtok(&length);		/* skip :fldname */ \
+	token = pg_strtok(&length);		/* get field value */ \
+	local_node->fldname = atof(token)
+
+/* Read a boolean field */
+#define READ_BOOL_FIELD(fldname) \
+	token = pg_strtok(&length);		/* skip :fldname */ \
+	token = pg_strtok(&length);		/* get field value */ \
+	local_node->fldname = strtobool(token)
+
+/* Read a Node field */
+#define READ_NODE_FIELD(fldname) \
+	token = pg_strtok(&length);		/* skip :fldname */ \
+	(void) token;				/* in case not used elsewhere */ \
+	local_node->fldname = nodeRead(NULL, 0)
+
+static void
+AQOnodeRead(struct ExtensibleNode *enode)
+{
+	AQOPlanNode *local_node = (AQOPlanNode *) enode;
+	const char	*token;
+	int			length;
+
+	Assert(0);
+	READ_BOOL_FIELD(had_path);
+	READ_NODE_FIELD(relids);
+	READ_NODE_FIELD(clauses);
+	READ_NODE_FIELD(selectivities);
+
+	READ_ENUM_FIELD(jointype, JoinType);
+	READ_INT_FIELD(parallel_divisor);
+	READ_BOOL_FIELD(was_parametrized);
+
+	/* For Adaptive optimization DEBUG purposes */
+	READ_INT_FIELD(fss);
+	READ_FLOAT_FIELD(prediction);
+}
+
+static const ExtensibleNodeMethods method =
+{
+	.extnodename = AQO_PLAN_NODE,
+	.node_size = sizeof(AQOPlanNode),
+	.nodeCopy =  AQOnodeCopy,
+	.nodeEqual = AQOnodeEqual,
+	.nodeOut = AQOnodeOut,
+	.nodeRead = AQOnodeRead
+};
+
+void
+RegisterAQOPlanNodeMethods(void)
+{
+	RegisterExtensibleNodeMethods(&method);
 }

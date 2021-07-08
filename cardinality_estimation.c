@@ -22,7 +22,7 @@
  * General method for prediction the cardinality of given relation.
  */
 double
-predict_for_relation(List *restrict_clauses, List *selectivities,
+predict_for_relation(List *clauses, List *selectivities,
 					 List *relids, int *fss_hash)
 {
 	int		nfeatures;
@@ -33,7 +33,7 @@ predict_for_relation(List *restrict_clauses, List *selectivities,
 	int		rows;
 	int		i;
 
-	*fss_hash = get_fss_for_object(relids, restrict_clauses,
+	*fss_hash = get_fss_for_object(relids, clauses,
 								   selectivities, &nfeatures, &features);
 
 	if (nfeatures > 0)

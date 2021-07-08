@@ -111,12 +111,13 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 	double	*features;
 	double	target;
 	int		i;
+	AQOPlanNode *aqo_node = get_aqo_plan_node(plan, false);
 
 	target = log(true_cardinality);
 	fss_hash = get_fss_for_object(relidslist, clauselist,
 								  selectivities, &nfeatures, &features);
 
-	if (aqo_log_ignorance && plan->predicted_cardinality <= 0 &&
+	if (aqo_log_ignorance && aqo_node->prediction <= 0 &&
 		load_fss(fhash, fss_hash, 0, NULL, NULL, NULL) )
 	{
 		/*
@@ -222,6 +223,16 @@ HasNeverExecutedNodes(PlanState *ps, void *context)
 
 	return planstate_tree_walker(ps, HasNeverExecutedNodes, NULL);
 }
+
+static bool
+IsParallelTuplesProcessing(const Plan *plan, bool IsParallel)
+{
+	if (IsParallel && (plan->parallel_aware || nodeTag(plan) == T_HashJoin ||
+		nodeTag(plan) == T_MergeJoin || nodeTag(plan) == T_NestLoop))
+		return true;
+	return false;
+}
+
 /*
  * Walks over obtained PlanState tree, collects relation objects with their
  * clauses, selectivities and relids and passes each object to learn_sample.
@@ -229,7 +240,7 @@ HasNeverExecutedNodes(PlanState *ps, void *context)
  * Returns clauselist, selectivities and relids.
  * Store observed subPlans into other_plans list.
  *
- * We use list_copy() of p->plan->path_clauses and p->plan->path_relids
+ * We use list_copy() of AQOPlanNode->clauses and AQOPlanNode->relids
  * because the plan may be stored in the cache after this. Operation
  * list_concat() changes input lists and may destruct cached plan.
  */
@@ -240,16 +251,19 @@ learnOnPlanState(PlanState *p, void *context)
 	aqo_obj_stat SubplanCtx = {NIL, NIL, NIL, ctx->learn};
 	double predicted = 0.;
 	double learn_rows = 0.;
+	AQOPlanNode *aqo_node;
 
 	if (!p->instrument)
 		return true;
 
 	planstate_tree_walker(p, learnOnPlanState, (void *) &SubplanCtx);
 
+	aqo_node = get_aqo_plan_node(p->plan, false);
 	if (p->instrument->nloops > 0.)
 	{
 		/* If we can strongly calculate produced rows, do it. */
-		if (p->worker_instrument && IsParallelTuplesProcessing(p->plan))
+		if (p->worker_instrument &&
+			IsParallelTuplesProcessing(p->plan, aqo_node->parallel_divisor > 0))
 		{
 			double wnloops = 0.;
 			double wntuples = 0.;
@@ -286,18 +300,17 @@ learnOnPlanState(PlanState *p, void *context)
 	 * reusing plan caused by the rewriting procedure.
 	 * Also it may be caused by using of a generic plan.
 	 */
-	if (p->plan->predicted_cardinality > 0. && query_context.use_aqo)
+	if (aqo_node->prediction > 0. && query_context.use_aqo)
 	{
 		/* AQO made prediction. use it. */
-		predicted = p->plan->predicted_cardinality;
+		predicted = aqo_node->prediction;
 	}
-	else if (IsParallelTuplesProcessing(p->plan))
+	else if (IsParallelTuplesProcessing(p->plan, aqo_node->parallel_divisor > 0))
 		/*
 		 * AQO didn't make a prediction and we need to calculate real number
 		 * of tuples passed because of parallel workers.
 		 */
-		predicted = p->plan->plan_rows *
-						get_parallel_divisor(p->plan->path_parallel_workers);
+		predicted = p->plan->plan_rows * aqo_node->parallel_divisor;
 	else
 		/* No AQO prediction. Parallel workers not used for this plan node. */
 		predicted = p->plan->plan_rows;
@@ -325,29 +338,29 @@ learnOnPlanState(PlanState *p, void *context)
 	 * Some nodes inserts after planning step (See T_Hash node type).
 	 * In this case we have'nt AQO prediction and fss record.
 	 */
-	if (p->plan->had_path)
+	if (aqo_node->had_path)
 	{
 		List *cur_selectivities;
 
-		cur_selectivities = restore_selectivities(p->plan->path_clauses,
-												  p->plan->path_relids,
-												  p->plan->path_jointype,
-												  p->plan->was_parametrized);
+		cur_selectivities = restore_selectivities(aqo_node->clauses,
+												  aqo_node->relids,
+												  aqo_node->jointype,
+												  aqo_node->was_parametrized);
 		SubplanCtx.selectivities = list_concat(SubplanCtx.selectivities,
 															cur_selectivities);
 		SubplanCtx.clauselist = list_concat(SubplanCtx.clauselist,
-											list_copy(p->plan->path_clauses));
+											list_copy(aqo_node->clauses));
 
-		if (p->plan->path_relids != NIL)
+		if (aqo_node->relids != NIL)
 			/*
 			 * This plan can be stored as cached plan. In the case we will have
 			 * bogus path_relids field (changed by list_concat routine) at the
 			 * next usage (and aqo-learn) of this plan.
 			 */
-			ctx->relidslist = list_copy(p->plan->path_relids);
+			ctx->relidslist = list_copy(aqo_node->relids);
 
 		if (p->instrument && (p->righttree != NULL || p->lefttree == NULL ||
-							  p->plan->path_clauses != NIL ||
+							  aqo_node->clauses != NIL ||
 							  IsA(p, ForeignScanState) ||
 							  IsA(p, AppendState) || IsA(p, MergeAppendState)))
 		{
@@ -370,8 +383,7 @@ learnOnPlanState(PlanState *p, void *context)
 
 			if (ctx->learn)
 				learn_sample(SubplanCtx.clauselist, SubplanCtx.selectivities,
-							 p->plan->path_relids, learn_rows,
-							 p->plan);
+							 aqo_node->relids, learn_rows, p->plan);
 		}
 	}
 
@@ -718,13 +730,16 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
 {
 	int wrkrs = 1;
 	double error = -1.;
+	AQOPlanNode *aqo_node;
 
 	if (!aqo_show_details || !plan || !ps->instrument)
 		goto explain_end;
 
+	aqo_node = get_aqo_plan_node(plan, false);
 	Assert(es->format == EXPLAIN_FORMAT_TEXT);
 
-	if (ps->worker_instrument && IsParallelTuplesProcessing(plan))
+	if (ps->worker_instrument &&
+		IsParallelTuplesProcessing(plan, aqo_node->parallel_divisor > 0))
 	{
 		int i;
 
@@ -744,20 +759,20 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
 	if (es->str->len == 0 || es->str->data[es->str->len - 1] == '\n')
 		appendStringInfoSpaces(es->str, es->indent * 2);
 
-	if (plan->predicted_cardinality > 0.)
+	if (aqo_node->prediction > 0.)
 	{
-		error = 100. * (plan->predicted_cardinality - (rows*wrkrs))
-									/ plan->predicted_cardinality;
+		error = 100. * (aqo_node->prediction - (rows*wrkrs))
+									/ aqo_node->prediction;
 		appendStringInfo(es->str,
 						 "AQO: rows=%.0lf, error=%.0lf%%",
-						 plan->predicted_cardinality, error);
+						 aqo_node->prediction, error);
 	}
 	else
 		appendStringInfo(es->str, "AQO not used");
 
 explain_end:
 	if (plan && aqo_show_hash)
-		appendStringInfo(es->str, ", fss=%d", plan->fss_hash);
+		appendStringInfo(es->str, ", fss=%d", aqo_node->fss);
 
 	if (prev_ExplainOneNode_hook)
 		prev_ExplainOneNode_hook(es, ps, plan, rows);

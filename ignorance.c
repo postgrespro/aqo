@@ -1,5 +1,6 @@
 #include "aqo.h"
 #include "ignorance.h"
+#include "path_utils.h"
 
 #include "access/heapam.h"
 #include "access/parallel.h"
@@ -92,6 +93,7 @@ update_ignorance(int qhash, int fhash, int fss_hash, Plan *plan)
 	LOCKTAG		tag;
 	Oid			nspid = get_aqo_schema();
 	char		*nspname;
+	AQOPlanNode *aqo_node = get_aqo_plan_node(plan, false);
 
 	if (!OidIsValid(nspid))
 		elog(PANIC, "AQO schema does not exists!");
@@ -128,7 +130,7 @@ update_ignorance(int qhash, int fhash, int fss_hash, Plan *plan)
 
 	if (!index_getnext_slot(scan, ForwardScanDirection, slot))
 	{
-		if (plan->predicted_cardinality < 0.)
+		if (aqo_node->prediction < 0.)
 		{
 			char nodestr[1024];
 			char *qplan = nodeToString(plan);
