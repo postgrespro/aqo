@@ -57,24 +57,47 @@ index e81b990092..157f6e2721 100644
  		else
  		{
 diff --git a/src/backend/nodes/copyfuncs.c b/src/backend/nodes/copyfuncs.c
-index bd87f23784..d0a87fc57e 100644
+index bd87f23784..f4d567b8ac 100644
 --- a/src/backend/nodes/copyfuncs.c
 +++ b/src/backend/nodes/copyfuncs.c
-@@ -127,6 +127,12 @@ CopyPlanFields(const Plan *from, Plan *newnode)
- 	COPY_NODE_FIELD(lefttree);
- 	COPY_NODE_FIELD(righttree);
+@@ -129,6 +129,7 @@ CopyPlanFields(const Plan *from, Plan *newnode)
  	COPY_NODE_FIELD(initPlan);
-+	COPY_SCALAR_FIELD(had_path);
-+	COPY_NODE_FIELD(path_clauses);
-+	COPY_NODE_FIELD(path_relids);
-+	COPY_SCALAR_FIELD(path_jointype);
-+	COPY_SCALAR_FIELD(path_parallel_workers);
-+	COPY_SCALAR_FIELD(was_parametrized);
  	COPY_BITMAPSET_FIELD(extParam);
  	COPY_BITMAPSET_FIELD(allParam);
++	COPY_NODE_FIELD(private);
  }
+ 
+ /*
+diff --git a/src/backend/nodes/outfuncs.c b/src/backend/nodes/outfuncs.c
+index e32b92e299..53b6188ff3 100644
+--- a/src/backend/nodes/outfuncs.c
++++ b/src/backend/nodes/outfuncs.c
+@@ -342,6 +342,7 @@ _outPlanInfo(StringInfo str, const Plan *node)
+ 	WRITE_NODE_FIELD(initPlan);
+ 	WRITE_BITMAPSET_FIELD(extParam);
+ 	WRITE_BITMAPSET_FIELD(allParam);
++	/*WRITE_NODE_FIELD(private); */
+ }
+ 
+ /*
+diff --git a/src/backend/nodes/readfuncs.c b/src/backend/nodes/readfuncs.c
+index f0b34ecfac..cf6dfd37f9 100644
+--- a/src/backend/nodes/readfuncs.c
++++ b/src/backend/nodes/readfuncs.c
+@@ -1628,6 +1628,11 @@ ReadCommonPlan(Plan *local_node)
+ 	READ_NODE_FIELD(initPlan);
+ 	READ_BITMAPSET_FIELD(extParam);
+ 	READ_BITMAPSET_FIELD(allParam);
++	local_node->private = NIL;
++	/* READ_NODE_FIELD(private);
++	 * Don't serialize this field. It is required to serialize RestrictInfo and
++	 * EqualenceClass.
++	*/
+ }
+ 
+ /*
 diff --git a/src/backend/optimizer/path/costsize.c b/src/backend/optimizer/path/costsize.c
-index 8577c7b138..02e59233e2 100644
+index 8577c7b138..bf7c625537 100644
 --- a/src/backend/optimizer/path/costsize.c
 +++ b/src/backend/optimizer/path/costsize.c
 @@ -98,6 +98,11 @@
@@ -97,87 +120,6 @@ index 8577c7b138..02e59233e2 100644
  
  
  /*
-@@ -269,7 +273,7 @@ cost_seqscan(Path *path, PlannerInfo *root,
- 	/* Adjust costing for parallelism, if used. */
- 	if (path->parallel_workers > 0)
- 	{
--		double		parallel_divisor = get_parallel_divisor(path);
-+		double		parallel_divisor = get_parallel_divisor(path->parallel_workers);
- 
- 		/* The CPU cost is divided among all the workers. */
- 		cpu_run_cost /= parallel_divisor;
-@@ -748,7 +752,7 @@ cost_index(IndexPath *path, PlannerInfo *root, double loop_count,
- 	/* Adjust costing for parallelism, if used. */
- 	if (path->path.parallel_workers > 0)
- 	{
--		double		parallel_divisor = get_parallel_divisor(&path->path);
-+		double		parallel_divisor = get_parallel_divisor(path->path.parallel_workers);
- 
- 		path->path.rows = clamp_row_est(path->path.rows / parallel_divisor);
- 
-@@ -1029,7 +1033,7 @@ cost_bitmap_heap_scan(Path *path, PlannerInfo *root, RelOptInfo *baserel,
- 	/* Adjust costing for parallelism, if used. */
- 	if (path->parallel_workers > 0)
- 	{
--		double		parallel_divisor = get_parallel_divisor(path);
-+		double		parallel_divisor = get_parallel_divisor(path->parallel_workers);
- 
- 		/* The CPU cost is divided among all the workers. */
- 		cpu_run_cost /= parallel_divisor;
-@@ -2228,7 +2232,7 @@ cost_append(AppendPath *apath)
- 	else						/* parallel-aware */
- 	{
- 		int			i = 0;
--		double		parallel_divisor = get_parallel_divisor(&apath->path);
-+		double		parallel_divisor = get_parallel_divisor(apath->path.parallel_workers);
- 
- 		/* Parallel-aware Append never produces ordered output. */
- 		Assert(apath->path.pathkeys == NIL);
-@@ -2262,7 +2266,7 @@ cost_append(AppendPath *apath)
- 			{
- 				double		subpath_parallel_divisor;
- 
--				subpath_parallel_divisor = get_parallel_divisor(subpath);
-+				subpath_parallel_divisor = get_parallel_divisor(subpath->parallel_workers);
- 				apath->path.rows += subpath->rows * (subpath_parallel_divisor /
- 													 parallel_divisor);
- 				apath->path.total_cost += subpath->total_cost;
-@@ -3002,7 +3006,7 @@ final_cost_nestloop(PlannerInfo *root, NestPath *path,
- 	/* For partial paths, scale row estimate. */
- 	if (path->path.parallel_workers > 0)
- 	{
--		double		parallel_divisor = get_parallel_divisor(&path->path);
-+		double		parallel_divisor = get_parallel_divisor(path->path.parallel_workers);
- 
- 		path->path.rows =
- 			clamp_row_est(path->path.rows / parallel_divisor);
-@@ -3448,7 +3452,7 @@ final_cost_mergejoin(PlannerInfo *root, MergePath *path,
- 	/* For partial paths, scale row estimate. */
- 	if (path->jpath.path.parallel_workers > 0)
- 	{
--		double		parallel_divisor = get_parallel_divisor(&path->jpath.path);
-+		double		parallel_divisor = get_parallel_divisor(path->jpath.path.parallel_workers);
- 
- 		path->jpath.path.rows =
- 			clamp_row_est(path->jpath.path.rows / parallel_divisor);
-@@ -3782,7 +3786,7 @@ initial_cost_hashjoin(PlannerInfo *root, JoinCostWorkspace *workspace,
- 	 * number, so we need to undo the division.
- 	 */
- 	if (parallel_hash)
--		inner_path_rows_total *= get_parallel_divisor(inner_path);
-+		inner_path_rows_total *= get_parallel_divisor(inner_path->parallel_workers);
- 
- 	/*
- 	 * Get hash table size that executor would use for inner relation.
-@@ -3879,7 +3883,7 @@ final_cost_hashjoin(PlannerInfo *root, HashPath *path,
- 	/* For partial paths, scale row estimate. */
- 	if (path->jpath.path.parallel_workers > 0)
- 	{
--		double		parallel_divisor = get_parallel_divisor(&path->jpath.path);
-+		double		parallel_divisor = get_parallel_divisor(path->jpath.path.parallel_workers);
- 
- 		path->jpath.path.rows =
- 			clamp_row_est(path->jpath.path.rows / parallel_divisor);
 @@ -4908,6 +4912,58 @@ approx_tuple_count(PlannerInfo *root, JoinPath *path, List *quals)
  }
  
@@ -410,46 +352,17 @@ index 8577c7b138..02e59233e2 100644
  
  	cost_qual_eval(&rel->baserestrictcost, rel->baserestrictinfo, root);
  
-@@ -6035,14 +6161,25 @@ page_size(double tuples, int width)
- 	return ceil(relation_byte_size(tuples, width) / BLCKSZ);
- }
- 
-+bool
-+IsParallelTuplesProcessing(const Plan *plan)
-+{
-+	if (plan->path_parallel_workers > 0 && (
-+		plan->parallel_aware || nodeTag(plan) == T_HashJoin ||
-+								nodeTag(plan) == T_MergeJoin ||
-+								nodeTag(plan) == T_NestLoop))
-+		return true;
-+	return false;
-+}
-+
- /*
+@@ -6039,7 +6165,7 @@ page_size(double tuples, int width)
   * Estimate the fraction of the work that each worker will do given the
   * number of workers budgeted for the path.
   */
 -static double
--get_parallel_divisor(Path *path)
 +double
-+get_parallel_divisor(int parallel_workers)
+ get_parallel_divisor(Path *path)
  {
--	double		parallel_divisor = path->parallel_workers;
-+	double		parallel_divisor = parallel_workers;
- 
- 	/*
- 	 * Early experience with parallel query suggests that when there is only
-@@ -6059,7 +6196,7 @@ get_parallel_divisor(Path *path)
- 	{
- 		double		leader_contribution;
- 
--		leader_contribution = 1.0 - (0.3 * path->parallel_workers);
-+		leader_contribution = 1.0 - (0.3 * parallel_workers);
- 		if (leader_contribution > 0)
- 			parallel_divisor += leader_contribution;
- 	}
+ 	double		parallel_divisor = path->parallel_workers;
 diff --git a/src/backend/optimizer/plan/createplan.c b/src/backend/optimizer/plan/createplan.c
-index 439e6b6426..deadcfabb6 100644
+index 439e6b6426..8dd516d8c8 100644
 --- a/src/backend/optimizer/plan/createplan.c
 +++ b/src/backend/optimizer/plan/createplan.c
 @@ -71,6 +71,7 @@
@@ -471,6 +384,14 @@ index 439e6b6426..deadcfabb6 100644
  	return plan;
  }
  
+@@ -5276,6 +5281,7 @@ copy_generic_path_info(Plan *dest, Path *src)
+ 	dest->plan_width = src->pathtarget->width;
+ 	dest->parallel_aware = src->parallel_aware;
+ 	dest->parallel_safe = src->parallel_safe;
++	dest->private = NIL;
+ }
+ 
+ /*
 diff --git a/src/backend/optimizer/util/relnode.c b/src/backend/optimizer/util/relnode.c
 index e105a4d5f1..392bed5222 100644
 --- a/src/backend/optimizer/util/relnode.c
@@ -556,31 +477,21 @@ index b7b2817a5d..a53b625e9e 100644
  
  
 diff --git a/src/include/nodes/plannodes.h b/src/include/nodes/plannodes.h
-index aaa3b65d04..bc126f8982 100644
+index aaa3b65d04..5a49998c51 100644
 --- a/src/include/nodes/plannodes.h
 +++ b/src/include/nodes/plannodes.h
-@@ -145,6 +145,19 @@ typedef struct Plan
- 	List	   *initPlan;		/* Init Plan nodes (un-correlated expr
- 								 * subselects) */
- 
-+	/*
-+	 * information for adaptive query optimization
-+	 */
-+	bool		had_path;
-+	List	   *path_clauses;
-+	List	   *path_relids;
-+	JoinType	path_jointype;
-+	int			path_parallel_workers;
-+	bool		was_parametrized;
-+	/* For Adaptive optimization DEBUG purposes */
-+	double		predicted_cardinality;
-+	int			fss_hash;
+@@ -158,6 +158,9 @@ typedef struct Plan
+ 	 */
+ 	Bitmapset  *extParam;
+ 	Bitmapset  *allParam;
 +
- 	/*
- 	 * Information for management of parameter-change-driven rescanning
- 	 *
++	/* Additional field for an extension purposes. */
++	List		*private;
+ } Plan;
+ 
+ /* ----------------
 diff --git a/src/include/optimizer/cost.h b/src/include/optimizer/cost.h
-index 0fe60d82e4..892b8bb7ba 100644
+index 0fe60d82e4..e3198d0cc9 100644
 --- a/src/include/optimizer/cost.h
 +++ b/src/include/optimizer/cost.h
 @@ -39,6 +39,37 @@ typedef enum
@@ -656,12 +567,11 @@ index 0fe60d82e4..892b8bb7ba 100644
  extern void set_subquery_size_estimates(PlannerInfo *root, RelOptInfo *rel);
  extern void set_function_size_estimates(PlannerInfo *root, RelOptInfo *rel);
  extern void set_values_size_estimates(PlannerInfo *root, RelOptInfo *rel);
-@@ -207,5 +255,7 @@ extern void set_foreign_size_estimates(PlannerInfo *root, RelOptInfo *rel);
+@@ -207,5 +255,6 @@ extern void set_foreign_size_estimates(PlannerInfo *root, RelOptInfo *rel);
  extern PathTarget *set_pathtarget_cost_width(PlannerInfo *root, PathTarget *target);
  extern double compute_bitmap_pages(PlannerInfo *root, RelOptInfo *baserel,
  								   Path *bitmapqual, int loop_count, Cost *cost, double *tuple);
-+extern bool IsParallelTuplesProcessing(const Plan *plan);
-+extern double get_parallel_divisor(int parallel_workers);
++extern double get_parallel_divisor(Path *path);
  
  #endif							/* COST_H */
 diff --git a/src/include/optimizer/pathnode.h b/src/include/optimizer/pathnode.h
