@@ -219,7 +219,7 @@ update_query(int qhash, int fhash,
  * Returns false if the operation failed, true otherwise.
  */
 bool
-add_query_text(int qhash)
+add_query_text(int qhash, const char *query_string)
 {
 	RangeVar   *rv;
 	Relation	hrel;
@@ -230,7 +230,7 @@ add_query_text(int qhash)
 	Oid			reloid;
 
 	values[0] = Int32GetDatum(qhash);
-	values[1] = CStringGetTextDatum(query_text);
+	values[1] = CStringGetTextDatum(query_string);
 
 	/* Couldn't allow to write if xact must be read-only. */
 	if (XactReadOnly)

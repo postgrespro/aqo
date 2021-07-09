@@ -68,31 +68,6 @@ static bool isQueryUsingSystemRelation(Query *query);
 static bool isQueryUsingSystemRelation_walker(Node *node, void *context);
 
 /*
- * Saves query text into query_text variable.
- * Query text field in aqo_queries table is for user.
- */
-void
-get_query_text(ParseState *pstate, Query *query, JumbleState *jstate)
-{
-	/*
-	 * Duplicate query string into private AQO memory context for guard
-	 * from possible memory context switching.
-	 */
-	if (pstate)
-	{
-		MemoryContext oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
-		query_text = pstrdup(pstate->p_sourcetext);
-		MemoryContextSwitchTo(oldCxt);
-	}
-	else
-		/* Can't imagine such case. Still, throw an error. */
-		elog(ERROR, "[AQO]: Query text is not found in post-parse step");
-
-	if (prev_post_parse_analyze_hook)
-		prev_post_parse_analyze_hook(pstate, query, jstate);
-}
-
-/*
  * Calls standard query planner or its previous hook.
  */
 PlannedStmt *
@@ -158,7 +133,7 @@ aqo_planner(Query *parse,
 									boundParams);
 	}
 
-	query_context.query_hash = get_query_hash(parse, query_text);
+	query_context.query_hash = get_query_hash(parse, query_string);
 
 	if (query_is_deactivated(query_context.query_hash) ||
 		list_member_int(cur_classes, query_context.query_hash))
@@ -256,8 +231,8 @@ aqo_planner(Query *parse,
 			 * Add query text into the ML-knowledge base. Just for further
 			 * analysis. In the case of cached plans we could have NULL query text.
 			 */
-			if (query_text != NULL)
-				add_query_text(query_context.query_hash);
+			if (query_string != NULL)
+				add_query_text(query_context.query_hash, query_string);
 		}
 	}
 	else
