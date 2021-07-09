@@ -89,8 +89,6 @@ QueryContextData	query_context;
 /* Additional plan info */
 int njoins;
 
-char				*query_text = NULL;
-
 /* Saved hook values */
 post_parse_analyze_hook_type				prev_post_parse_analyze_hook;
 planner_hook_type							prev_planner_hook;
@@ -119,12 +117,6 @@ aqo_free_callback(ResourceReleasePhase phase,
 {
 	if (phase != RESOURCE_RELEASE_AFTER_LOCKS)
 		return;
-
-	if (query_text != NULL)
-	{
-		pfree(query_text);
-		query_text = NULL;
-	}
 
 	if (isTopLevel)
 	{
@@ -203,8 +195,6 @@ _PG_init(void)
 
 	prev_planner_hook							= planner_hook;
 	planner_hook								= aqo_planner;
-	prev_post_parse_analyze_hook				= post_parse_analyze_hook;
-	post_parse_analyze_hook						= get_query_text;
 	prev_ExecutorStart_hook						= ExecutorStart_hook;
 	ExecutorStart_hook							= aqo_ExecutorStart;
 	prev_ExecutorEnd_hook						= ExecutorEnd_hook;
