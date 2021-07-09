@@ -107,7 +107,10 @@ get_fss_for_object(List *relidslist, List *clauselist,
 	int fss_hash;
 
 	n = list_length(clauselist);
-	Assert(n == list_length(selectivities));
+
+	/* Check parameters state invariant. */
+	Assert(n == list_length(selectivities) ||
+		   (nfeatures == NULL && features == NULL));
 
 	get_eclasses(clauselist, &nargs, &args_hash, &eclass_hash);
 
@@ -171,17 +174,12 @@ get_fss_for_object(List *relidslist, List *clauselist,
 		i = j;
 	}
 
-	if (nfeatures != NULL)
-	{
-		*nfeatures = n - sh;
-		(*features) = repalloc(*features, (*nfeatures) * sizeof(**features));
-	}
 	/*
 	 * Generate feature subspace hash.
 	 * XXX: Remember! that relidslist_hash isn't portable between postgres
 	 * instances.
 	 */
-	clauses_hash = get_int_array_hash(sorted_clauses, *nfeatures);
+	clauses_hash = get_int_array_hash(sorted_clauses, n - sh);
 	eclasses_hash = get_int_array_hash(eclass_hash, nargs);
 	relidslist_hash = get_relidslist_hash(relidslist);
 	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relidslist_hash);
@@ -193,6 +191,12 @@ get_fss_for_object(List *relidslist, List *clauselist,
 	pfree(clause_has_consts);
 	pfree(args_hash);
 	pfree(eclass_hash);
+
+	if (nfeatures != NULL)
+	{
+		*nfeatures = n - sh;
+		(*features) = repalloc(*features, (*nfeatures) * sizeof(**features));
+	}
 	return fss_hash;
 }
 

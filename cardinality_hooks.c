@@ -137,7 +137,7 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	Oid			relid;
 	List	   *relids;
 	List	   *selectivities = NULL;
-	List	*restrict_clauses;
+	List	*clauses;
 	int fss = 0;
 
 	if (query_context.use_aqo || query_context.learn_aqo)
@@ -156,8 +156,8 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	relid = planner_rt_fetch(rel->relid, root)->relid;
 	relids = list_make1_int(relid);
 
-	restrict_clauses = list_copy(rel->baserestrictinfo);
-	predicted = predict_for_relation(restrict_clauses, selectivities,
+	clauses = aqo_get_clauses(root, rel->baserestrictinfo);
+	predicted = predict_for_relation(clauses, selectivities,
 									 relids, &fss);
 	rel->fss_hash = fss;
 
@@ -173,7 +173,7 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	}
 
 	list_free_deep(selectivities);
-	list_free(restrict_clauses);
+	list_free(clauses);
 	list_free(relids);
 }
 
@@ -212,8 +212,8 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	{
 		MemoryContext mcxt;
 
-		allclauses = list_concat(list_copy(param_clauses),
-								 list_copy(rel->baserestrictinfo));
+		allclauses = list_concat(aqo_get_clauses(root, param_clauses),
+								 aqo_get_clauses(root, rel->baserestrictinfo));
 		selectivities = get_selectivities(root, allclauses, rel->relid,
 										  JOIN_INNER, NULL);
 		relid = planner_rt_fetch(rel->relid, root)->relid;
@@ -304,7 +304,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 									 &outer_selectivities);
 	inner_clauses = get_path_clauses(inner_rel->cheapest_total_path, root,
 									 &inner_selectivities);
-	allclauses = list_concat(list_copy(restrictlist),
+	allclauses = list_concat(aqo_get_clauses(root, restrictlist),
 							 list_concat(outer_clauses, inner_clauses));
 	selectivities = list_concat(current_selectivities,
 								list_concat(outer_selectivities,
@@ -340,7 +340,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 								   Path *outer_path,
 								   Path *inner_path,
 								   SpecialJoinInfo *sjinfo,
-								   List *restrict_clauses)
+								   List *clauses)
 {
 	double		predicted;
 	List	   *relids;
@@ -354,7 +354,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	int			fss = 0;
 
 	if (query_context.use_aqo || query_context.learn_aqo)
-		current_selectivities = get_selectivities(root, restrict_clauses, 0,
+		current_selectivities = get_selectivities(root, clauses, 0,
 												  sjinfo->jointype, sjinfo);
 
 	if (!query_context.use_aqo)
@@ -366,13 +366,13 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 														   outer_path,
 														   inner_path,
 														   sjinfo,
-														   restrict_clauses);
+														   clauses);
 	}
 
 	relids = get_list_of_relids(root, rel->relids);
 	outer_clauses = get_path_clauses(outer_path, root, &outer_selectivities);
 	inner_clauses = get_path_clauses(inner_path, root, &inner_selectivities);
-	allclauses = list_concat(list_copy(restrict_clauses),
+	allclauses = list_concat(aqo_get_clauses(root, clauses),
 							 list_concat(outer_clauses, inner_clauses));
 	selectivities = list_concat(current_selectivities,
 								list_concat(outer_selectivities,
@@ -390,5 +390,5 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 														   outer_path,
 														   inner_path,
 														   sjinfo,
-														   restrict_clauses);
+														   clauses);
 }

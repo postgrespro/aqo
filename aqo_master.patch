@@ -393,10 +393,42 @@ index 439e6b6426..8dd516d8c8 100644
  
  /*
 diff --git a/src/backend/optimizer/util/relnode.c b/src/backend/optimizer/util/relnode.c
-index e105a4d5f1..392bed5222 100644
+index e105a4d5f1..d821ea63bd 100644
 --- a/src/backend/optimizer/util/relnode.c
 +++ b/src/backend/optimizer/util/relnode.c
-@@ -1279,6 +1279,7 @@ find_childrel_parents(PlannerInfo *root, RelOptInfo *rel)
+@@ -258,6 +258,7 @@ build_simple_rel(PlannerInfo *root, int relid, RelOptInfo *parent)
+ 	rel->all_partrels = NULL;
+ 	rel->partexprs = NULL;
+ 	rel->nullable_partexprs = NULL;
++	rel->private = NULL;
+ 
+ 	/*
+ 	 * Pass assorted information down the inheritance hierarchy.
+@@ -383,7 +384,6 @@ find_base_rel(PlannerInfo *root, int relid)
+ 		if (rel)
+ 			return rel;
+ 	}
+-
+ 	elog(ERROR, "no relation entry for relid %d", relid);
+ 
+ 	return NULL;				/* keep compiler quiet */
+@@ -672,6 +672,7 @@ build_join_rel(PlannerInfo *root,
+ 	joinrel->all_partrels = NULL;
+ 	joinrel->partexprs = NULL;
+ 	joinrel->nullable_partexprs = NULL;
++	joinrel->private = NULL;
+ 
+ 	/* Compute information relevant to the foreign relations. */
+ 	set_foreign_rel_properties(joinrel, outer_rel, inner_rel);
+@@ -850,6 +851,7 @@ build_child_join_rel(PlannerInfo *root, RelOptInfo *outer_rel,
+ 	joinrel->all_partrels = NULL;
+ 	joinrel->partexprs = NULL;
+ 	joinrel->nullable_partexprs = NULL;
++	joinrel->private = NULL;
+ 
+ 	joinrel->top_parent_relids = bms_union(outer_rel->top_parent_relids,
+ 										   inner_rel->top_parent_relids);
+@@ -1279,6 +1281,7 @@ find_childrel_parents(PlannerInfo *root, RelOptInfo *rel)
  }
  
  
@@ -404,7 +436,7 @@ index e105a4d5f1..392bed5222 100644
  /*
   * get_baserel_parampathinfo
   *		Get the ParamPathInfo for a parameterized path for a base relation,
-@@ -1347,6 +1348,10 @@ get_baserel_parampathinfo(PlannerInfo *root, RelOptInfo *baserel,
+@@ -1347,6 +1350,10 @@ get_baserel_parampathinfo(PlannerInfo *root, RelOptInfo *baserel,
  	ppi->ppi_req_outer = required_outer;
  	ppi->ppi_rows = rows;
  	ppi->ppi_clauses = pclauses;
@@ -415,7 +447,7 @@ index e105a4d5f1..392bed5222 100644
  	baserel->ppilist = lappend(baserel->ppilist, ppi);
  
  	return ppi;
-@@ -1572,6 +1577,10 @@ get_joinrel_parampathinfo(PlannerInfo *root, RelOptInfo *joinrel,
+@@ -1572,6 +1579,10 @@ get_joinrel_parampathinfo(PlannerInfo *root, RelOptInfo *joinrel,
  	ppi->ppi_req_outer = required_outer;
  	ppi->ppi_rows = rows;
  	ppi->ppi_clauses = NIL;
@@ -451,7 +483,7 @@ index e94d9e49cf..667ba7e58d 100644
  extern void ExplainQuery(ParseState *pstate, ExplainStmt *stmt,
  						 ParamListInfo params, DestReceiver *dest);
 diff --git a/src/include/nodes/pathnodes.h b/src/include/nodes/pathnodes.h
-index b7b2817a5d..a53b625e9e 100644
+index b7b2817a5d..fe6f7266f5 100644
 --- a/src/include/nodes/pathnodes.h
 +++ b/src/include/nodes/pathnodes.h
 @@ -751,6 +751,10 @@ typedef struct RelOptInfo
@@ -465,7 +497,16 @@ index b7b2817a5d..a53b625e9e 100644
  	/* used for partitioned relations: */
  	PartitionScheme part_scheme;	/* Partitioning scheme */
  	int			nparts;			/* Number of partitions; -1 if not yet set; in
-@@ -1133,6 +1137,10 @@ typedef struct ParamPathInfo
+@@ -765,6 +769,8 @@ typedef struct RelOptInfo
+ 	Relids		all_partrels;	/* Relids set of all partition relids */
+ 	List	  **partexprs;		/* Non-nullable partition key expressions */
+ 	List	  **nullable_partexprs; /* Nullable partition key expressions */
++
++	List		*private;
+ } RelOptInfo;
+ 
+ /*
+@@ -1133,6 +1139,10 @@ typedef struct ParamPathInfo
  	Relids		ppi_req_outer;	/* rels supplying parameters used by path */
  	double		ppi_rows;		/* estimated number of result tuples */
  	List	   *ppi_clauses;	/* join clauses available from outer rels */

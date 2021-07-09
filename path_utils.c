@@ -23,6 +23,8 @@
  */
 create_plan_hook_type prev_create_plan_hook = NULL;
 
+create_upper_paths_hook_type prev_create_upper_paths_hook = NULL;
+
 static AQOPlanNode DefaultAQOPlanNode =
 {
 	.node.type = T_ExtensibleNode,
@@ -130,6 +132,52 @@ get_list_of_relids(PlannerInfo *root, Relids relids)
 		l = lappend_int(l, entry->relid);
 	}
 	return l;
+}
+
+static bool
+subplan_hunter(Node *node, void *context)
+{
+	if (node == NULL)
+		/* Continue recursion in other subtrees. */
+		return false;
+
+	if (IsA(node, SubPlan))
+	{
+		SubPlan		*splan = (SubPlan *) node;
+		PlannerInfo	*root = (PlannerInfo *) context;
+		PlannerInfo	*subroot;
+		RelOptInfo	*upper_rel;
+		Value		*fss;
+
+		subroot = (PlannerInfo *) list_nth(root->glob->subroots,
+										   splan->plan_id - 1);
+		upper_rel = fetch_upper_rel(subroot, UPPERREL_FINAL, NULL);
+
+		Assert(list_length(upper_rel->private) == 1);
+		Assert(IsA((Node *) linitial(upper_rel->private), Integer));
+
+		fss = (Value *) linitial(upper_rel->private);
+		// elog(WARNING, "[%d] SubPlan. ival=%d", node->type, fss->val.ival);
+		return true;
+	}
+
+	return expression_tree_walker(node, subplan_hunter, context);
+}
+
+List *
+aqo_get_clauses(PlannerInfo *root, List *restrictlist)
+{
+	List		*clauses = NIL;
+	ListCell	*lc;
+
+	foreach(lc, restrictlist)
+	{
+		RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+
+		expression_tree_walker((Node*)rinfo->clause, subplan_hunter, (void *) root);
+		clauses = lappend(clauses, copyObject(rinfo));
+	}
+	return clauses;
 }
 
 /*
@@ -243,7 +291,8 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 					get_path_clauses(subpath, root, selectivities)));
 				cur_sel = list_concat(cur_sel, *selectivities);
 			}
-			cur = list_concat(cur, list_copy(path->parent->baserestrictinfo));
+			cur = list_concat(cur, aqo_get_clauses(root,
+											path->parent->baserestrictinfo));
 			*selectivities = list_concat(cur_sel,
 										 get_selectivities(root,
 											path->parent->baserestrictinfo,
@@ -254,9 +303,12 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 		case T_ForeignPath:
 			/* The same as in the default case */
 		default:
-			cur = list_concat(list_copy(path->parent->baserestrictinfo),
+			cur = list_concat(aqo_get_clauses(root,
+											  path->parent->baserestrictinfo),
 							  path->param_info ?
-							  list_copy(path->param_info->ppi_clauses) : NIL);
+							  aqo_get_clauses(root,
+											  path->param_info->ppi_clauses) :
+							  NIL);
 			if (path->param_info)
 				cur_sel = get_selectivities(root, cur, path->parent->relid,
 											JOIN_INNER, NULL);
@@ -463,4 +515,40 @@ void
 RegisterAQOPlanNodeMethods(void)
 {
 	RegisterExtensibleNodeMethods(&method);
+}
+
+/*
+ * Hook for create_upper_paths_hook
+ *
+ * Assume, that we are last in the chain of path creators.
+ */
+void
+aqo_store_upper_signature_hook(PlannerInfo *root,
+							   UpperRelationKind stage,
+							   RelOptInfo *input_rel,
+							   RelOptInfo *output_rel,
+							   void *extra)
+{
+	Value	*fss_node = (Value *) newNode(sizeof(Value), T_Integer);
+	List	*relids;
+	List	*clauses;
+	List	*selectivities;
+
+	if (prev_create_upper_paths_hook)
+		(*prev_create_upper_paths_hook)(root, stage, input_rel, output_rel, extra);
+
+	if (stage != UPPERREL_FINAL)
+		return;
+
+	if (!query_context.use_aqo && !query_context.learn_aqo &&! force_collect_stat)
+		return;
+
+	set_cheapest(input_rel);
+	clauses = get_path_clauses(input_rel->cheapest_total_path,
+													root, &selectivities);
+	relids = get_list_of_relids(root, input_rel->relids);
+	fss_node->val.ival = get_fss_for_object(relids, clauses, NIL, NULL, NULL);
+	output_rel->private = lappend(output_rel->private, (void *) fss_node);
+
+//	elog(WARNING, "UPPER added %d ( fss=%d)", stage, fss_node->val.ival);
 }
