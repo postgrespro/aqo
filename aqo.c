@@ -226,6 +226,8 @@ _PG_init(void)
 	prev_ExplainOneNode_hook					= ExplainOneNode_hook;
 	ExplainOneNode_hook							= print_node_explain;
 	parampathinfo_postinit_hook					= ppi_hook;
+	prev_create_upper_paths_hook				= create_upper_paths_hook;
+	create_upper_paths_hook						= aqo_store_upper_signature_hook;
 
 	init_deactivated_queries_storage();
 	AQOMemoryContext = AllocSetContextCreate(TopMemoryContext,
