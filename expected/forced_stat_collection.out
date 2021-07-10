@@ -40,7 +40,7 @@ SELECT learn_aqo,use_aqo,auto_tuning,cardinality_error_without_aqo ce,executions
 FROM aqo_queries JOIN aqo_query_stat USING (query_hash);
  learn_aqo | use_aqo | auto_tuning |          ce          | nex 
 -----------+---------+-------------+----------------------+-----
- f         | f       | f           | {2.9661225937240054} |   1
+ f         | f       | f           | {0.8637762840285226} |   1
  f         | f       | f           | {2.9634630129852053} |   1
 (2 rows)
 
