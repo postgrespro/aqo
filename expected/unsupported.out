@@ -3,41 +3,36 @@ SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
 DROP TABLE IF EXISTS t;
 CREATE TABLE t AS SELECT (gs.* / 50) AS x FROM generate_series(1,1000) AS gs;
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
-	SELECT * FROM t GROUP BY (x) HAVING x > 3;
-                  QUERY PLAN                   
------------------------------------------------
- HashAggregate (actual rows=17 loops=1)
+ANALYZE t;
+--
+-- Do not support HAVING clause for now.
+--
+SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
+ count 
+-------
+    17
+(1 row)
+
+EXPLAIN (COSTS OFF)
+	SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
+          QUERY PLAN           
+-------------------------------
+ Aggregate
    AQO not used
-   Group Key: x
-   Batches: 1  Memory Usage: 40kB
-   ->  Seq Scan on t (actual rows=801 loops=1)
+   ->  HashAggregate
          AQO not used
-         Filter: (x > 3)
-         Rows Removed by Filter: 199
+         Group Key: t.x
+         ->  Seq Scan on t
+               AQO: rows=801
+               Filter: (x > 3)
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
 (11 rows)
 
--- Do not support having clauses for now.
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
-	SELECT * FROM t GROUP BY (x) HAVING x > 3;
-                  QUERY PLAN                   
------------------------------------------------
- HashAggregate (actual rows=17 loops=1)
-   AQO not used
-   Group Key: x
-   Batches: 1  Memory Usage: 40kB
-   ->  Seq Scan on t (actual rows=801 loops=1)
-         AQO: rows=801, error=0%
-         Filter: (x > 3)
-         Rows Removed by Filter: 199
- Using aqo: true
- AQO mode: LEARN
- JOINS: 0
-(11 rows)
-
+--
+-- The subplans issue
+--
 SELECT count(*) FROM t WHERE x = (SELECT avg(x) FROM t WHERE x = 1);
  count 
 -------
@@ -322,18 +317,18 @@ SELECT * FROM
 		JOIN
 	(SELECT * FROM t WHERE x > 20) AS t1
 		USING(x);
-                   QUERY PLAN                   
-------------------------------------------------
- Hash Join (actual rows=0 loops=1)
+                 QUERY PLAN                  
+---------------------------------------------
+ Nested Loop (actual rows=0 loops=1)
    AQO not used
-   Hash Cond: (t.x = t_1.x)
+   Join Filter: (t.x = t_1.x)
    ->  Seq Scan on t (actual rows=0 loops=1)
          AQO not used
          Filter: (x < 0)
          Rows Removed by Filter: 1000
-   ->  Hash (never executed)
-         ->  Seq Scan on t t_1 (never executed)
-               Filter: (x > 20)
+   ->  Seq Scan on t t_1 (never executed)
+         AQO not used
+         Filter: (x > 20)
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0

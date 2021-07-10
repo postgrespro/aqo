@@ -755,17 +755,28 @@ RemoveFromQueryEnv(QueryDesc *queryDesc)
 }
 
 void
-print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
+print_node_explain(ExplainState *es, PlanState *ps, Plan *plan)
 {
 	int wrkrs = 1;
 	double error = -1.;
 	AQOPlanNode *aqo_node;
 
-	if (!aqo_show_details || !plan || !ps->instrument)
+	/* Extension, which took a hook early can be executed early too. */
+	if (prev_ExplainOneNode_hook)
+		prev_ExplainOneNode_hook(es, ps, plan);
+
+	if (es->format != EXPLAIN_FORMAT_TEXT)
+		/* Only text format is supported. */
+		return;
+
+	if (!aqo_show_details || !plan || !ps)
 		goto explain_end;
 
 	aqo_node = get_aqo_plan_node(plan, false);
-	Assert(es->format == EXPLAIN_FORMAT_TEXT);
+
+	if (!ps->instrument)
+		/* We can show only prediction, without error calculation */
+		goto explain_print;
 
 	if (ps->worker_instrument &&
 		IsParallelTuplesProcessing(plan, aqo_node->parallel_divisor > 0))
@@ -783,28 +794,32 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
 		}
 	}
 
+explain_print:
 	appendStringInfoChar(es->str, '\n');
-	Assert(es->format == EXPLAIN_FORMAT_TEXT);
 	if (es->str->len == 0 || es->str->data[es->str->len - 1] == '\n')
 		appendStringInfoSpaces(es->str, es->indent * 2);
 
 	if (aqo_node->prediction > 0.)
 	{
-		error = 100. * (aqo_node->prediction - (rows*wrkrs))
+		appendStringInfo(es->str, "AQO: rows=%.0lf", aqo_node->prediction);
+
+		if (ps->instrument)
+		{
+			double nloops = ps->instrument->nloops;
+			double rows = ps->instrument->ntuples / nloops;
+
+			error = 100. * (aqo_node->prediction - (rows*wrkrs))
 									/ aqo_node->prediction;
-		appendStringInfo(es->str,
-						 "AQO: rows=%.0lf, error=%.0lf%%",
-						 aqo_node->prediction, error);
+			appendStringInfo(es->str, ", error=%.0lf%%", error);
+		}
 	}
 	else
 		appendStringInfo(es->str, "AQO not used");
 
 explain_end:
+	/* XXX: Do we really have situations than plan is NULL? */
 	if (plan && aqo_show_hash)
 		appendStringInfo(es->str, ", fss=%d", aqo_node->fss);
-
-	if (prev_ExplainOneNode_hook)
-		prev_ExplainOneNode_hook(es, ps, plan, rows);
 }
 
 /*

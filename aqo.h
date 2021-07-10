@@ -313,8 +313,7 @@ extern void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 							   ParamListInfo params,
 							   const instr_time *planduration,
 							   QueryEnvironment *queryEnv);
-extern void print_node_explain(ExplainState *es, PlanState *ps, Plan *plan,
-							   double rows);
+extern void print_node_explain(ExplainState *es, PlanState *ps, Plan *plan);
 extern void disable_aqo_for_query(void);
 
 /* Cardinality estimation hooks */
