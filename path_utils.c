@@ -134,7 +134,11 @@ get_list_of_relids(PlannerInfo *root, Relids relids)
 	return l;
 }
 
-static bool
+/*
+ * Search for any subplans or initplans.
+ * if subplan is found, replace it by the feature space value of this subplan.
+ */
+static Node *
 subplan_hunter(Node *node, void *context)
 {
 	if (node == NULL)
@@ -157,13 +161,16 @@ subplan_hunter(Node *node, void *context)
 		Assert(IsA((Node *) linitial(upper_rel->private), Integer));
 
 		fss = (Value *) linitial(upper_rel->private);
-		// elog(WARNING, "[%d] SubPlan. ival=%d", node->type, fss->val.ival);
-		return true;
+		return (Node *) copyObject(fss);
 	}
-
-	return expression_tree_walker(node, subplan_hunter, context);
+	return expression_tree_mutator(node, subplan_hunter, context);
 }
 
+/*
+ * Get independent copy of the clauses list.
+ * During this operation clauses could be changed and we couldn't walk across
+ * this list next.
+ */
 List *
 aqo_get_clauses(PlannerInfo *root, List *restrictlist)
 {
@@ -174,8 +181,11 @@ aqo_get_clauses(PlannerInfo *root, List *restrictlist)
 	{
 		RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
 
-		expression_tree_walker((Node*)rinfo->clause, subplan_hunter, (void *) root);
-		clauses = lappend(clauses, copyObject(rinfo));
+		rinfo = copyObject(rinfo);
+		rinfo->clause = (Expr *) expression_tree_mutator((Node *) rinfo->clause,
+														 subplan_hunter,
+														 (void *) root);
+		clauses = lappend(clauses, (void *) rinfo);
 	}
 	return clauses;
 }
@@ -352,14 +362,14 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 
 	if (is_join_path)
 	{
-		node->clauses = ((JoinPath *) src)->joinrestrictinfo;
+		node->clauses = aqo_get_clauses(root, ((JoinPath *) src)->joinrestrictinfo);
 		node->jointype = ((JoinPath *) src)->jointype;
 	}
 	else
 	{
 		node->clauses = list_concat(
-									list_copy(src->parent->baserestrictinfo),
-						 src->param_info ? src->param_info->ppi_clauses : NIL);
+			aqo_get_clauses(root, src->parent->baserestrictinfo),
+				src->param_info ? aqo_get_clauses(root, src->param_info->ppi_clauses) : NIL);
 		node->jointype = JOIN_INNER;
 	}
 

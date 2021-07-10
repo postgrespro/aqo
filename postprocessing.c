@@ -252,11 +252,40 @@ learnOnPlanState(PlanState *p, void *context)
 	double predicted = 0.;
 	double learn_rows = 0.;
 	AQOPlanNode *aqo_node;
+	List *saved_subplan_list = NIL;
+	List *saved_initplan_list = NIL;
+	ListCell	*lc;
 
 	if (!p->instrument)
 		return true;
 
+	saved_subplan_list = p->subPlan;
+	saved_initplan_list = p->initPlan;
+	p->subPlan = NIL;
+	p->initPlan = NIL;
+
 	planstate_tree_walker(p, learnOnPlanState, (void *) &SubplanCtx);
+
+	foreach(lc, saved_subplan_list)
+	{
+		SubPlanState *sps = lfirst_node(SubPlanState, lc);
+		aqo_obj_stat SPCtx = {NIL, NIL, NIL, ctx->learn};
+
+		if (learnOnPlanState(sps->planstate, (void *) &SPCtx))
+			return true;
+	}
+
+	foreach(lc, saved_initplan_list)
+	{
+		SubPlanState *sps = lfirst_node(SubPlanState, lc);
+		aqo_obj_stat SPCtx = {NIL, NIL, NIL, ctx->learn};
+
+		if (learnOnPlanState(sps->planstate, (void *) &SPCtx))
+			return true;
+	}
+
+	p->subPlan = saved_subplan_list;
+	p->initPlan = saved_initplan_list;
 
 	aqo_node = get_aqo_plan_node(p->plan, false);
 	if (p->instrument->nloops > 0.)
