@@ -11,7 +11,7 @@ index f27e458482..0c62191904 100644
  		auto_explain	\
  		bloom		\
 diff --git a/src/backend/commands/explain.c b/src/backend/commands/explain.c
-index e81b990092..157f6e2721 100644
+index e81b990092..123bd27f1c 100644
 --- a/src/backend/commands/explain.c
 +++ b/src/backend/commands/explain.c
 @@ -24,6 +24,7 @@
@@ -46,16 +46,16 @@ index e81b990092..157f6e2721 100644
  	ExplainCloseGroup("Query", NULL, true, es);
  }
  
-@@ -1620,6 +1631,9 @@ ExplainNode(PlanState *planstate, List *ancestors,
- 				appendStringInfo(es->str,
- 								 " (actual rows=%.0f loops=%.0f)",
- 								 rows, nloops);
-+
-+			if (ExplainOneNode_hook)
-+				ExplainOneNode_hook(es, planstate, plan, rows);
+@@ -1650,6 +1661,9 @@ ExplainNode(PlanState *planstate, List *ancestors,
  		}
- 		else
- 		{
+ 	}
+ 
++	if (ExplainOneNode_hook)
++		ExplainOneNode_hook(es, planstate, plan);
++
+ 	/* in text format, first line ends here */
+ 	if (es->format == EXPLAIN_FORMAT_TEXT)
+ 		appendStringInfoChar(es->str, '\n');
 diff --git a/src/backend/nodes/copyfuncs.c b/src/backend/nodes/copyfuncs.c
 index bd87f23784..f4d567b8ac 100644
 --- a/src/backend/nodes/copyfuncs.c
@@ -459,10 +459,10 @@ index e105a4d5f1..d821ea63bd 100644
  
  	return ppi;
 diff --git a/src/include/commands/explain.h b/src/include/commands/explain.h
-index e94d9e49cf..667ba7e58d 100644
+index e94d9e49cf..49236ced77 100644
 --- a/src/include/commands/explain.h
 +++ b/src/include/commands/explain.h
-@@ -75,6 +75,19 @@ extern PGDLLIMPORT ExplainOneQuery_hook_type ExplainOneQuery_hook;
+@@ -75,6 +75,18 @@ extern PGDLLIMPORT ExplainOneQuery_hook_type ExplainOneQuery_hook;
  typedef const char *(*explain_get_index_name_hook_type) (Oid indexId);
  extern PGDLLIMPORT explain_get_index_name_hook_type explain_get_index_name_hook;
  
@@ -476,14 +476,13 @@ index e94d9e49cf..667ba7e58d 100644
 +/* Explain a node info */
 +typedef void (*ExplainOneNode_hook_type) (ExplainState *es,
 +										 PlanState *ps,
-+										 Plan *plan,
-+										 double rows);
++										 Plan *plan);
 +extern PGDLLIMPORT ExplainOneNode_hook_type ExplainOneNode_hook;
  
  extern void ExplainQuery(ParseState *pstate, ExplainStmt *stmt,
  						 ParamListInfo params, DestReceiver *dest);
 diff --git a/src/include/nodes/pathnodes.h b/src/include/nodes/pathnodes.h
-index b7b2817a5d..fe6f7266f5 100644
+index b7b2817a5d..cafad7009b 100644
 --- a/src/include/nodes/pathnodes.h
 +++ b/src/include/nodes/pathnodes.h
 @@ -751,6 +751,10 @@ typedef struct RelOptInfo
@@ -497,15 +496,17 @@ index b7b2817a5d..fe6f7266f5 100644
  	/* used for partitioned relations: */
  	PartitionScheme part_scheme;	/* Partitioning scheme */
  	int			nparts;			/* Number of partitions; -1 if not yet set; in
-@@ -765,6 +769,8 @@ typedef struct RelOptInfo
+@@ -765,7 +769,9 @@ typedef struct RelOptInfo
  	Relids		all_partrels;	/* Relids set of all partition relids */
  	List	  **partexprs;		/* Non-nullable partition key expressions */
  	List	  **nullable_partexprs; /* Nullable partition key expressions */
+-} RelOptInfo;
 +
 +	List		*private;
- } RelOptInfo;
++} 	RelOptInfo;
  
  /*
+  * Is given relation partitioned?
 @@ -1133,6 +1139,10 @@ typedef struct ParamPathInfo
  	Relids		ppi_req_outer;	/* rels supplying parameters used by path */
  	double		ppi_rows;		/* estimated number of result tuples */
