@@ -83,7 +83,7 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
  Aggregate (actual rows=1 loops=1)
    AQO not used
    ->  Seq Scan on t (actual rows=1000 loops=1)
-         AQO not used
+         AQO: rows=1000, error=0%
          Filter: ((x)::numeric = (SubPlan 1))
          SubPlan 1
            ->  Aggregate (actual rows=1 loops=1000)
@@ -97,5 +97,211 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
  JOINS: 0
 (15 rows)
 
-	
+-- Two identical subplans in a clause list
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	SELECT count(*) FROM t WHERE
+		x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21) OR
+		x IN (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21);
+                            QUERY PLAN                             
+-------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   AQO not used
+   ->  Seq Scan on t (actual rows=0 loops=1)
+         AQO not used
+         Filter: (((x)::numeric = (SubPlan 1)) OR (SubPlan 2))
+         Rows Removed by Filter: 1000
+         SubPlan 1
+           ->  Aggregate (actual rows=1 loops=1000)
+                 AQO not used
+                 ->  Seq Scan on t t0 (actual rows=0 loops=1000)
+                       AQO not used
+                       Filter: (x = (t.x + 21))
+                       Rows Removed by Filter: 1000
+         SubPlan 2
+           ->  Aggregate (actual rows=1 loops=1000)
+                 AQO not used
+                 ->  Seq Scan on t t0_1 (actual rows=0 loops=1000)
+                       AQO not used
+                       Filter: (x = (t.x + 21))
+                       Rows Removed by Filter: 1000
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(23 rows)
+
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	SELECT count(*) FROM t WHERE
+		x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21) OR
+		x IN (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21);
+                            QUERY PLAN                             
+-------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   AQO not used
+   ->  Seq Scan on t (actual rows=0 loops=1)
+         AQO: rows=1, error=100%
+         Filter: (((x)::numeric = (SubPlan 1)) OR (SubPlan 2))
+         Rows Removed by Filter: 1000
+         SubPlan 1
+           ->  Aggregate (actual rows=1 loops=1000)
+                 AQO not used
+                 ->  Seq Scan on t t0 (actual rows=0 loops=1000)
+                       AQO: rows=1, error=100%
+                       Filter: (x = (t.x + 21))
+                       Rows Removed by Filter: 1000
+         SubPlan 2
+           ->  Aggregate (actual rows=1 loops=1000)
+                 AQO not used
+                 ->  Seq Scan on t t0_1 (actual rows=0 loops=1000)
+                       AQO: rows=1, error=100%
+                       Filter: (x = (t.x + 21))
+                       Rows Removed by Filter: 1000
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(23 rows)
+
+-- It's OK to use the knowledge for a query with different constants.
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	SELECT count(*) FROM t WHERE
+		x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 22) OR
+		x IN (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 23);
+                            QUERY PLAN                             
+-------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   AQO not used
+   ->  Seq Scan on t (actual rows=0 loops=1)
+         AQO: rows=1, error=100%
+         Filter: (((x)::numeric = (SubPlan 1)) OR (SubPlan 2))
+         Rows Removed by Filter: 1000
+         SubPlan 1
+           ->  Aggregate (actual rows=1 loops=1000)
+                 AQO not used
+                 ->  Seq Scan on t t0 (actual rows=0 loops=1000)
+                       AQO: rows=1, error=100%
+                       Filter: (x = (t.x + 22))
+                       Rows Removed by Filter: 1000
+         SubPlan 2
+           ->  Aggregate (actual rows=1 loops=1000)
+                 AQO not used
+                 ->  Seq Scan on t t0_1 (actual rows=0 loops=1000)
+                       AQO: rows=1, error=100%
+                       Filter: (x = (t.x + 23))
+                       Rows Removed by Filter: 1000
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(23 rows)
+
+-- Different SubPlans in the quals of leafs of JOIN.
+SELECT count(*) FROM
+	(SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x = t.x)) AS q1
+		JOIN
+	(SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x <> t.x)) AS q2
+		ON q1.x = q2.x+1;
+ count 
+-------
+ 42550
+(1 row)
+
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+SELECT count(*) FROM
+	(SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x = t.x)) AS q1
+		JOIN
+	(SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x <> t.x)) AS q2
+		ON q1.x = q2.x+1;
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   AQO not used
+   ->  Hash Join (actual rows=42550 loops=1)
+         AQO: rows=42550, error=0%
+         Hash Cond: ((t_1.x + 1) = t.x)
+         ->  Seq Scan on t t_1 (actual rows=1000 loops=1)
+               AQO: rows=1000, error=0%
+               Filter: (((x % 3))::numeric < (SubPlan 2))
+               SubPlan 2
+                 ->  Aggregate (actual rows=1 loops=1000)
+                       AQO not used
+                       ->  Seq Scan on t t0_1 (actual rows=950 loops=1000)
+                             AQO: rows=950, error=-0%
+                             Filter: (x <> t_1.x)
+                             Rows Removed by Filter: 50
+         ->  Hash (actual rows=851 loops=1)
+               AQO not used
+               Buckets: 1024  Batches: 1  Memory Usage: 38kB
+               ->  Seq Scan on t (actual rows=851 loops=1)
+                     AQO: rows=851, error=0%
+                     Filter: (((x % 3))::numeric < (SubPlan 1))
+                     Rows Removed by Filter: 149
+                     SubPlan 1
+                       ->  Aggregate (actual rows=1 loops=1000)
+                             AQO not used
+                             ->  Seq Scan on t t0 (actual rows=50 loops=1000)
+                                   AQO: rows=50, error=0%
+                                   Filter: (x = t.x)
+                                   Rows Removed by Filter: 950
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 1
+(32 rows)
+
+-- Two identical subplans in a clause
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	SELECT count(*) FROM t WHERE (SELECT avg(x) FROM t t0 WHERE t0.x = t.x) =
+	(SELECT avg(x) FROM t t0 WHERE t0.x = t.x);
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   AQO not used
+   ->  Seq Scan on t (actual rows=1000 loops=1)
+         AQO not used
+         Filter: ((SubPlan 1) = (SubPlan 2))
+         SubPlan 1
+           ->  Aggregate (actual rows=1 loops=1000)
+                 AQO not used
+                 ->  Seq Scan on t t0 (actual rows=50 loops=1000)
+                       AQO not used
+                       Filter: (x = t.x)
+                       Rows Removed by Filter: 950
+         SubPlan 2
+           ->  Aggregate (actual rows=1 loops=1000)
+                 AQO not used
+                 ->  Seq Scan on t t0_1 (actual rows=50 loops=1000)
+                       AQO not used
+                       Filter: (x = t.x)
+                       Rows Removed by Filter: 950
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(22 rows)
+
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	SELECT count(*) FROM t WHERE (SELECT avg(x) FROM t t0 WHERE t0.x = t.x) =
+	(SELECT avg(x) FROM t t0 WHERE t0.x = t.x);
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   AQO not used
+   ->  Seq Scan on t (actual rows=1000 loops=1)
+         AQO: rows=1000, error=0%
+         Filter: ((SubPlan 1) = (SubPlan 2))
+         SubPlan 1
+           ->  Aggregate (actual rows=1 loops=1000)
+                 AQO not used
+                 ->  Seq Scan on t t0 (actual rows=50 loops=1000)
+                       AQO: rows=50, error=0%
+                       Filter: (x = t.x)
+                       Rows Removed by Filter: 950
+         SubPlan 2
+           ->  Aggregate (actual rows=1 loops=1000)
+                 AQO not used
+                 ->  Seq Scan on t t0_1 (actual rows=50 loops=1000)
+                       AQO: rows=50, error=0%
+                       Filter: (x = t.x)
+                       Rows Removed by Filter: 950
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(22 rows)
+
 DROP EXTENSION aqo;
