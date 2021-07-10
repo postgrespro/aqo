@@ -320,14 +320,14 @@ SELECT * FROM
                  QUERY PLAN                  
 ---------------------------------------------
  Nested Loop (actual rows=0 loops=1)
-   AQO not used
+   AQO: rows=1, error=100%
    Join Filter: (t.x = t_1.x)
    ->  Seq Scan on t (actual rows=0 loops=1)
-         AQO not used
+         AQO: rows=1, error=100%
          Filter: (x < 0)
          Rows Removed by Filter: 1000
    ->  Seq Scan on t t_1 (never executed)
-         AQO not used
+         AQO: rows=1
          Filter: (x > 20)
  Using aqo: true
  AQO mode: LEARN

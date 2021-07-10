@@ -52,7 +52,8 @@ static void learn_sample(List *clauselist,
 						 List *selectivities,
 						 List *relidslist,
 						 double true_cardinality,
-						 Plan *plan);
+						 Plan *plan,
+						 bool notExecuted);
 static List *restore_selectivities(List *clauselist,
 								   List *relidslist,
 								   JoinType join_type,
@@ -101,7 +102,7 @@ atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
  */
 static void
 learn_sample(List *clauselist, List *selectivities, List *relidslist,
-			 double true_cardinality, Plan *plan)
+			 double true_cardinality, Plan *plan, bool notExecuted)
 {
 	int		fhash = query_context.fspace_hash;
 	int		fss_hash;
@@ -116,6 +117,13 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 	target = log(true_cardinality);
 	fss_hash = get_fss_for_object(relidslist, clauselist,
 								  selectivities, &nfeatures, &features);
+
+	/*
+	 * Learn 'not executed' nodes only once, if no one another knowledge exists
+	 * for current feature subspace.
+	 */
+	if (notExecuted && aqo_node->prediction > 0)
+		return;
 
 	if (aqo_log_ignorance && aqo_node->prediction <= 0 &&
 		load_fss(fhash, fss_hash, 0, NULL, NULL, NULL) )
@@ -207,23 +215,6 @@ restore_selectivities(List *clauselist,
 	return lst;
 }
 
-/*
- * Check for the nodes that never executed. If at least one node exists in the
- * plan than actual rows of any another node can be false.
- * Suppress such knowledge because it can worsen the query execution time.
- */
-static bool
-HasNeverExecutedNodes(PlanState *ps, void *context)
-{
-	Assert(context == NULL);
-
-	InstrEndLoop(ps->instrument);
-	if (ps->instrument == NULL || ps->instrument->nloops == 0)
-		return true;
-
-	return planstate_tree_walker(ps, HasNeverExecutedNodes, NULL);
-}
-
 static bool
 IsParallelTuplesProcessing(const Plan *plan, bool IsParallel)
 {
@@ -255,9 +246,11 @@ learnOnPlanState(PlanState *p, void *context)
 	List *saved_subplan_list = NIL;
 	List *saved_initplan_list = NIL;
 	ListCell	*lc;
+	bool notExecuted = false;
 
 	if (!p->instrument)
 		return true;
+	InstrEndLoop(p->instrument);
 
 	saved_subplan_list = p->subPlan;
 	saved_initplan_list = p->initPlan;
@@ -322,6 +315,12 @@ learnOnPlanState(PlanState *p, void *context)
 			 * to calculate produced rows. */
 			learn_rows = p->instrument->ntuples / p->instrument->nloops;
 	}
+	else
+	{
+		/* The case of 'not executed' node. */
+		learn_rows = 1.;
+		notExecuted = true;
+	}
 
 	/*
 	 * Calculate predicted cardinality.
@@ -359,6 +358,10 @@ learnOnPlanState(PlanState *p, void *context)
 	else if (!ctx->learn)
 		return true;
 
+	/*
+	 * Need learn.
+	 */
+
 	/* It is needed for correct exp(result) calculation. */
 	predicted = clamp_row_est(predicted);
 	learn_rows = clamp_row_est(learn_rows);
@@ -393,26 +396,11 @@ learnOnPlanState(PlanState *p, void *context)
 							  IsA(p, ForeignScanState) ||
 							  IsA(p, AppendState) || IsA(p, MergeAppendState)))
 		{
-			if (p->instrument->nloops <= 0.)
-			{
-				/*
-				 * LAV: I found two cases for this code:
-				 * 1. if query returns with error.
-				 * 2. plan node has never visited. In this case we can not teach
-				 * AQO because ntuples value is equal to 0 and we will got
-				 * learn rows == 1. It is false knowledge: at another place of
-				 * a plan, scanning of the node may produce many tuples.
-				 * Both cases can't be used to learning AQO because give an
-				 * incorrect number of rows.
-				 */
-				elog(PANIC, "AQO: impossible situation");
-			}
-
-			Assert(predicted >= 1 && learn_rows >= 1);
+			Assert(predicted >= 1. && learn_rows >= 1.);
 
 			if (ctx->learn)
 				learn_sample(SubplanCtx.clauselist, SubplanCtx.selectivities,
-							 aqo_node->relids, learn_rows, p->plan);
+							 aqo_node->relids, learn_rows, p->plan, notExecuted);
 		}
 	}
 
@@ -548,8 +536,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		query_context.collect_stat = false;
 	}
 
-	if ((query_context.learn_aqo &&
-		!HasNeverExecutedNodes(queryDesc->planstate, NULL)) ||
+	if (query_context.learn_aqo ||
 		(!query_context.learn_aqo && query_context.collect_stat))
 	{
 		aqo_obj_stat ctx = {NIL, NIL, NIL, query_context.learn_aqo};
@@ -803,10 +790,9 @@ explain_print:
 	{
 		appendStringInfo(es->str, "AQO: rows=%.0lf", aqo_node->prediction);
 
-		if (ps->instrument)
+		if (ps->instrument && ps->instrument->nloops > 0.)
 		{
-			double nloops = ps->instrument->nloops;
-			double rows = ps->instrument->ntuples / nloops;
+			double rows = ps->instrument->ntuples / ps->instrument->nloops;
 
 			error = 100. * (aqo_node->prediction - (rows*wrkrs))
 									/ aqo_node->prediction;
