@@ -47,7 +47,8 @@ static char *PlanStateInfo = "PlanStateInfo";
 /* Query execution statistics collecting utilities */
 static void atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
 								  double **matrix, double *targets,
-								  double *features, double target);
+								  double *features, double target,
+								  List *relids);
 static void learn_sample(List *clauselist,
 						 List *selectivities,
 						 List *relidslist,
@@ -79,7 +80,8 @@ static void RemoveFromQueryEnv(QueryDesc *queryDesc);
 static void
 atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
 					 double **matrix, double *targets,
-					 double *features, double target)
+					 double *features, double target,
+					 List *relids)
 {
 	LOCKTAG	tag;
 	int		nrows;
@@ -87,11 +89,11 @@ atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
 	init_lock_tag(&tag, (uint32) fhash, (uint32) fss_hash);
 	LockAcquire(&tag, ExclusiveLock, false, false);
 
-	if (!load_fss(fhash, fss_hash, ncols, matrix, targets, &nrows))
+	if (!load_fss(fhash, fss_hash, ncols, matrix, targets, &nrows, NULL))
 		nrows = 0;
 
 	nrows = OkNNr_learn(nrows, ncols, matrix, targets, features, target);
-	update_fss(fhash, fss_hash, nrows, ncols, matrix, targets);
+	update_fss(fhash, fss_hash, nrows, ncols, matrix, targets, relids);
 
 	LockRelease(&tag, ExclusiveLock, false);
 }
@@ -126,7 +128,7 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 		return;
 
 	if (aqo_log_ignorance && aqo_node->prediction <= 0 &&
-		load_fss(fhash, fss_hash, 0, NULL, NULL, NULL) )
+		load_fss(fhash, fss_hash, 0, NULL, NULL, NULL, NULL) )
 	{
 		/*
 		 * If ignorance logging is enabled and the feature space was existed in
@@ -141,7 +143,8 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 
 	/* Critical section */
 	atomic_fss_learn_step(fhash, fss_hash,
-						  nfeatures, matrix, targets, features, target);
+						  nfeatures, matrix, targets, features, target,
+						  relidslist);
 	/* End of critical section */
 
 	if (nfeatures > 0)
