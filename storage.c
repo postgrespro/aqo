@@ -259,6 +259,53 @@ add_query_text(int qhash, const char *query_string)
 	return true;
 }
 
+
+static ArrayType *
+form_oids_vector(List *relids)
+{
+	Datum	   *oids;
+	ArrayType  *array;
+	ListCell   *lc;
+	int			i = 0;
+
+	if (relids == NIL)
+		return NULL;
+
+	oids = (Datum *) palloc(list_length(relids) * sizeof(Datum));
+
+	foreach(lc, relids)
+	{
+		Oid relid = lfirst_oid(lc);
+
+		oids[i++] = ObjectIdGetDatum(relid);
+	}
+
+	Assert(i == list_length(relids));
+	array = construct_array(oids, i, OIDOID, sizeof(Oid), true, TYPALIGN_INT);
+	pfree(oids);
+	return array;
+}
+
+static List *
+deform_oids_vector(Datum datum)
+{
+	ArrayType	*array = DatumGetArrayTypePCopy(PG_DETOAST_DATUM(datum));
+	Datum		*values;
+	int			i;
+	int			nelems = 0;
+	List		*relids = NIL;
+
+	deconstruct_array(array,
+					  OIDOID, sizeof(Oid), true, TYPALIGN_INT,
+					  &values, NULL, &nelems);
+	for (i = 0; i < nelems; ++i)
+		relids = lappend_oid(relids, DatumGetObjectId(values[i]));
+
+	pfree(values);
+	pfree(array);
+	return relids;
+}
+
 /*
  * Loads feature subspace (fss) from table aqo_data into memory.
  * The last column of the returned matrix is for target values of objects.
@@ -275,7 +322,8 @@ add_query_text(int qhash, const char *query_string)
  */
 bool
 load_fss(int fhash, int fss_hash,
-		 int ncols, double **matrix, double *targets, int *rows)
+		 int ncols, double **matrix, double *targets, int *rows,
+		 List **relids)
 {
 	RangeVar	*rv;
 	Relation	hrel;
@@ -287,8 +335,8 @@ load_fss(int fhash, int fss_hash,
 	Oid			reloid;
 	IndexScanDesc scan;
 	ScanKeyData	key[2];
-	Datum		values[5];
-	bool		isnull[5];
+	Datum		values[6];
+	bool		isnull[6];
 	bool		success = true;
 
 	reloid = RelnameGetRelid("aqo_fss_access_idx");
@@ -330,6 +378,9 @@ load_fss(int fhash, int fss_hash,
 				deform_matrix(values[3], matrix);
 
 			deform_vector(values[4], targets, rows);
+
+			if (relids != NULL)
+				*relids = deform_oids_vector(values[5]);
 		}
 		else
 			elog(ERROR, "unexpected number of features for hash (%d, %d):\
@@ -361,7 +412,7 @@ load_fss(int fhash, int fss_hash,
  */
 bool
 update_fss(int fhash, int fsshash, int nrows, int ncols,
-		   double **matrix, double *targets)
+		   double **matrix, double *targets, List *relids)
 {
 	RangeVar   *rv;
 	Relation	hrel;
@@ -371,9 +422,9 @@ update_fss(int fhash, int fsshash, int nrows, int ncols,
 	TupleDesc	tupDesc;
 	HeapTuple	tuple,
 				nw_tuple;
-	Datum		values[5];
-	bool		isnull[5] = { false, false, false, false, false };
-	bool		replace[5] = { false, false, false, true, true };
+	Datum		values[6];
+	bool		isnull[6] = { false, false, false, false, false, false };
+	bool		replace[6] = { false, false, false, true, true, false };
 	bool		shouldFree;
 	bool		find_ok = false;
 	bool		update_indexes;
@@ -421,6 +472,11 @@ update_fss(int fhash, int fsshash, int nrows, int ncols,
 			isnull[3] = true;
 
 		values[4] = PointerGetDatum(form_vector(targets, nrows));
+
+		/* Form array of relids. Only once. */
+		values[5] = PointerGetDatum(form_oids_vector(relids));
+		if ((void *) values[5] == NULL)
+			isnull[5] = true;
 		tuple = heap_form_tuple(tupDesc, values, isnull);
 
 		/*

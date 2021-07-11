@@ -27,7 +27,8 @@ PG_CPPFLAGS += -I$(libpq_srcdir) -I$(fdw_srcdir)
 EXTRA_REGRESS_OPTS=--temp-config=$(top_srcdir)/$(subdir)/conf.add
 EXTRA_INSTALL = contrib/postgres_fdw
 
-DATA = aqo--1.0.sql aqo--1.0--1.1.sql aqo--1.1--1.2.sql aqo--1.2.sql
+DATA = aqo--1.0.sql aqo--1.0--1.1.sql aqo--1.1--1.2.sql aqo--1.2.sql \
+		aqo--1.2--1.3.sql
 
 ifdef USE_PGXS
 PG_CONFIG ?= pg_config
