@@ -44,12 +44,12 @@ FROM aqo_queries JOIN aqo_query_stat USING (query_hash);
  f         | f       | f           | {2.9634630129852053} |   1
 (2 rows)
 
-SELECT query_text FROM aqo_query_texts ORDER BY (query_text);
+SELECT query_text FROM aqo_query_texts ORDER BY (md5(query_text));
                              query_text                             
 --------------------------------------------------------------------
+ SELECT count(*) FROM person WHERE age<18;
  COMMON feature space (do not delete!)
  SELECT count(*) FROM person WHERE age<18 AND passport IS NOT NULL;
- SELECT count(*) FROM person WHERE age<18;
 (3 rows)
 
 DROP EXTENSION aqo;
