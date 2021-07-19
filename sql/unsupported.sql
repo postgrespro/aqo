@@ -6,12 +6,23 @@ DROP TABLE IF EXISTS t;
 CREATE TABLE t AS SELECT (gs.* / 50) AS x FROM generate_series(1,1000) AS gs;
 ANALYZE t;
 
+CREATE TABLE t1 AS SELECT mod(gs,10) AS x, mod(gs+1,10) AS y
+	FROM generate_series(1,1000) AS gs;
+ANALYZE t, t1;
+
 --
 -- Do not support HAVING clause for now.
 --
 SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
 EXPLAIN (COSTS OFF)
 	SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
+
+--
+-- Doesn't estimates GROUP BY clause
+--
+SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,y)) AS q1;
+EXPLAIN (COSTS OFF)
+	SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,y)) AS q1;
 
 --
 -- The subplans issue

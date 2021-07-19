@@ -4,6 +4,9 @@ SET aqo.show_details = 'on';
 DROP TABLE IF EXISTS t;
 CREATE TABLE t AS SELECT (gs.* / 50) AS x FROM generate_series(1,1000) AS gs;
 ANALYZE t;
+CREATE TABLE t1 AS SELECT mod(gs,10) AS x, mod(gs+1,10) AS y
+	FROM generate_series(1,1000) AS gs;
+ANALYZE t, t1;
 --
 -- Do not support HAVING clause for now.
 --
@@ -29,6 +32,31 @@ EXPLAIN (COSTS OFF)
  AQO mode: LEARN
  JOINS: 0
 (11 rows)
+
+--
+-- Doesn't estimates GROUP BY clause
+--
+SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,y)) AS q1;
+ count 
+-------
+    10
+(1 row)
+
+EXPLAIN (COSTS OFF)
+	SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,y)) AS q1;
+          QUERY PLAN           
+-------------------------------
+ Aggregate
+   AQO not used
+   ->  HashAggregate
+         AQO not used
+         Group Key: t1.x, t1.y
+         ->  Seq Scan on t1
+               AQO: rows=1000
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(10 rows)
 
 --
 -- The subplans issue
