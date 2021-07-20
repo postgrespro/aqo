@@ -9,6 +9,7 @@
  */
 
 #include "aqo.h"
+#include "cardinality_hooks.h"
 #include "ignorance.h"
 #include "path_utils.h"
 
@@ -16,6 +17,7 @@
 #include "access/table.h"
 #include "catalog/pg_extension.h"
 #include "commands/extension.h"
+#include "utils/selfuncs.h"
 
 PG_MODULE_MAGIC;
 
@@ -218,6 +220,8 @@ _PG_init(void)
 	parampathinfo_postinit_hook					= ppi_hook;
 	prev_create_upper_paths_hook				= create_upper_paths_hook;
 	create_upper_paths_hook						= aqo_store_upper_signature_hook;
+	prev_estimate_num_groups_hook				= estimate_num_groups_hook;
+	estimate_num_groups_hook					= aqo_estimate_num_groups_hook;
 
 	init_deactivated_queries_storage();
 	AQOMemoryContext = AllocSetContextCreate(TopMemoryContext,

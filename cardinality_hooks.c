@@ -26,7 +26,10 @@
  */
 
 #include "aqo.h"
+#include "cardinality_hooks.h"
 #include "path_utils.h"
+
+estimate_num_groups_hook_type prev_estimate_num_groups_hook = NULL;
 
 double predicted_ppi_rows;
 double fss_ppi_hash;
@@ -391,4 +394,30 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 														   inner_path,
 														   sjinfo,
 														   clauses);
+}
+
+double
+aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
+							 RelOptInfo *rel, List **pgset,
+							 EstimationInfo *estinfo)
+{
+	double input_rows = rel->cheapest_total_path->rows;
+	double nGroups = -1;
+
+	if (!query_context.use_aqo)
+	{
+		if (prev_estimate_num_groups_hook != NULL)
+			nGroups = (*prev_estimate_num_groups_hook)(root, groupExprs, rel,
+													   pgset, estinfo);
+		if (nGroups < 0)
+			return estimate_num_groups(root, groupExprs, input_rows,
+									   pgset, estinfo);
+		else
+		 return nGroups;
+	}
+
+	if (prev_estimate_num_groups_hook != NULL)
+		elog(WARNING, "AQO replaced another estimator of a groups number");
+
+	return estimate_num_groups(root, groupExprs, input_rows, pgset, estinfo);
 }

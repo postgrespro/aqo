@@ -11,7 +11,7 @@ index f27e458482..0c62191904 100644
  		auto_explain	\
  		bloom		\
 diff --git a/src/backend/commands/explain.c b/src/backend/commands/explain.c
-index e81b990092..123bd27f1c 100644
+index 340db2bac4..b55896bb89 100644
 --- a/src/backend/commands/explain.c
 +++ b/src/backend/commands/explain.c
 @@ -24,6 +24,7 @@
@@ -57,7 +57,7 @@ index e81b990092..123bd27f1c 100644
  	if (es->format == EXPLAIN_FORMAT_TEXT)
  		appendStringInfoChar(es->str, '\n');
 diff --git a/src/backend/nodes/copyfuncs.c b/src/backend/nodes/copyfuncs.c
-index bd87f23784..f4d567b8ac 100644
+index 9d4893c504..1261be3494 100644
 --- a/src/backend/nodes/copyfuncs.c
 +++ b/src/backend/nodes/copyfuncs.c
 @@ -129,6 +129,7 @@ CopyPlanFields(const Plan *from, Plan *newnode)
@@ -69,7 +69,7 @@ index bd87f23784..f4d567b8ac 100644
  
  /*
 diff --git a/src/backend/nodes/outfuncs.c b/src/backend/nodes/outfuncs.c
-index e32b92e299..53b6188ff3 100644
+index e73be21bd6..2457b54c39 100644
 --- a/src/backend/nodes/outfuncs.c
 +++ b/src/backend/nodes/outfuncs.c
 @@ -342,6 +342,7 @@ _outPlanInfo(StringInfo str, const Plan *node)
@@ -81,10 +81,10 @@ index e32b92e299..53b6188ff3 100644
  
  /*
 diff --git a/src/backend/nodes/readfuncs.c b/src/backend/nodes/readfuncs.c
-index f0b34ecfac..cf6dfd37f9 100644
+index 77d082d8b4..b911ab02da 100644
 --- a/src/backend/nodes/readfuncs.c
 +++ b/src/backend/nodes/readfuncs.c
-@@ -1628,6 +1628,11 @@ ReadCommonPlan(Plan *local_node)
+@@ -1629,6 +1629,11 @@ ReadCommonPlan(Plan *local_node)
  	READ_NODE_FIELD(initPlan);
  	READ_BITMAPSET_FIELD(extParam);
  	READ_BITMAPSET_FIELD(allParam);
@@ -97,7 +97,7 @@ index f0b34ecfac..cf6dfd37f9 100644
  
  /*
 diff --git a/src/backend/optimizer/path/costsize.c b/src/backend/optimizer/path/costsize.c
-index 8577c7b138..bf7c625537 100644
+index b54cf34a8e..d3234ae683 100644
 --- a/src/backend/optimizer/path/costsize.c
 +++ b/src/backend/optimizer/path/costsize.c
 @@ -98,6 +98,11 @@
@@ -362,7 +362,7 @@ index 8577c7b138..bf7c625537 100644
  {
  	double		parallel_divisor = path->parallel_workers;
 diff --git a/src/backend/optimizer/plan/createplan.c b/src/backend/optimizer/plan/createplan.c
-index 439e6b6426..8dd516d8c8 100644
+index d3f8639a40..f18e1c1a54 100644
 --- a/src/backend/optimizer/plan/createplan.c
 +++ b/src/backend/optimizer/plan/createplan.c
 @@ -71,6 +71,7 @@
@@ -373,7 +373,7 @@ index 439e6b6426..8dd516d8c8 100644
  
  static Plan *create_plan_recurse(PlannerInfo *root, Path *best_path,
  								 int flags);
-@@ -546,6 +547,10 @@ create_plan_recurse(PlannerInfo *root, Path *best_path, int flags)
+@@ -543,6 +544,10 @@ create_plan_recurse(PlannerInfo *root, Path *best_path, int flags)
  			break;
  	}
  
@@ -384,7 +384,7 @@ index 439e6b6426..8dd516d8c8 100644
  	return plan;
  }
  
-@@ -5276,6 +5281,7 @@ copy_generic_path_info(Plan *dest, Path *src)
+@@ -5273,6 +5278,7 @@ copy_generic_path_info(Plan *dest, Path *src)
  	dest->plan_width = src->pathtarget->width;
  	dest->parallel_aware = src->parallel_aware;
  	dest->parallel_safe = src->parallel_safe;
@@ -392,6 +392,94 @@ index 439e6b6426..8dd516d8c8 100644
  }
  
  /*
+diff --git a/src/backend/optimizer/plan/planner.c b/src/backend/optimizer/plan/planner.c
+index 1868c4eff4..4fb43434af 100644
+--- a/src/backend/optimizer/plan/planner.c
++++ b/src/backend/optimizer/plan/planner.c
+@@ -143,7 +143,7 @@ static List *extract_rollup_sets(List *groupingSets);
+ static List *reorder_grouping_sets(List *groupingSets, List *sortclause);
+ static void standard_qp_callback(PlannerInfo *root, void *extra);
+ static double get_number_of_groups(PlannerInfo *root,
+-								   double path_rows,
++								   RelOptInfo *rel,
+ 								   grouping_sets_data *gd,
+ 								   List *target_list);
+ static RelOptInfo *create_grouping_paths(PlannerInfo *root,
+@@ -3150,7 +3150,7 @@ standard_qp_callback(PlannerInfo *root, void *extra)
+  */
+ static double
+ get_number_of_groups(PlannerInfo *root,
+-					 double path_rows,
++					 RelOptInfo *rel,
+ 					 grouping_sets_data *gd,
+ 					 List *target_list)
+ {
+@@ -3185,9 +3185,9 @@ get_number_of_groups(PlannerInfo *root,
+ 				{
+ 					List	   *gset = (List *) lfirst(lc);
+ 					GroupingSetData *gs = lfirst_node(GroupingSetData, lc2);
+-					double		numGroups = estimate_num_groups(root,
++					double		numGroups = estimate_num_groups_ext(root,
+ 																groupExprs,
+-																path_rows,
++																rel,
+ 																&gset,
+ 																NULL);
+ 
+@@ -3211,9 +3211,9 @@ get_number_of_groups(PlannerInfo *root,
+ 				{
+ 					List	   *gset = (List *) lfirst(lc);
+ 					GroupingSetData *gs = lfirst_node(GroupingSetData, lc2);
+-					double		numGroups = estimate_num_groups(root,
++					double		numGroups = estimate_num_groups_ext(root,
+ 																groupExprs,
+-																path_rows,
++																rel,
+ 																&gset,
+ 																NULL);
+ 
+@@ -3230,7 +3230,7 @@ get_number_of_groups(PlannerInfo *root,
+ 			groupExprs = get_sortgrouplist_exprs(parse->groupClause,
+ 												 target_list);
+ 
+-			dNumGroups = estimate_num_groups(root, groupExprs, path_rows,
++			dNumGroups = estimate_num_groups_ext(root, groupExprs, rel,
+ 											 NULL, NULL);
+ 		}
+ 	}
+@@ -3529,7 +3529,6 @@ create_ordinary_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel,
+ 							   GroupPathExtraData *extra,
+ 							   RelOptInfo **partially_grouped_rel_p)
+ {
+-	Path	   *cheapest_path = input_rel->cheapest_total_path;
+ 	RelOptInfo *partially_grouped_rel = NULL;
+ 	double		dNumGroups;
+ 	PartitionwiseAggregateType patype = PARTITIONWISE_AGGREGATE_NONE;
+@@ -3618,7 +3617,7 @@ create_ordinary_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel,
+ 	 * Estimate number of groups.
+ 	 */
+ 	dNumGroups = get_number_of_groups(root,
+-									  cheapest_path->rows,
++									  input_rel,
+ 									  gd,
+ 									  extra->targetList);
+ 
+@@ -6424,13 +6423,13 @@ create_partial_grouping_paths(PlannerInfo *root,
+ 	if (cheapest_total_path != NULL)
+ 		dNumPartialGroups =
+ 			get_number_of_groups(root,
+-								 cheapest_total_path->rows,
++								 input_rel,
+ 								 gd,
+ 								 extra->targetList);
+ 	if (cheapest_partial_path != NULL)
+ 		dNumPartialPartialGroups =
+ 			get_number_of_groups(root,
+-								 cheapest_partial_path->rows,
++								 input_rel,
+ 								 gd,
+ 								 extra->targetList);
+ 
 diff --git a/src/backend/optimizer/util/relnode.c b/src/backend/optimizer/util/relnode.c
 index e105a4d5f1..d821ea63bd 100644
 --- a/src/backend/optimizer/util/relnode.c
@@ -458,6 +546,38 @@ index e105a4d5f1..d821ea63bd 100644
  	joinrel->ppilist = lappend(joinrel->ppilist, ppi);
  
  	return ppi;
+diff --git a/src/backend/utils/adt/selfuncs.c b/src/backend/utils/adt/selfuncs.c
+index 0c8c05f6c2..3699b93dff 100644
+--- a/src/backend/utils/adt/selfuncs.c
++++ b/src/backend/utils/adt/selfuncs.c
+@@ -143,6 +143,7 @@
+ /* Hooks for plugins to get control when we ask for stats */
+ get_relation_stats_hook_type get_relation_stats_hook = NULL;
+ get_index_stats_hook_type get_index_stats_hook = NULL;
++estimate_num_groups_hook_type estimate_num_groups_hook = NULL;
+ 
+ static double eqsel_internal(PG_FUNCTION_ARGS, bool negate);
+ static double eqjoinsel_inner(Oid opfuncoid, Oid collation,
+@@ -3364,6 +3365,19 @@ add_unique_group_var(PlannerInfo *root, List *varinfos,
+  * assume such clauses do not reduce the number either (somewhat bogus,
+  * but we don't have the info to do better).
+  */
++double
++estimate_num_groups_ext(PlannerInfo *root, List *groupExprs, RelOptInfo *rel,
++					List **pgset, EstimationInfo *estinfo)
++{
++	double input_rows = rel->cheapest_total_path->rows;
++
++	if (estimate_num_groups_hook != NULL)
++		return (*estimate_num_groups_hook)(root, groupExprs, rel, pgset,
++										   estinfo);
++
++	return estimate_num_groups(root, groupExprs, input_rows, pgset, estinfo);
++}
++
+ double
+ estimate_num_groups(PlannerInfo *root, List *groupExprs, double input_rows,
+ 					List **pgset, EstimationInfo *estinfo)
 diff --git a/src/include/commands/explain.h b/src/include/commands/explain.h
 index e94d9e49cf..49236ced77 100644
 --- a/src/include/commands/explain.h
@@ -482,7 +602,7 @@ index e94d9e49cf..49236ced77 100644
  extern void ExplainQuery(ParseState *pstate, ExplainStmt *stmt,
  						 ParamListInfo params, DestReceiver *dest);
 diff --git a/src/include/nodes/pathnodes.h b/src/include/nodes/pathnodes.h
-index b7b2817a5d..cafad7009b 100644
+index a692bcfb53..74aed4b1fb 100644
 --- a/src/include/nodes/pathnodes.h
 +++ b/src/include/nodes/pathnodes.h
 @@ -751,6 +751,10 @@ typedef struct RelOptInfo
@@ -519,7 +639,7 @@ index b7b2817a5d..cafad7009b 100644
  
  
 diff --git a/src/include/nodes/plannodes.h b/src/include/nodes/plannodes.h
-index aaa3b65d04..5a49998c51 100644
+index 98a4c73f93..e6780fffb2 100644
 --- a/src/include/nodes/plannodes.h
 +++ b/src/include/nodes/plannodes.h
 @@ -158,6 +158,9 @@ typedef struct Plan
@@ -533,7 +653,7 @@ index aaa3b65d04..5a49998c51 100644
  
  /* ----------------
 diff --git a/src/include/optimizer/cost.h b/src/include/optimizer/cost.h
-index 0fe60d82e4..e3198d0cc9 100644
+index 2113bc82de..bcc2520cec 100644
 --- a/src/include/optimizer/cost.h
 +++ b/src/include/optimizer/cost.h
 @@ -39,6 +39,37 @@ typedef enum
@@ -617,7 +737,7 @@ index 0fe60d82e4..e3198d0cc9 100644
  
  #endif							/* COST_H */
 diff --git a/src/include/optimizer/pathnode.h b/src/include/optimizer/pathnode.h
-index 53261ee91f..4c6605a4ce 100644
+index f704d39980..2058694c68 100644
 --- a/src/include/optimizer/pathnode.h
 +++ b/src/include/optimizer/pathnode.h
 @@ -18,6 +18,10 @@
@@ -648,3 +768,30 @@ index bf1adfc52a..9c78e0f4e0 100644
  /*
   * prototypes for plan/planmain.c
   */
+diff --git a/src/include/utils/selfuncs.h b/src/include/utils/selfuncs.h
+index 9dd444e1ff..8b63d2162a 100644
+--- a/src/include/utils/selfuncs.h
++++ b/src/include/utils/selfuncs.h
+@@ -144,6 +144,12 @@ typedef bool (*get_index_stats_hook_type) (PlannerInfo *root,
+ 										   AttrNumber indexattnum,
+ 										   VariableStatData *vardata);
+ extern PGDLLIMPORT get_index_stats_hook_type get_index_stats_hook;
++typedef double (*estimate_num_groups_hook_type) (PlannerInfo *root,
++												 List *groupExprs,
++												 RelOptInfo *rel,
++												 List **pgset,
++												 EstimationInfo *estinfo);
++extern PGDLLIMPORT estimate_num_groups_hook_type estimate_num_groups_hook;
+ 
+ /* Functions in selfuncs.c */
+ 
+@@ -210,6 +216,9 @@ extern void mergejoinscansel(PlannerInfo *root, Node *clause,
+ 							 Selectivity *leftstart, Selectivity *leftend,
+ 							 Selectivity *rightstart, Selectivity *rightend);
+ 
++extern double estimate_num_groups_ext(PlannerInfo *root, List *groupExprs,
++									  RelOptInfo *rel, List **pgset,
++									  EstimationInfo *estinfo);
+ extern double estimate_num_groups(PlannerInfo *root, List *groupExprs,
+ 								  double input_rows, List **pgset,
+ 								  EstimationInfo *estinfo);
