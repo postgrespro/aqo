@@ -404,8 +404,8 @@ predict_num_groups(PlannerInfo *root, RelOptInfo *rel, List *group_exprs)
 
 double
 aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
-							 RelOptInfo *rel, List **pgset,
-							 EstimationInfo *estinfo)
+							 RelOptInfo *rel, RelOptInfo *grouped_rel,
+							 List **pgset, EstimationInfo *estinfo)
 {
 	double input_rows = rel->cheapest_total_path->rows;
 	double nGroups = -1;
@@ -417,6 +417,7 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 	{
 		if (prev_estimate_num_groups_hook != NULL)
 			nGroups = (*prev_estimate_num_groups_hook)(root, groupExprs, rel,
+													   grouped_rel,
 													   pgset, estinfo);
 		if (nGroups < 0)
 			return estimate_num_groups(root, groupExprs, input_rows,
