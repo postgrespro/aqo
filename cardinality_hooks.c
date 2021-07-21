@@ -396,6 +396,12 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 														   clauses);
 }
 
+static double
+predict_num_groups(PlannerInfo *root, RelOptInfo *rel, List *group_exprs)
+{
+	return -1;
+}
+
 double
 aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 							 RelOptInfo *rel, List **pgset,
@@ -403,6 +409,9 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 {
 	double input_rows = rel->cheapest_total_path->rows;
 	double nGroups = -1;
+	ListCell *lc;
+	int i = 0;
+	List *group_exprs = NIL;
 
 	if (!query_context.use_aqo)
 	{
@@ -419,5 +428,33 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 	if (prev_estimate_num_groups_hook != NULL)
 		elog(WARNING, "AQO replaced another estimator of a groups number");
 
+	/* Zero the estinfo output parameter, if non-NULL */
+	if (estinfo != NULL)
+		memset(estinfo, 0, sizeof(EstimationInfo));
+
+	if (groupExprs == NIL || (pgset && list_length(*pgset) < 1))
+		return 1.0;
+
+	foreach(lc, groupExprs)
+	{
+		Node	   *groupexpr = (Node *) lfirst(lc);
+
+		/* is expression in this grouping set? */
+		if (pgset && !list_member_int(*pgset, i++))
+			continue;
+
+		group_exprs = lappend(group_exprs, groupexpr);
+	}
+
+	if (group_exprs != NIL)
+	{
+		double predicted;
+
+		predicted = predict_num_groups(root, rel, group_exprs);
+		if (predicted > 0.)
+			return predicted;
+	}
+
+	pfree(group_exprs);
 	return estimate_num_groups(root, groupExprs, input_rows, pgset, estinfo);
 }
