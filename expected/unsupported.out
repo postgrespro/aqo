@@ -49,7 +49,7 @@ EXPLAIN (COSTS OFF)
  Aggregate
    AQO not used
    ->  HashAggregate
-         AQO not used
+         AQO: rows=10
          Group Key: t1.x, t1.y
          ->  Seq Scan on t1
                AQO: rows=1000
@@ -57,6 +57,74 @@ EXPLAIN (COSTS OFF)
  AQO mode: LEARN
  JOINS: 0
 (10 rows)
+
+SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,x*y)) AS q1;
+ count 
+-------
+    10
+(1 row)
+
+EXPLAIN (COSTS OFF)
+	SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,x*y)) AS q1;
+               QUERY PLAN               
+----------------------------------------
+ Aggregate
+   AQO not used
+   ->  HashAggregate
+         AQO: rows=10
+         Group Key: t1.x, (t1.x * t1.y)
+         ->  Seq Scan on t1
+               AQO: rows=1000
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(10 rows)
+
+SELECT count(*) FROM (
+	SELECT count(*) AS x FROM (
+		SELECT count(*) FROM t1 GROUP BY (x,y)
+	) AS q1
+) AS q2
+WHERE q2.x > 1;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(*) FROM (
+	SELECT count(*) AS x FROM (
+		SELECT count(*) FROM t1 GROUP BY (x,y)
+	) AS q1
+) AS q2
+WHERE q2.x > 1;
+ count 
+-------
+     1
+(1 row)
+
+EXPLAIN (COSTS OFF)
+SELECT count(*) FROM (
+	SELECT count(*) AS x FROM (
+		SELECT count(*) FROM t1 GROUP BY (x,y)
+	) AS q1
+) AS q2
+WHERE q2.x > 1;
+             QUERY PLAN              
+-------------------------------------
+ Aggregate
+   AQO not used
+   ->  Aggregate
+         AQO not used
+         Filter: (count(*) > 1)
+         ->  HashAggregate
+               AQO: rows=10
+               Group Key: t1.x, t1.y
+               ->  Seq Scan on t1
+                     AQO: rows=1000
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(13 rows)
 
 --
 -- The subplans issue

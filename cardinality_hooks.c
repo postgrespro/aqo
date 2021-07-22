@@ -27,6 +27,7 @@
 
 #include "aqo.h"
 #include "cardinality_hooks.h"
+#include "hash.h"
 #include "path_utils.h"
 
 estimate_num_groups_hook_type prev_estimate_num_groups_hook = NULL;
@@ -397,9 +398,36 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 }
 
 static double
-predict_num_groups(PlannerInfo *root, RelOptInfo *rel, List *group_exprs)
+predict_num_groups(PlannerInfo *root, RelOptInfo *rel, List *group_exprs,
+				   int *fss)
 {
-	return -1;
+	int child_fss = 0;
+	double prediction;
+	int rows;
+	double target;
+
+	if (rel->predicted_cardinality > 0.)
+		/* A fast path. Here we can use a fss hash of a leaf. */
+		child_fss = rel->fss_hash;
+	else
+	{
+		List *relids;
+		List *clauses;
+		List *selectivities = NIL;
+
+		relids = get_list_of_relids(root, rel->relids);
+		clauses = get_path_clauses(rel->cheapest_total_path, root, &selectivities);
+		(void) predict_for_relation(clauses, selectivities, relids, &child_fss);
+	}
+
+	*fss = get_grouped_exprs_hash(child_fss, group_exprs);
+
+	if (!load_fss(query_context.fspace_hash, *fss, 0, NULL, &target, &rows, NULL))
+		return -1;
+
+	Assert(rows == 1);
+	prediction = exp(target);
+	return (prediction <= 0) ? -1 : prediction;
 }
 
 double
@@ -409,9 +437,8 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 {
 	double input_rows = rel->cheapest_total_path->rows;
 	double nGroups = -1;
-	ListCell *lc;
-	int i = 0;
-	List *group_exprs = NIL;
+	int fss;
+	double predicted;
 
 	if (!query_context.use_aqo)
 	{
@@ -420,11 +447,14 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 													   grouped_rel,
 													   pgset, estinfo);
 		if (nGroups < 0)
-			return estimate_num_groups(root, groupExprs, input_rows,
-									   pgset, estinfo);
+			goto default_estimator;
 		else
 		 return nGroups;
 	}
+
+	if (pgset || groupExprs == NIL)
+		/* XXX: Don't support some GROUPING options */
+		goto default_estimator;
 
 	if (prev_estimate_num_groups_hook != NULL)
 		elog(WARNING, "AQO replaced another estimator of a groups number");
@@ -433,29 +463,25 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 	if (estinfo != NULL)
 		memset(estinfo, 0, sizeof(EstimationInfo));
 
-	if (groupExprs == NIL || (pgset && list_length(*pgset) < 1))
+	if (groupExprs == NIL)
 		return 1.0;
 
-	foreach(lc, groupExprs)
+	predicted = predict_num_groups(root, rel, groupExprs, &fss);
+
+	if (predicted > 0.)
 	{
-		Node	   *groupexpr = (Node *) lfirst(lc);
-
-		/* is expression in this grouping set? */
-		if (pgset && !list_member_int(*pgset, i++))
-			continue;
-
-		group_exprs = lappend(group_exprs, groupexpr);
+		grouped_rel->predicted_cardinality = predicted;
+		grouped_rel->rows = predicted;
+		grouped_rel->fss_hash = fss;
+		return predicted;
 	}
+	else
+		/*
+		 * Some nodes AQO doesn't know yet, some nodes are ignored by AQO
+		 * permanently - as an example, SubqueryScan.
+		 */
+		grouped_rel->predicted_cardinality = -1;
 
-	if (group_exprs != NIL)
-	{
-		double predicted;
-
-		predicted = predict_num_groups(root, rel, group_exprs);
-		if (predicted > 0.)
-			return predicted;
-	}
-
-	pfree(group_exprs);
+default_estimator:
 	return estimate_num_groups(root, groupExprs, input_rows, pgset, estinfo);
 }

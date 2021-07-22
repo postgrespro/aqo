@@ -33,6 +33,7 @@ static AQOPlanNode DefaultAQOPlanNode =
 	.relids = NIL,
 	.clauses = NIL,
 	.selectivities = NIL,
+	.grouping_exprs = NIL,
 	.jointype = -1,
 	.parallel_divisor = -1,
 	.was_parametrized = false,
@@ -350,6 +351,7 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 					src->type == T_HashPath);
 
 	node = get_aqo_plan_node(plan, true);
+
 	if (node->had_path)
 	{
 		/*
@@ -364,6 +366,16 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 	{
 		node->clauses = aqo_get_clauses(root, ((JoinPath *) src)->joinrestrictinfo);
 		node->jointype = ((JoinPath *) src)->jointype;
+	}
+	else if (IsA(src, AggPath))
+	/* Aggregation node must store grouping clauses. */
+	{
+		AggPath *ap = (AggPath *) src;
+
+		List *groupExprs = get_sortgrouplist_exprs(ap->groupClause,
+														root->processed_tlist);
+		/* Copy bare expressions for further AQO learning case. */
+		node->grouping_exprs = copyObject(groupExprs);
 	}
 	else
 	{
@@ -559,6 +571,4 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 	relids = get_list_of_relids(root, input_rel->relids);
 	fss_node->val.ival = get_fss_for_object(relids, clauses, NIL, NULL, NULL);
 	output_rel->private = lappend(output_rel->private, (void *) fss_node);
-
-//	elog(WARNING, "UPPER added %d ( fss=%d)", stage, fss_node->val.ival);
 }

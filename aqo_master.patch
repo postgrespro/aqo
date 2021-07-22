@@ -393,7 +393,7 @@ index d3f8639a40..f18e1c1a54 100644
  
  /*
 diff --git a/src/backend/optimizer/plan/planner.c b/src/backend/optimizer/plan/planner.c
-index 1868c4eff4..386ef43300 100644
+index 1868c4eff4..397e78c2ef 100644
 --- a/src/backend/optimizer/plan/planner.c
 +++ b/src/backend/optimizer/plan/planner.c
 @@ -143,7 +143,8 @@ static List *extract_rollup_sets(List *groupingSets);
@@ -453,6 +453,15 @@ index 1868c4eff4..386ef43300 100644
  		}
  	}
  	else if (parse->groupingSets)
+@@ -3403,7 +3407,7 @@ make_grouping_rel(PlannerInfo *root, RelOptInfo *input_rel,
+ 		 * NULL.  (This could be changed, but might require adjustments
+ 		 * elsewhere.)
+ 		 */
+-		grouped_rel = fetch_upper_rel(root, UPPERREL_GROUP_AGG, NULL);
++		grouped_rel = fetch_upper_rel(root, UPPERREL_GROUP_AGG, input_rel->relids);
+ 	}
+ 
+ 	/* Set target. */
 @@ -3529,7 +3533,6 @@ create_ordinary_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel,
  							   GroupPathExtraData *extra,
  							   RelOptInfo **partially_grouped_rel_p)

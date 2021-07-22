@@ -17,6 +17,7 @@
  */
 
 #include "aqo.h"
+#include "hash.h"
 #include "ignorance.h"
 #include "path_utils.h"
 
@@ -49,6 +50,7 @@ static void atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
 								  double **matrix, double *targets,
 								  double *features, double target,
 								  List *relids);
+static bool learnOnPlanState(PlanState *p, void *context);
 static void learn_sample(List *clauselist,
 						 List *selectivities,
 						 List *relidslist,
@@ -98,6 +100,39 @@ atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
 	LockRelease(&tag, ExclusiveLock, false);
 }
 
+static void
+learn_agg_sample(List *clauselist, List *selectivities, List *relidslist,
+			 double true_cardinality, Plan *plan, bool notExecuted)
+{
+	int fhash = query_context.fspace_hash;
+	int child_fss;
+	int fss;
+	double target;
+	double	*matrix[aqo_K];
+	double	targets[aqo_K];
+	AQOPlanNode *aqo_node = get_aqo_plan_node(plan, false);
+	int i;
+
+	/*
+	 * Learn 'not executed' nodes only once, if no one another knowledge exists
+	 * for current feature subspace.
+	 */
+	if (notExecuted && aqo_node->prediction > 0)
+		return;
+
+	target = log(true_cardinality);
+	child_fss = get_fss_for_object(relidslist, clauselist, NULL, NULL, NULL);
+	fss = get_grouped_exprs_hash(child_fss, aqo_node->grouping_exprs);
+
+	for (i = 0; i < aqo_K; i++)
+		matrix[i] = NULL;
+	/* Critical section */
+	atomic_fss_learn_step(fhash, fss,
+						  0, matrix, targets, NULL, target,
+						  relidslist);
+	/* End of critical section */
+}
+
 /*
  * For given object (i. e. clauselist, selectivities, relidslist, predicted and
  * true cardinalities) performs learning procedure.
@@ -119,6 +154,9 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 	target = log(true_cardinality);
 	fss_hash = get_fss_for_object(relidslist, clauselist,
 								  selectivities, &nfeatures, &features);
+
+	/* Only Agg nodes can have non-empty a grouping expressions list. */
+	Assert(!IsA(plan, Agg) || aqo_node->grouping_exprs != NIL);
 
 	/*
 	 * Learn 'not executed' nodes only once, if no one another knowledge exists
@@ -228,28 +266,17 @@ IsParallelTuplesProcessing(const Plan *plan, bool IsParallel)
 }
 
 /*
- * Walks over obtained PlanState tree, collects relation objects with their
- * clauses, selectivities and relids and passes each object to learn_sample.
+ * learn_subplan_recurse
  *
- * Returns clauselist, selectivities and relids.
- * Store observed subPlans into other_plans list.
- *
- * We use list_copy() of AQOPlanNode->clauses and AQOPlanNode->relids
- * because the plan may be stored in the cache after this. Operation
- * list_concat() changes input lists and may destruct cached plan.
+ * Emphasise recursion operation into separate function because of increasing
+ * complexity of this logic.
  */
 static bool
-learnOnPlanState(PlanState *p, void *context)
+learn_subplan_recurse(PlanState *p, aqo_obj_stat *ctx)
 {
-	aqo_obj_stat *ctx = (aqo_obj_stat *) context;
-	aqo_obj_stat SubplanCtx = {NIL, NIL, NIL, ctx->learn};
-	double predicted = 0.;
-	double learn_rows = 0.;
-	AQOPlanNode *aqo_node;
 	List *saved_subplan_list = NIL;
 	List *saved_initplan_list = NIL;
-	ListCell	*lc;
-	bool notExecuted = false;
+	ListCell *lc;
 
 	if (!p->instrument)
 		return true;
@@ -260,7 +287,8 @@ learnOnPlanState(PlanState *p, void *context)
 	p->subPlan = NIL;
 	p->initPlan = NIL;
 
-	planstate_tree_walker(p, learnOnPlanState, (void *) &SubplanCtx);
+	if (planstate_tree_walker(p, learnOnPlanState, (void *) ctx))
+		return true;
 
 	foreach(lc, saved_subplan_list)
 	{
@@ -282,8 +310,43 @@ learnOnPlanState(PlanState *p, void *context)
 
 	p->subPlan = saved_subplan_list;
 	p->initPlan = saved_initplan_list;
+	return false;
+}
+
+/*
+ * Walks over obtained PlanState tree, collects relation objects with their
+ * clauses, selectivities and relids and passes each object to learn_sample.
+ *
+ * Returns clauselist, selectivities and relids.
+ * Store observed subPlans into other_plans list.
+ *
+ * We use list_copy() of AQOPlanNode->clauses and AQOPlanNode->relids
+ * because the plan may be stored in the cache after this. Operation
+ * list_concat() changes input lists and may destruct cached plan.
+ */
+static bool
+learnOnPlanState(PlanState *p, void *context)
+{
+	aqo_obj_stat *ctx = (aqo_obj_stat *) context;
+	aqo_obj_stat SubplanCtx = {NIL, NIL, NIL, ctx->learn};
+	double predicted = 0.;
+	double learn_rows = 0.;
+	AQOPlanNode *aqo_node;
+	bool notExecuted = false;
+
+	/* Recurse into subtree and collect clauses. */
+	if (learn_subplan_recurse(p, &SubplanCtx))
+		/* If something goes wrong, return quckly. */
+		return true;
 
 	aqo_node = get_aqo_plan_node(p->plan, false);
+
+	/*
+	 * Compute real value of rows, passed through this node. Summarize rows
+	 * for parallel workers.
+	 * If 'never executed' node will be found - set specific sign, because we
+	 * allow to learn on such node only once.
+	 */
 	if (p->instrument->nloops > 0.)
 	{
 		/* If we can strongly calculate produced rows, do it. */
@@ -394,16 +457,20 @@ learnOnPlanState(PlanState *p, void *context)
 			 */
 			ctx->relidslist = list_copy(aqo_node->relids);
 
-		if (p->instrument && (p->righttree != NULL || p->lefttree == NULL ||
-							  aqo_node->clauses != NIL ||
-							  IsA(p, ForeignScanState) ||
-							  IsA(p, AppendState) || IsA(p, MergeAppendState)))
+		if (p->instrument)
 		{
 			Assert(predicted >= 1. && learn_rows >= 1.);
 
 			if (ctx->learn)
-				learn_sample(SubplanCtx.clauselist, SubplanCtx.selectivities,
+			{
+				if (IsA(p, AggState))
+					learn_agg_sample(SubplanCtx.clauselist, NULL,
+							 		 aqo_node->relids, learn_rows,
+									 p->plan, notExecuted);
+				else
+					learn_sample(SubplanCtx.clauselist, SubplanCtx.selectivities,
 							 aqo_node->relids, learn_rows, p->plan, notExecuted);
+			}
 		}
 	}
 

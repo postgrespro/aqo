@@ -24,6 +24,32 @@ SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,y)) AS q1;
 EXPLAIN (COSTS OFF)
 	SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,y)) AS q1;
 
+SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,x*y)) AS q1;
+EXPLAIN (COSTS OFF)
+	SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,x*y)) AS q1;
+
+SELECT count(*) FROM (
+	SELECT count(*) AS x FROM (
+		SELECT count(*) FROM t1 GROUP BY (x,y)
+	) AS q1
+) AS q2
+WHERE q2.x > 1;
+
+SELECT count(*) FROM (
+	SELECT count(*) AS x FROM (
+		SELECT count(*) FROM t1 GROUP BY (x,y)
+	) AS q1
+) AS q2
+WHERE q2.x > 1;
+
+EXPLAIN (COSTS OFF)
+SELECT count(*) FROM (
+	SELECT count(*) AS x FROM (
+		SELECT count(*) FROM t1 GROUP BY (x,y)
+	) AS q1
+) AS q2
+WHERE q2.x > 1;
+
 --
 -- The subplans issue
 --
