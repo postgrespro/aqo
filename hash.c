@@ -21,10 +21,10 @@
 #include "math.h"
 
 #include "aqo.h"
+#include "hash.h"
 
 static int	get_str_hash(const char *str);
 static int	get_node_hash(Node *node);
-static int	get_int_array_hash(int *arr, int len);
 static int	get_unsorted_unsafe_int_array_hash(int *arr, int len);
 static int	get_unordered_int_list_hash(List *lst);
 
@@ -69,6 +69,30 @@ get_query_hash(Query *parse, const char *query_text)
 	pfree(str_repr);
 
 	return hash;
+}
+
+int
+get_grouped_exprs_hash(int child_fss, List *group_exprs)
+{
+	ListCell	*lc;
+	int			*hashes = palloc(list_length(group_exprs) * sizeof(int));
+	int			i = 0;
+	int			final_hashes[2];
+
+	/* Calculate hash of each grouping expression. */
+	foreach(lc, group_exprs)
+	{
+		Node *clause = (Node *) lfirst(lc);
+
+		hashes[i++] = get_node_hash(clause);
+	}
+
+	/* Sort to get rid of expressions permutation. */
+	qsort(hashes, i, sizeof(int), int_cmp);
+
+	final_hashes[0] = child_fss;
+	final_hashes[1] = get_int_array_hash(hashes, i);
+	return get_int_array_hash(final_hashes, 2);
 }
 
 /*
@@ -246,7 +270,7 @@ get_str_hash(const char *str)
 /*
  * Computes hash for given node.
  */
-int
+static int
 get_node_hash(Node *node)
 {
 	char	   *str;

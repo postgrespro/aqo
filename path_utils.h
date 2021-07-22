@@ -21,6 +21,9 @@ typedef struct AQOPlanNode
 	List		*clauses;
 	List		*selectivities;
 
+	/* Grouping expressions from a target list. */
+	List		*grouping_exprs;
+
 	JoinType	jointype;
 	int			parallel_divisor;
 	bool		was_parametrized;
