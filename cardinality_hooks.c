@@ -398,7 +398,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 }
 
 static double
-predict_num_groups(PlannerInfo *root, RelOptInfo *rel, List *group_exprs,
+predict_num_groups(PlannerInfo *root, Path *subpath, List *group_exprs,
 				   int *fss)
 {
 	int child_fss = 0;
@@ -406,17 +406,17 @@ predict_num_groups(PlannerInfo *root, RelOptInfo *rel, List *group_exprs,
 	int rows;
 	double target;
 
-	if (rel->predicted_cardinality > 0.)
+	if (subpath->parent->predicted_cardinality > 0.)
 		/* A fast path. Here we can use a fss hash of a leaf. */
-		child_fss = rel->fss_hash;
+		child_fss = subpath->parent->fss_hash;
 	else
 	{
 		List *relids;
 		List *clauses;
 		List *selectivities = NIL;
 
-		relids = get_list_of_relids(root, rel->relids);
-		clauses = get_path_clauses(rel->cheapest_total_path, root, &selectivities);
+		relids = get_list_of_relids(root, subpath->parent->relids);
+		clauses = get_path_clauses(subpath, root, &selectivities);
 		(void) predict_for_relation(clauses, selectivities, relids, &child_fss);
 	}
 
@@ -432,10 +432,10 @@ predict_num_groups(PlannerInfo *root, RelOptInfo *rel, List *group_exprs,
 
 double
 aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
-							 RelOptInfo *rel, RelOptInfo *grouped_rel,
+							 Path *subpath, RelOptInfo *grouped_rel,
 							 List **pgset, EstimationInfo *estinfo)
 {
-	double input_rows = rel->cheapest_total_path->rows;
+	double input_rows = subpath->rows;
 	double nGroups = -1;
 	int fss;
 	double predicted;
@@ -443,7 +443,8 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 	if (!query_context.use_aqo)
 	{
 		if (prev_estimate_num_groups_hook != NULL)
-			nGroups = (*prev_estimate_num_groups_hook)(root, groupExprs, rel,
+			nGroups = (*prev_estimate_num_groups_hook)(root, groupExprs,
+													   subpath,
 													   grouped_rel,
 													   pgset, estinfo);
 		if (nGroups < 0)
@@ -466,7 +467,7 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 	if (groupExprs == NIL)
 		return 1.0;
 
-	predicted = predict_num_groups(root, rel, groupExprs, &fss);
+	predicted = predict_num_groups(root, subpath, groupExprs, &fss);
 
 	if (predicted > 0.)
 	{

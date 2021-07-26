@@ -7,7 +7,7 @@
 extern estimate_num_groups_hook_type prev_estimate_num_groups_hook;
 
 extern double aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
-										   RelOptInfo *rel,
+										   Path *subpath,
 										   RelOptInfo *grouped_rel,
 										   List **pgset,
 										   EstimationInfo *estinfo);

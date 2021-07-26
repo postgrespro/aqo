@@ -376,6 +376,7 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 														root->processed_tlist);
 		/* Copy bare expressions for further AQO learning case. */
 		node->grouping_exprs = copyObject(groupExprs);
+		node->relids = get_list_of_relids(root, ap->subpath->parent->relids);
 	}
 	else
 	{
