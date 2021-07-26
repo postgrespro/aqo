@@ -297,6 +297,9 @@ void init_deactivated_queries_storage(void);
 void fini_deactivated_queries_storage(void);
 bool query_is_deactivated(int query_hash);
 void add_deactivated_query(int query_hash);
+void makeAqoDir(void);
+void file_add_query_text(int qhash, const char *query_string);
+void file_read_query_text(void);
 
 /* Query preprocessing hooks */
 extern void get_query_text(ParseState *pstate, Query *query,

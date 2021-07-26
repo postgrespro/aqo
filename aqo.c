@@ -225,6 +225,7 @@ _PG_init(void)
 											 ALLOCSET_DEFAULT_SIZES);
 	RegisterResourceReleaseCallback(aqo_free_callback, NULL);
 	RegisterAQOPlanNodeMethods();
+	makeAqoDir();
 }
 
 PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);

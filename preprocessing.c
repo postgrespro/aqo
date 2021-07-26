@@ -232,7 +232,10 @@ aqo_planner(Query *parse,
 			 * analysis. In the case of cached plans we could have NULL query text.
 			 */
 			if (query_string != NULL)
+			{
 				add_query_text(query_context.query_hash, query_string);
+				file_add_query_text(query_context.query_hash, query_string);
+			}
 		}
 	}
 	else
