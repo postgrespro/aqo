@@ -23,7 +23,7 @@ EXPLAIN (COSTS OFF)
  Aggregate
    AQO not used
    ->  HashAggregate
-         AQO not used
+         AQO: rows=17
          Group Key: t.x
          ->  Seq Scan on t
                AQO: rows=801

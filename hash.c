@@ -161,6 +161,13 @@ get_fss_for_object(List *relidslist, List *clauselist,
 	inverse_idx = inverse_permutation(idx, n);
 
 	i = 0;
+	foreach(lc, clauselist)
+	{
+		sorted_clauses[inverse_idx[i]] = clause_hashes[i];
+		i++;
+	}
+
+	i = 0;
 	foreach(lc, selectivities)
 	{
 		Selectivity *s = (Selectivity *) lfirst(lc);
@@ -171,7 +178,6 @@ get_fss_for_object(List *relidslist, List *clauselist,
 			if ((*features)[inverse_idx[i]] < log_selectivity_lower_bound)
 				(*features)[inverse_idx[i]] = log_selectivity_lower_bound;
 		}
-		sorted_clauses[inverse_idx[i]] = clause_hashes[i];
 		i++;
 	}
 
