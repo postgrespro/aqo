@@ -423,6 +423,7 @@ AQOnodeCopy(struct ExtensibleNode *enew, const struct ExtensibleNode *eold)
 	/* These lists couldn't contain AQO nodes. Use basic machinery */
 	new->relids = copyObject(old->relids);
 	new->clauses = copyObject(old->clauses);
+	new->grouping_exprs = copyObject(old->grouping_exprs);
 	new->selectivities = copyObject(old->selectivities);
 	enew = (ExtensibleNode *) new;
 }
@@ -464,6 +465,7 @@ AQOnodeOut(struct StringInfoData *str, const struct ExtensibleNode *enode)
 	WRITE_NODE_FIELD(relids);
 	WRITE_NODE_FIELD(clauses);
 	WRITE_NODE_FIELD(selectivities);
+	WRITE_NODE_FIELD(grouping_exprs);
 
 	WRITE_ENUM_FIELD(jointype, JoinType);
 	WRITE_INT_FIELD(parallel_divisor);
@@ -516,6 +518,7 @@ AQOnodeRead(struct ExtensibleNode *enode)
 	READ_NODE_FIELD(relids);
 	READ_NODE_FIELD(clauses);
 	READ_NODE_FIELD(selectivities);
+	READ_NODE_FIELD(grouping_exprs);
 
 	READ_ENUM_FIELD(jointype, JoinType);
 	READ_INT_FIELD(parallel_divisor);
