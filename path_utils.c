@@ -372,8 +372,9 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 	{
 		AggPath *ap = (AggPath *) src;
 
+		/* Get TLE's from child target list corresponding to the list of exprs. */
 		List *groupExprs = get_sortgrouplist_exprs(ap->groupClause,
-														root->processed_tlist);
+												(*dest)->lefttree->targetlist);
 		/* Copy bare expressions for further AQO learning case. */
 		node->grouping_exprs = copyObject(groupExprs);
 		node->relids = get_list_of_relids(root, ap->subpath->parent->relids);
