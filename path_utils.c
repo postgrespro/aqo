@@ -377,6 +377,7 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 		/* Copy bare expressions for further AQO learning case. */
 		node->grouping_exprs = copyObject(groupExprs);
 		node->relids = get_list_of_relids(root, ap->subpath->parent->relids);
+		node->jointype = JOIN_INNER;
 	}
 	else
 	{
@@ -388,6 +389,7 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 
 	node->relids = list_concat(node->relids,
 								get_list_of_relids(root, src->parent->relids));
+
 	if (src->parallel_workers > 0)
 		node->parallel_divisor = get_parallel_divisor(src);
 	node->was_parametrized = (src->param_info != NULL);
