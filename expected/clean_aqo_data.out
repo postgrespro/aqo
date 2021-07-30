@@ -1,0 +1,102 @@
+CREATE EXTENSION aqo;
+SET aqo.mode = 'learn';
+CREATE TABLE a();
+SELECT * FROM a;
+--
+(0 rows)
+
+SELECT 'a'::regclass::oid AS a_oid \gset
+SELECT clean_aqo_data();
+NOTICE:  Cleaning aqo_data records
+ clean_aqo_data 
+----------------
+ 
+(1 row)
+
+-- lines with a_oid should remain
+SELECT count(*) FROM aqo_data WHERE :a_oid=ANY(oids);
+ count 
+-------
+     1
+(1 row)
+
+DROP TABLE a;
+SELECT clean_aqo_data();
+NOTICE:  Cleaning aqo_data records
+ clean_aqo_data 
+----------------
+ 
+(1 row)
+
+--  lines with a_oid should be deleted
+SELECT count(*) FROM aqo_data WHERE :a_oid=ANY(oids);
+ count 
+-------
+     0
+(1 row)
+
+CREATE TABLE a();
+CREATE TABLE b();
+SELECT * FROM a;
+--
+(0 rows)
+
+SELECT * FROM b;
+--
+(0 rows)
+
+SELECT * FROM b CROSS JOIN a;
+--
+(0 rows)
+
+SELECT 'a'::regclass::oid AS a_oid \gset
+SELECT 'b'::regclass::oid AS b_oid \gset
+-- new lines added to aqo_data
+SELECT count(*) FROM aqo_data WHERE :a_oid=ANY(oids);
+ count 
+-------
+     3
+(1 row)
+
+SELECT count(*) FROM aqo_data WHERE :b_oid=ANY(oids);
+ count 
+-------
+     3
+(1 row)
+
+DROP TABLE a;
+SELECT clean_aqo_data();
+NOTICE:  Cleaning aqo_data records
+ clean_aqo_data 
+----------------
+ 
+(1 row)
+
+-- lines with a_oid deleted, including line with both a_oid and b_oid
+SELECT count(*) FROM aqo_data WHERE :a_oid=ANY(oids);
+ count 
+-------
+     0
+(1 row)
+
+SELECT count(*) FROM aqo_data WHERE :b_oid=ANY(oids);
+ count 
+-------
+     2
+(1 row)
+
+DROP TABLE b;
+SELECT clean_aqo_data();
+NOTICE:  Cleaning aqo_data records
+ clean_aqo_data 
+----------------
+ 
+(1 row)
+
+-- lines with b_oid deleted
+SELECT count(*) FROM aqo_data WHERE :b_oid=ANY(oids);
+ count 
+-------
+     0
+(1 row)
+
