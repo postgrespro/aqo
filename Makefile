@@ -20,7 +20,8 @@ REGRESS =	aqo_disabled \
 			aqo_CVE-2020-14350 \
 			gucs \
 			forced_stat_collection \
-			unsupported
+			unsupported \
+			clean_aqo_data
 
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw
 PG_CPPFLAGS += -I$(libpq_srcdir) -I$(fdw_srcdir)
