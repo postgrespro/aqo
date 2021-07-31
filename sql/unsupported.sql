@@ -51,6 +51,13 @@ SELECT count(*) FROM (
 WHERE q2.x > 1;
 
 --
+-- Doesn't support GROUPING SETS clause
+--
+SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;
+EXPLAIN (COSTS OFF)
+	SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;
+
+--
 -- The subplans issue
 --
 SELECT count(*) FROM t WHERE x = (SELECT avg(x) FROM t WHERE x = 1);

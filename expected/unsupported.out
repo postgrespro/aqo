@@ -127,6 +127,34 @@ WHERE q2.x > 1;
 (13 rows)
 
 --
+-- Doesn't support GROUPING SETS clause
+--
+SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;
+ count 
+-------
+    31
+(1 row)
+
+EXPLAIN (COSTS OFF)
+	SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;
+          QUERY PLAN          
+------------------------------
+ Aggregate
+   AQO not used
+   ->  MixedAggregate
+         AQO not used
+         Hash Key: t1.x, t1.y
+         Hash Key: t1.x
+         Hash Key: t1.y
+         Group Key: ()
+         ->  Seq Scan on t1
+               AQO: rows=1000
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(13 rows)
+
+--
 -- The subplans issue
 --
 SELECT count(*) FROM t WHERE x = (SELECT avg(x) FROM t WHERE x = 1);
