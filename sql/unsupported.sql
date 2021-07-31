@@ -117,4 +117,33 @@ SELECT * FROM
 	(SELECT * FROM t WHERE x > 20) AS t1
 		USING(x);
 
+-- AQO need to predict total fetched tuples in a table.
+--
+-- At a non-leaf node we have prediction about input tuples - is a number of
+-- predicted output rows in underlying node. But for Scan nodes we don't have
+-- any prediction on number of fetched tuples.
+-- So, if selectivity was wrong we could make bad choice of Scan operation.
+-- For example, we could choose suboptimal index.
+
+-- Turn off statistics gathering for simple demonstration of filtering problem.
+ALTER TABLE t SET (autovacuum_enabled = 'false');
+CREATE INDEX ind1 ON t(x);
+
+SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+	SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
+
+-- Because of bad statistics we use a last created index instead of best choice.
+-- Here we filter more tuples than with the ind1 index.
+CREATE INDEX ind2 ON t(mod(x,3));
+SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+	SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
+
+-- Best choice is ...
+ANALYZE t;
+EXPLAIN (COSTS OFF)
+	SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
+
+DROP TABLE t,t1 CASCADE;
 DROP EXTENSION aqo;
