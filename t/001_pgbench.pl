@@ -4,7 +4,7 @@ use TestLib;
 use Test::More tests => 6;
 use PostgresNode;
 
-my $node = get_new_node('aqotest');
+my $node = PostgresNode->new('aqotest');
 $node->init;
 $node->append_conf('postgresql.conf', qq{
 						shared_preload_libraries = 'aqo'
