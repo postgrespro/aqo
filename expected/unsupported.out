@@ -11,14 +11,14 @@ ANALYZE t, t1;
 -- Do not support HAVING clause for now.
 --
 SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
- count 
+ count
 -------
     17
 (1 row)
 
 EXPLAIN (COSTS OFF)
 	SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
-          QUERY PLAN           
+          QUERY PLAN
 -------------------------------
  Aggregate
    AQO not used
@@ -37,14 +37,14 @@ EXPLAIN (COSTS OFF)
 -- Doesn't estimates GROUP BY clause
 --
 SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,y)) AS q1;
- count 
+ count
 -------
     10
 (1 row)
 
 EXPLAIN (COSTS OFF)
 	SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,y)) AS q1;
-          QUERY PLAN           
+          QUERY PLAN
 -------------------------------
  Aggregate
    AQO not used
@@ -59,14 +59,14 @@ EXPLAIN (COSTS OFF)
 (10 rows)
 
 SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,x*y)) AS q1;
- count 
+ count
 -------
     10
 (1 row)
 
 EXPLAIN (COSTS OFF)
 	SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,x*y)) AS q1;
-               QUERY PLAN               
+               QUERY PLAN
 ----------------------------------------
  Aggregate
    AQO not used
@@ -86,7 +86,7 @@ SELECT count(*) FROM (
 	) AS q1
 ) AS q2
 WHERE q2.x > 1;
- count 
+ count
 -------
      1
 (1 row)
@@ -97,7 +97,7 @@ SELECT count(*) FROM (
 	) AS q1
 ) AS q2
 WHERE q2.x > 1;
- count 
+ count
 -------
      1
 (1 row)
@@ -109,7 +109,7 @@ SELECT count(*) FROM (
 	) AS q1
 ) AS q2
 WHERE q2.x > 1;
-             QUERY PLAN              
+             QUERY PLAN
 -------------------------------------
  Aggregate
    AQO not used
@@ -127,10 +127,38 @@ WHERE q2.x > 1;
 (13 rows)
 
 --
+-- Doesn't support GROUPING SETS clause
+--
+SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;
+ count
+-------
+    31
+(1 row)
+
+EXPLAIN (COSTS OFF)
+      SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;
+          QUERY PLAN
+------------------------------
+ Aggregate
+   AQO not used
+   ->  MixedAggregate
+         AQO not used
+         Hash Key: t1.x, t1.y
+         Hash Key: t1.x
+         Hash Key: t1.y
+         Group Key: ()
+         ->  Seq Scan on t1
+               AQO not used
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(13 rows)
+
+--
 -- The subplans issue
 --
 SELECT count(*) FROM t WHERE x = (SELECT avg(x) FROM t WHERE x = 1);
- count 
+ count
 -------
     50
 (1 row)
@@ -139,7 +167,7 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 	SELECT count(*) FROM t WHERE x = (
 		SELECT avg(x) FROM t WHERE x = 1
 	);
-                        QUERY PLAN                        
+                        QUERY PLAN
 ----------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
@@ -160,7 +188,7 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 (16 rows)
 
 SELECT count(*) FROM t WHERE x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x);
- count 
+ count
 -------
   1000
 (1 row)
@@ -169,7 +197,7 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 	SELECT count(*) FROM t WHERE x = (
 		SELECT avg(x) FROM t t0 WHERE t0.x = t.x
 	);
-                            QUERY PLAN                            
+                            QUERY PLAN
 ------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
@@ -193,7 +221,7 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 	SELECT count(*) FROM t WHERE
 		x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21) OR
 		x IN (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21);
-                            QUERY PLAN                             
+                            QUERY PLAN
 -------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
@@ -224,7 +252,7 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 	SELECT count(*) FROM t WHERE
 		x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21) OR
 		x IN (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21);
-                            QUERY PLAN                             
+                            QUERY PLAN
 -------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
@@ -256,7 +284,7 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 	SELECT count(*) FROM t WHERE
 		x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 22) OR
 		x IN (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 23);
-                            QUERY PLAN                             
+                            QUERY PLAN
 -------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
@@ -289,7 +317,7 @@ SELECT count(*) FROM
 		JOIN
 	(SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x <> t.x)) AS q2
 		ON q1.x = q2.x+1;
- count 
+ count
 -------
  42550
 (1 row)
@@ -300,7 +328,7 @@ SELECT count(*) FROM
 		JOIN
 	(SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x <> t.x)) AS q2
 		ON q1.x = q2.x+1;
-                                  QUERY PLAN                                  
+                                  QUERY PLAN
 ------------------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
@@ -340,7 +368,7 @@ SELECT count(*) FROM
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 	SELECT count(*) FROM t WHERE (SELECT avg(x) FROM t t0 WHERE t0.x = t.x) =
 	(SELECT avg(x) FROM t t0 WHERE t0.x = t.x);
-                             QUERY PLAN                             
+                             QUERY PLAN
 --------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
@@ -369,7 +397,7 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 	SELECT count(*) FROM t WHERE (SELECT avg(x) FROM t t0 WHERE t0.x = t.x) =
 	(SELECT avg(x) FROM t t0 WHERE t0.x = t.x);
-                             QUERY PLAN                             
+                             QUERY PLAN
 --------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
@@ -403,7 +431,7 @@ SELECT * FROM
 		JOIN
 	(SELECT * FROM t WHERE x > 20) AS t1
 		USING(x);
- x 
+ x
 ---
 (0 rows)
 
@@ -413,7 +441,7 @@ SELECT * FROM
 		JOIN
 	(SELECT * FROM t WHERE x > 20) AS t1
 		USING(x);
-                 QUERY PLAN                  
+                 QUERY PLAN
 ---------------------------------------------
  Nested Loop (actual rows=0 loops=1)
    AQO: rows=1, error=100%
@@ -441,14 +469,14 @@ SELECT * FROM
 ALTER TABLE t SET (autovacuum_enabled = 'false');
 CREATE INDEX ind1 ON t(x);
 SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
- count 
+ count
 -------
     50
 (1 row)
 
 EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 	SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
-                           QUERY PLAN                           
+                           QUERY PLAN
 ----------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
@@ -467,14 +495,14 @@ EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 -- Here we filter more tuples than with the ind1 index.
 CREATE INDEX ind2 ON t(mod(x,3));
 SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
- count 
+ count
 -------
     50
 (1 row)
 
 EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 	SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
-                           QUERY PLAN                            
+                           QUERY PLAN
 -----------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
@@ -496,7 +524,7 @@ EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 ANALYZE t;
 EXPLAIN (COSTS OFF)
 	SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
-              QUERY PLAN               
+              QUERY PLAN
 ---------------------------------------
  Aggregate
    AQO not used
