@@ -30,6 +30,7 @@ typedef struct
 	List *clauselist;
 	List *selectivities;
 	List *relidslist;
+	List *path_tablenames; // my code
 	bool learn;
 } aqo_obj_stat;
 
@@ -47,11 +48,8 @@ static char *PlanStateInfo = "PlanStateInfo";
 static void atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
 								  double **matrix, double *targets,
 								  double *features, double target);
-static void learn_sample(List *clauselist,
-						 List *selectivities,
-						 List *relidslist,
-						 double true_cardinality,
-						 Plan *plan);
+static void learn_sample(List *clauselist, List *selectivities, List *relidslist,List *tablelist,
+			 double true_cardinality, Plan *plan);// my code
 static List *restore_selectivities(List *clauselist,
 								   List *relidslist,
 								   JoinType join_type,
@@ -99,7 +97,7 @@ atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
  * true cardinalities) performs learning procedure.
  */
 static void
-learn_sample(List *clauselist, List *selectivities, List *relidslist,
+learn_sample(List *clauselist, List *selectivities, List *relidslist,List *tablelist,
 			 double true_cardinality, Plan *plan)
 {
 	int		fhash = query_context.fspace_hash;
@@ -112,7 +110,7 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 	int		i;
 
 	target = log(true_cardinality);
-	fss_hash = get_fss_for_object(clauselist, selectivities, relidslist,
+	fss_hash = get_fss_for_object(clauselist, selectivities, tablelist,
 								  &nfeatures, &features);
 
 	if (aqo_log_ignorance && plan->predicted_cardinality <= 0 &&
@@ -236,7 +234,7 @@ static bool
 learnOnPlanState(PlanState *p, void *context)
 {
 	aqo_obj_stat *ctx = (aqo_obj_stat *) context;
-	aqo_obj_stat SubplanCtx = {NIL, NIL, NIL, ctx->learn};
+	aqo_obj_stat SubplanCtx = {NIL, NIL, NIL, NIL, ctx->learn};
 	double predicted = 0.;
 	double learn_rows = 0.;
 
@@ -338,12 +336,14 @@ learnOnPlanState(PlanState *p, void *context)
 											list_copy(p->plan->path_clauses));
 
 		if (p->plan->path_relids != NIL)
-			/*
+			{/*
 			 * This plan can be stored as cached plan. In the case we will have
 			 * bogus path_relids field (changed by list_concat routine) at the
 			 * next usage (and aqo-learn) of this plan.
 			 */
 			ctx->relidslist = list_copy(p->plan->path_relids);
+			ctx->path_tablenames= list_copy(p->plan->tablenames);
+			}
 
 		if (p->instrument && (p->righttree != NULL || p->lefttree == NULL ||
 							  p->plan->path_clauses != NIL ||
@@ -369,7 +369,7 @@ learnOnPlanState(PlanState *p, void *context)
 
 			if (ctx->learn)
 				learn_sample(SubplanCtx.clauselist, SubplanCtx.selectivities,
-							 p->plan->path_relids, learn_rows,
+							 p->plan->path_relids, ctx->path_tablenames,learn_rows,
 							 p->plan);
 		}
 	}
@@ -510,7 +510,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		!HasNeverExecutedNodes(queryDesc->planstate, NULL)) ||
 		(!query_context.learn_aqo && query_context.collect_stat))
 	{
-		aqo_obj_stat ctx = {NIL, NIL, NIL, query_context.learn_aqo};
+		aqo_obj_stat ctx = {NIL, NIL, NIL,NIL, query_context.learn_aqo};
 
 		/*
 		 * Analyze plan if AQO need to learn or need to collect statistics only.
@@ -642,6 +642,8 @@ aqo_copy_generic_path_info(PlannerInfo *root, Plan *dest, Path *src)
 
 	dest->path_relids = list_concat(dest->path_relids,
 								get_list_of_relids(root, src->parent->relids));
+	dest->tablenames = get_list_of_tablenames(root, src->parent->relids);
+
 	dest->path_parallel_workers = src->parallel_workers;
 	dest->was_parametrized = (src->param_info != NULL);
 
@@ -775,7 +777,7 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
 {
 	int wrkrs = 1;
 	double error = -1.;
-
+	plan->tablenames = list_copy(es->rtable_names);
 	if (!aqo_show_details || !plan || !ps->instrument)
 		goto explain_end;
 

@@ -42,7 +42,22 @@ get_selectivities(PlannerInfo *root,
 
 	return res;
 }
-
+List* // my code
+get_list_of_tablenames(PlannerInfo *root, Relids relids)
+{
+	Index       rti;
+	List   *l = NIL;
+	char	   *refname;
+    for (rti = 1; rti < root->simple_rel_array_size; rti++)
+   {
+    RelOptInfo *rel = root->simple_rel_array[rti];
+    Assert(rel->relid == rti);      /* sanity check on array */
+	
+	refname = root->simple_rte_array[rti]->eref->aliasname;
+	l = lappend(l, refname);
+	}
+	return l;
+}
 /*
  * Transforms given relids from path optimization stage format to list of
  * an absolute (independent on query optimization context) relids.

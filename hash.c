@@ -30,7 +30,10 @@ static int	get_unordered_int_list_hash(List *lst);
 static int	get_relidslist_hash(List *relidslist);
 static int get_fss_hash(int clauses_hash, int eclasses_hash,
 			 int relidslist_hash);
-
+//my code
+static int get_unordered_int_list_tblnames(List *lst);
+static int get_tbl_names_hash(List *tbl_names);
+//my code
 static char *replace_patterns(const char *str, const char *start_pattern,
 				 bool (*end_pattern) (char ch));
 static char *remove_consts(const char *str);
@@ -78,7 +81,7 @@ get_query_hash(Query *parse, const char *query_text)
  *		transforms selectivities to features
  */
 int
-get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
+get_fss_for_object(List *clauselist, List *selectivities, List *table_names,
 				   int *nfeatures, double **features)
 {
 	int			n;
@@ -166,8 +169,12 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 	 */
 	clauses_hash = get_int_array_hash(sorted_clauses, *nfeatures);
 	eclasses_hash = get_int_array_hash(eclass_hash, nargs);
-	relidslist_hash = get_relidslist_hash(relidslist);
-	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relidslist_hash);
+	// relidslist_hash = get_relidslist_hash(relidslist);
+	//my code
+	int         tableslist_hash;
+	tableslist_hash = get_tbl_names_hash(table_names);
+	//my code
+	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, tableslist_hash);
 
 	pfree(clause_hashes);
 	pfree(sorted_clauses);
@@ -258,7 +265,30 @@ get_unsorted_unsafe_int_array_hash(int *arr, int len)
 	qsort(arr, len, sizeof(*arr), int_cmp);
 	return get_int_array_hash(arr, len);
 }
+//my code
+int
+get_tbl_names_hash(List *tbl_names)
+{
+return get_unordered_int_list_tblnames(tbl_names);
+}
+int
+get_unordered_int_list_tblnames(List *lst)
+{
+	int			i = 0;
+	int			len;
+	int		   *arr;
+	ListCell   *l;
+	int			hash;
 
+	len = list_length(lst);
+	arr = palloc(sizeof(*arr) * len);
+	foreach(l, lst)
+		arr[i++] = get_str_hash((char *) lfirst(l));
+	hash = get_unsorted_unsafe_int_array_hash(arr, len);
+	pfree(arr);
+	return hash;
+}
+//my code
 /*
  * Returns for an integer list a hash which does not depend on the order
  * of elements.

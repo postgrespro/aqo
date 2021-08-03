@@ -152,9 +152,22 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	relid = planner_rt_fetch(rel->relid, root)->relid;
 	relids = list_make1_int(relid);
 
+	// my code
+	Index       rti;
+	char	   *refname;
+	List       *tablesname = NIL;
+    for (rti = 1; rti < root->simple_rel_array_size; rti++)
+   {
+    RelOptInfo *rel = root->simple_rel_array[rti];
+    Assert(rel->relid == rti);      /* sanity check on array */
+	
+	refname = root->simple_rte_array[rti]->eref->aliasname;
+	tablesname = lappend(tablesname, refname);
+	}
+	// my code
 	restrict_clauses = list_copy(rel->baserestrictinfo);
 	predicted = predict_for_relation(restrict_clauses, selectivities,
-									 relids, &fss);
+									 tablesname, &fss);
 	rel->fss_hash = fss;
 
 	if (predicted >= 0)
@@ -237,8 +250,20 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	}
 
 	relids = list_make1_int(relid);
-
-	predicted = predict_for_relation(allclauses, selectivities, relids, &fss);
+	// my code
+	Index       rti;
+	char	   *refname;
+	List       *tablesname = NIL;
+    for (rti = 1; rti < root->simple_rel_array_size; rti++)
+   {
+    RelOptInfo *rel = root->simple_rel_array[rti];
+    Assert(rel->relid == rti);      /* sanity check on array */
+	
+	refname = root->simple_rte_array[rti]->eref->aliasname;
+	tablesname = lappend(tablesname, refname);
+	}
+	// my code
+	predicted = predict_for_relation(allclauses, selectivities, tablesname, &fss);
 
 	predicted_ppi_rows = predicted;
 	fss_ppi_hash = fss;
@@ -297,8 +322,20 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	selectivities = list_concat(current_selectivities,
 								list_concat(outer_selectivities,
 											inner_selectivities));
-
-	predicted = predict_for_relation(allclauses, selectivities, relids, &fss);
+	// my code
+	Index       rti;
+	char	   *refname;
+	List       *tablesname = NIL;
+    for (rti = 1; rti < root->simple_rel_array_size; rti++)
+   {
+    RelOptInfo *rel = root->simple_rel_array[rti];
+    Assert(rel->relid == rti);      /* sanity check on array */
+	
+	refname = root->simple_rte_array[rti]->eref->aliasname;
+	tablesname = lappend(tablesname, refname);
+	}
+	// my code
+	predicted = predict_for_relation(allclauses, selectivities, tablesname, &fss);
 	rel->fss_hash = fss;
 
 	if (predicted >= 0)
@@ -362,8 +399,20 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	selectivities = list_concat(current_selectivities,
 								list_concat(outer_selectivities,
 											inner_selectivities));
-
-	predicted = predict_for_relation(allclauses, selectivities, relids, &fss);
+	// my code
+	Index       rti;
+	char	   *refname;
+	List       *tablesname = NIL;
+    for (rti = 1; rti < root->simple_rel_array_size; rti++)
+   {
+    RelOptInfo *rel = root->simple_rel_array[rti];
+    Assert(rel->relid == rti);      /* sanity check on array */
+	
+	refname = root->simple_rte_array[rti]->eref->aliasname;
+	tablesname = lappend(tablesname, refname);
+	}
+	// my code
+	predicted = predict_for_relation(allclauses, selectivities, tablesname, &fss);
 
 	predicted_ppi_rows = predicted;
 	fss_ppi_hash = fss;
