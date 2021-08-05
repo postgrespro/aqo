@@ -101,6 +101,29 @@ SELECT count(*) FROM aqo_query_stat WHERE
 (1 row)
 
 CREATE TABLE a();
+SELECT * FROM a;
+--
+(0 rows)
+
+SELECT 'a'::regclass::oid AS a_oid \gset
+-- add manually line with different fspace_hash and query_hash to aqo_queries
+INSERT INTO aqo_queries VALUES (:a_oid + 1, 't', 't', :a_oid, 'f');
+DROP TABLE a;
+SELECT clean_aqo_data();
+NOTICE:  Cleaning aqo_data records
+ clean_aqo_data 
+----------------
+ 
+(1 row)
+
+-- this line should remain
+SELECT count(*) FROM aqo_queries WHERE (fspace_hash = :a_oid AND query_hash = :a_oid + 1);
+ count 
+-------
+     1
+(1 row)
+
+CREATE TABLE a();
 CREATE TABLE b();
 SELECT * FROM a;
 --
