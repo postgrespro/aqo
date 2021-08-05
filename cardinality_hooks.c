@@ -162,8 +162,18 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
     Assert(rel->relid == rti);      /* sanity check on array */
 	
 	refname = root->simple_rte_array[rti]->eref->aliasname;
-	tablesname = lappend(tablesname, refname);
+	if (refname != "*RESULT*")
+		tablesname = lappend(tablesname, refname);
+	if (strlen(refname)>=0)
+	{
+		elog(ERROR, "aqo_set_baserel_rows_estimate: tablename is %s!",refname);
+		elog(ERROR, "aqo_set_baserel_rows_estimate: tablelist in ctx is %d!",list_length(tablesname));
 	}
+	}
+	/*if (list_length(tablesname)>=0)
+		{
+			elog(ERROR, "aqo_set_baserel_rows_estimate: tablelist in ctx is %d!",list_length(tablesname));
+		}*/
 	// my code
 	restrict_clauses = list_copy(rel->baserestrictinfo);
 	predicted = predict_for_relation(restrict_clauses, selectivities,
@@ -256,11 +266,17 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	List       *tablesname = NIL;
     for (rti = 1; rti < root->simple_rel_array_size; rti++)
    {
-    RelOptInfo *rel = root->simple_rel_array[rti];
-    Assert(rel->relid == rti);      /* sanity check on array */
+    RelOptInfo *rel = root->simple_rel_array[rti];   /* sanity check on array */
 	
 	refname = root->simple_rte_array[rti]->eref->aliasname;
-	tablesname = lappend(tablesname, refname);
+	if (strlen(refname)>=0)
+	{
+		elog(ERROR, "aqo_get_parameterized_baserel_size: tablename is %s!",refname);
+	
+		elog(ERROR, "aqo_get_parameterized_baserel_size: tablelist in this function is %d!",list_length(l));
+	}
+	if (refname != "*RESULT*")
+		tablesname = lappend(tablesname, refname);
 	}
 	// my code
 	predicted = predict_for_relation(allclauses, selectivities, tablesname, &fss);
@@ -332,7 +348,14 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
     Assert(rel->relid == rti);      /* sanity check on array */
 	
 	refname = root->simple_rte_array[rti]->eref->aliasname;
-	tablesname = lappend(tablesname, refname);
+	if (strlen(refname)>=0)
+	{
+		elog(ERROR, "aqo_set_joinrel_size_estimates: tablename is %s!",refname);
+	
+		elog(ERROR, "aqo_set_joinrel_size_estimates: tablelist in this function is %d!",list_length(tablesname));
+	}
+	if (refname != "*RESULT*")
+		tablesname = lappend(tablesname, refname);
 	}
 	// my code
 	predicted = predict_for_relation(allclauses, selectivities, tablesname, &fss);
@@ -409,7 +432,14 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
     Assert(rel->relid == rti);      /* sanity check on array */
 	
 	refname = root->simple_rte_array[rti]->eref->aliasname;
-	tablesname = lappend(tablesname, refname);
+	if (strlen(refname)>=0)
+	{
+		elog(ERROR, "aqo_get_parameterized_joinrel_size: tablename is %s!",refname);
+	
+		elog(ERROR, "aqo_get_parameterized_joinrel_size: tablelist in this function is %d!",list_length(tablesname));
+	}
+	if (refname != "*RESULT*")
+		tablesname = lappend(tablesname, refname);
 	}
 	// my code
 	predicted = predict_for_relation(allclauses, selectivities, tablesname, &fss);

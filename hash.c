@@ -107,7 +107,10 @@ get_fss_for_object(List *clauselist, List *selectivities, List *table_names,
 	int fss_hash;
 
 	n = list_length(clauselist);
-
+	if (list_length(table_names)==0)
+		{
+			elog(ERROR, "get_fss_for_object: tablelist in this function is null!");
+		}
 	get_eclasses(clauselist, &nargs, &args_hash, &eclass_hash);
 
 	clause_hashes = palloc(sizeof(*clause_hashes) * n);
@@ -173,6 +176,10 @@ get_fss_for_object(List *clauselist, List *selectivities, List *table_names,
 	//my code
 	int         tableslist_hash;
 	tableslist_hash = get_tbl_names_hash(table_names);
+	if (tableslist_hash==0)
+		{
+			elog(ERROR, "get_fss_for_object: tablelist_hash is 0!");
+		}
 	//my code
 	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, tableslist_hash);
 

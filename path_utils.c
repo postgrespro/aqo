@@ -52,10 +52,18 @@ get_list_of_tablenames(PlannerInfo *root, Relids relids)
    {
     RelOptInfo *rel = root->simple_rel_array[rti];
     Assert(rel->relid == rti);      /* sanity check on array */
+	if (refname != "*RESULT*")
+		refname = root->simple_rte_array[rti]->eref->aliasname;
 	
-	refname = root->simple_rte_array[rti]->eref->aliasname;
 	l = lappend(l, refname);
+	
+	if (strlen(refname)>=0)
+	{
+		elog(ERROR, "get_list_of_tablenames: tablename is %s!",refname);
+	
+		elog(ERROR, "get_list_of_tablenames: tablelist in this function is %d!",list_length(l));
 	}
+   }
 	return l;
 }
 /*
