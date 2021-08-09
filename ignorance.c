@@ -15,7 +15,7 @@ set_ignorance(bool newval, void *extra)
 {
 	/*
 	 * On postgres start we can't create any table.
-	 * It is not problem. We will check existence at each update and create this
+	 * It is not a problem. We will check existence at each update and create this
 	 * table in dynamic mode, if needed.
 	 */
 	if (IsUnderPostmaster && !IsParallelWorker() && newval &&
@@ -104,6 +104,8 @@ update_ignorance(int qhash, int fhash, int fss_hash, Plan *plan)
 	reloid = RangeVarGetRelid(rv, NoLock, true);
 	if (!OidIsValid(reloid))
 	{
+		elog(LOG, "Create AQO ignorance table.");
+
 		/* This table doesn't created on instance startup. Create now. */
 		create_ignorance_table(false);
 		reloid = RangeVarGetRelid(rv, NoLock, true);

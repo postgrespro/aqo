@@ -139,7 +139,7 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 {
 	double		predicted;
 	Oid			relid;
-	List	   *relids;
+	List	   *relids = NIL;
 	List	   *selectivities = NULL;
 	List	*clauses;
 	int fss = 0;
@@ -158,7 +158,9 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	}
 
 	relid = planner_rt_fetch(rel->relid, root)->relid;
-	relids = list_make1_int(relid);
+	if (OidIsValid(relid))
+		/* Predict for a plane table only. */
+		relids = list_make1_int(relid);
 
 	clauses = aqo_get_clauses(root, rel->baserestrictinfo);
 	predicted = predict_for_relation(clauses, selectivities,
@@ -201,7 +203,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 {
 	double		predicted;
 	Oid			relid = InvalidOid;
-	List	   *relids = NULL;
+	List	   *relids = NIL;
 	List	   *allclauses = NULL;
 	List	   *selectivities = NULL;
 	ListCell   *l;
@@ -249,7 +251,9 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 														   param_clauses);
 	}
 
-	relids = list_make1_int(relid);
+	if (OidIsValid(relid))
+		/* Predict for a plane table only. */
+		relids = list_make1_int(relid);
 
 	predicted = predict_for_relation(allclauses, selectivities, relids, &fss);
 

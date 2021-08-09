@@ -450,27 +450,31 @@ learnOnPlanState(PlanState *p, void *context)
 											list_copy(aqo_node->clauses));
 
 		if (aqo_node->relids != NIL)
+		{
 			/*
-			 * This plan can be stored as cached plan. In the case we will have
+			 * This plan can be stored as a cached plan. In the case we will have
 			 * bogus path_relids field (changed by list_concat routine) at the
 			 * next usage (and aqo-learn) of this plan.
 			 */
 			ctx->relidslist = list_copy(aqo_node->relids);
 
-		if (p->instrument)
-		{
-			Assert(predicted >= 1. && learn_rows >= 1.);
-
-			if (ctx->learn)
+			if (p->instrument)
 			{
-				if (IsA(p, AggState))
-					learn_agg_sample(SubplanCtx.clauselist, NULL,
-							 		 aqo_node->relids, learn_rows,
-									 p->plan, notExecuted);
+				Assert(predicted >= 1. && learn_rows >= 1.);
 
-				else
-					learn_sample(SubplanCtx.clauselist, SubplanCtx.selectivities,
-							 aqo_node->relids, learn_rows, p->plan, notExecuted);
+				if (ctx->learn)
+				{
+					if (IsA(p, AggState))
+						learn_agg_sample(SubplanCtx.clauselist, NULL,
+										 aqo_node->relids, learn_rows,
+										 p->plan, notExecuted);
+
+					else
+						learn_sample(SubplanCtx.clauselist,
+									 SubplanCtx.selectivities,
+									 aqo_node->relids, learn_rows,
+									 p->plan, notExecuted);
+				}
 			}
 		}
 	}
