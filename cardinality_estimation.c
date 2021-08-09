@@ -33,6 +33,13 @@ predict_for_relation(List *clauses, List *selectivities,
 	int		rows;
 	int		i;
 
+	if (relids == NIL)
+		/*
+		 * Don't make prediction for query plans without any underlying plane
+		 * tables. Use return value -4 for debug purposes.
+		 */
+		return -4.;
+
 	*fss_hash = get_fss_for_object(relids, clauses,
 								   selectivities, &nfeatures, &features);
 

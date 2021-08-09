@@ -126,11 +126,17 @@ get_list_of_relids(PlannerInfo *root, Relids relids)
 	if (relids == NULL)
 		return NIL;
 
+	/*
+	 * Check: don't take into account relations without underlying plane
+	 * source table.
+	 */
+	Assert(!bms_is_member(0, relids));
+
 	i = -1;
 	while ((i = bms_next_member(relids, i)) >= 0)
 	{
 		entry = planner_rt_fetch(i, root);
-		if (entry->relid != 0)
+		if (OidIsValid(entry->relid))
 			l = lappend_int(l, entry->relid);
 	}
 	return l;
