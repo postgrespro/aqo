@@ -10,9 +10,12 @@ $node->append_conf('postgresql.conf', qq{
 						shared_preload_libraries = 'aqo'
 						aqo.mode = 'intelligent'
 						aqo.log_ignorance = 'on'
+						log_statement = 'ddl'
 					});
 
-#my $result1;
+my $TRANSACTIONS = 1000;
+my $CLIENTS = 20;
+my $THREADS = 20;
 
 $node->start();
 
@@ -21,27 +24,32 @@ $node->start();
 $node->safe_psql('postgres', "CREATE EXTENSION aqo");
 $node->safe_psql('postgres', "ALTER SYSTEM SET aqo.mode = 'intelligent'");
 $node->command_ok([ 'pgbench', '-i', '-s', '1' ], 'init pgbench tables');
-$node->command_ok([ 'pgbench', '-t', "1000", '-c', "20", '-j', "20" ],
-	'pgbench in intelligent mode');
+$node->command_ok([ 'pgbench', '-t',
+					"$TRANSACTIONS", '-c', "$CLIENTS", '-j', "$THREADS" ],
+					'pgbench in intelligent mode');
 
 $node->safe_psql('postgres', "ALTER SYSTEM SET aqo.mode = 'controlled'");
-$node->command_ok([ 'pgbench', '-t', "1000", '-c', "20", '-j', "20" ],
-	'pgbench in controlled mode');
+$node->command_ok([ 'pgbench', '-t',
+					"$TRANSACTIONS", '-c', "$CLIENTS", '-j', "$THREADS" ],
+					'pgbench in controlled mode');
 
 $node->safe_psql('postgres', "ALTER SYSTEM SET aqo.mode = 'disabled'");
-$node->command_ok([ 'pgbench', '-t', "1000", '-c', "20", '-j', "20" ],
-	'pgbench in disabled mode');
+$node->command_ok([ 'pgbench', '-t',
+					"$TRANSACTIONS", '-c', "$CLIENTS", '-j', "$THREADS" ],
+					'pgbench in disabled mode');
 
 $node->safe_psql('postgres', "DROP EXTENSION aqo");
 $node->safe_psql('postgres', "CREATE EXTENSION aqo");
 
 $node->safe_psql('postgres', "ALTER SYSTEM SET aqo.mode = 'learn'");
-$node->command_ok([ 'pgbench', '-t', "1000", '-c', "20", '-j', "20" ],
-	'pgbench in learn mode');
+$node->command_ok([ 'pgbench', '-t',
+					"$TRANSACTIONS", '-c', "$CLIENTS", '-j', "$THREADS" ],
+					'pgbench in learn mode');
 
 $node->safe_psql('postgres', "ALTER SYSTEM SET aqo.mode = 'frozen'");
-$node->command_ok([ 'pgbench', '-t', "1000", '-c', "20", '-j', "20" ],
-	'pgbench in frozen mode');
+$node->command_ok([ 'pgbench', '-t',
+					"$TRANSACTIONS", '-c', "$CLIENTS", '-j', "$THREADS" ],
+					'pgbench in frozen mode');
 
 $node->safe_psql('postgres', "DROP EXTENSION aqo");
 
