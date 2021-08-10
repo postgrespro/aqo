@@ -43,7 +43,7 @@ get_selectivities(PlannerInfo *root,
 	return res;
 }
 List* // my code
-get_list_of_tablenames(PlannerInfo *root, List *relids)
+get_list_of_tablenames(PlannerInfo *root, Relids relids)
 {
 	List   *l = NIL;
 	char	   *refname;
@@ -52,13 +52,13 @@ get_list_of_tablenames(PlannerInfo *root, List *relids)
 	//elog(WARNING, "get_list_of_tablenames: rti is %d 0: %d!", list_length(relids), relids[0]);
 	
 		//elog(WARNING, "get_list_of_tablenames: rti is %d!", relids[0]);
-	foreach(lm, relids)
+	/*foreach(lm, relids)
 	{
 		rti = lfirst_int(lm);
 		break;
-	}
+	}*/
 	//rti = relids[0];
-	elog(WARNING, "get_list_of_tablenames: rti is %d!", rti);
+	/*elog(WARNING, "get_list_of_tablenames: rti is %d!", rti);
 	foreach(lc, root->parse->rtable)
 	{
 
@@ -70,20 +70,7 @@ get_list_of_tablenames(PlannerInfo *root, List *relids)
 		if (rti == rte->relid)
 			l = lappend(l, refname);
 			
-	}
-	foreach(lc, l)
-		{
-			elog(WARNING, "get_list_of_tablenames: tablename is %s!", (char *) lfirst(lc));
-		}
-	return l;
-		//elog(WARNING, "get_list_of_tablenames: length_list is %d!", list_length(l));
-		/*foreach(lc, l)
-		{
-			elog(WARNING, "get_list_of_tablenames: length of list is %s!", (char *) lfirst(lc));
-		}
-		return l;*/
-	
-		/*
+	}*/
 	for (rti = 1; rti < root->simple_rel_array_size; rti++)
    {
     RelOptInfo *rel = root->simple_rel_array[rti];
@@ -94,13 +81,29 @@ get_list_of_tablenames(PlannerInfo *root, List *relids)
 			continue;
 		}
 	else{
-		refname = root->simple_rte_array[rti]->alias;
+		refname = root->simple_rte_array[rti]->eref->aliasname;
 
 	}
 	l = lappend(l, refname);
-   } */
-   
+   } 
+   elog(WARNING, "get_list_of_tablenames: list is %d!", list_length(l));
+	foreach(lc, l)
+		{
+			elog(WARNING, "get_list_of_tablenames: table is %s!",(char *)lc );
+		}
+	return l;
 }
+		//elog(WARNING, "get_list_of_tablenames: length_list is %d!", list_length(l));
+		/*foreach(lc, l)
+		{
+			elog(WARNING, "get_list_of_tablenames: length of list is %s!", (char *) lfirst(lc));
+		}
+		return l;*/
+	
+		
+	
+   
+
 
 /*
  * Transforms given relids from path optimization stage format to list of

@@ -175,9 +175,24 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 			elog(ERROR, "aqo_set_baserel_rows_estimate: tablelist in ctx is %d!",list_length(tablesname));
 		}*/
 		ListCell *lc;
+		for (rti = 1; rti < root->simple_rel_array_size; rti++)
+   {
+    RelOptInfo *rel = root->simple_rel_array[rti];
+    Assert(rel->relid == rti);     
+	if (root->simple_rte_array[rti]->relid == 0)
+		{
+			refname = "Invalid table name";
+			continue;
+		}
+	else{
+		refname = root->simple_rte_array[rti]->eref->aliasname;
+
+	}
+	tablesname = lappend(tablesname, refname);
+   } 
 	/*if (list_length(root->parse->rtable)>0)
 		elog(ERROR, "get_list_of_tablenames: tablename is %d!",list_length(root->parse->rtable));*/
-	foreach(lc, root->parse->rtable)
+	/*foreach(lc, root->parse->rtable)
 	{
 		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
 		ListCell *lm;
@@ -198,12 +213,12 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 		if (flag)
 		{
 			tablesname = lappend(tablesname, refname);
-		}
+		}*/
 			/*if (strlen(refname)>=0)
 			{
 				elog(ERROR, "aqo_set_baserel_rows_estimate: tablename is %s!",refname);
 			}*/
-	}
+	
 	/*foreach(lc, tablesname)
 	{
 		elog(WARNING, "aqo_set_baserel_rows_estimate: tablename is %s!", (char *) lfirst(lc));
@@ -313,8 +328,22 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 		tablesname = lappend(tablesname, refname);
 	}*/
 	ListCell *lc, *lm;
-	
-	foreach(lc, root->parse->rtable)
+	for (rti = 1; rti < root->simple_rel_array_size; rti++)
+   {
+    RelOptInfo *rel = root->simple_rel_array[rti];
+    Assert(rel->relid == rti);     
+	if (root->simple_rte_array[rti]->relid == 0)
+		{
+			refname = "Invalid table name";
+			continue;
+		}
+	else{
+		refname = root->simple_rte_array[rti]->eref->aliasname;
+
+	}
+	tablesname = lappend(tablesname, refname);
+   } 
+	/*foreach(lc, root->parse->rtable)
 	{
 		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
 		
@@ -341,7 +370,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 			{
 				elog(ERROR, "aqo_get_parameterized_baserel_size: tablename is %s!",refname);
 			}*/
-		}
+		
 	// my code
 	predicted = predict_for_relation(allclauses, selectivities, tablesname, &fss);
 
@@ -422,8 +451,22 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 		tablesname = lappend(tablesname, refname);
 	}*/
 	ListCell *lc, *lm;
-	
-	foreach(lc, root->parse->rtable)
+	for (rti = 1; rti < root->simple_rel_array_size; rti++)
+   {
+    RelOptInfo *rel = root->simple_rel_array[rti];
+    Assert(rel->relid == rti);     
+	if (root->simple_rte_array[rti]->relid == 0)
+		{
+			refname = "Invalid table name";
+			continue;
+		}
+	else{
+		refname = root->simple_rte_array[rti]->eref->aliasname;
+
+	}
+	tablesname = lappend(tablesname, refname);
+   } 
+	/*foreach(lc, root->parse->rtable)
 	{
 		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
 		
@@ -445,7 +488,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 		{
 			tablesname = lappend(tablesname, refname);
 		}
-	}
+	}*/
 	// my code
 	predicted = predict_for_relation(allclauses, selectivities, tablesname, &fss);
 	rel->fss_hash = fss;
@@ -532,7 +575,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	}*/
 	ListCell *lc, *lm;
 	
-	foreach(lc, root->parse->rtable)
+	/*foreach(lc, root->parse->rtable)
 	{
 		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
 		
@@ -554,7 +597,22 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 		{
 			tablesname = lappend(tablesname, refname);
 		}
+		}*/
+		for (rti = 1; rti < root->simple_rel_array_size; rti++)
+   {
+    RelOptInfo *rel = root->simple_rel_array[rti];
+    Assert(rel->relid == rti);     
+	if (root->simple_rte_array[rti]->relid == 0)
+		{
+			refname = "Invalid table name";
+			continue;
 		}
+	else{
+		refname = root->simple_rte_array[rti]->eref->aliasname;
+
+	}
+	tablesname = lappend(tablesname, refname);
+   } 
 	// my code
 	predicted = predict_for_relation(allclauses, selectivities, tablesname, &fss);
 
