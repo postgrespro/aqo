@@ -43,29 +43,65 @@ get_selectivities(PlannerInfo *root,
 	return res;
 }
 List* // my code
-get_list_of_tablenames(PlannerInfo *root, Relids relids)
+get_list_of_tablenames(PlannerInfo *root, List *relids)
 {
-	Index       rti;
 	List   *l = NIL;
 	char	   *refname;
-    for (rti = 1; rti < root->simple_rel_array_size; rti++)
+	ListCell *lc, *lm;
+	int rti;
+	//elog(WARNING, "get_list_of_tablenames: rti is %d 0: %d!", list_length(relids), relids[0]);
+	
+		//elog(WARNING, "get_list_of_tablenames: rti is %d!", relids[0]);
+	foreach(lm, relids)
+	{
+		rti = lfirst_int(lm);
+		break;
+	}
+	//rti = relids[0];
+	elog(WARNING, "get_list_of_tablenames: rti is %d!", rti);
+	foreach(lc, root->parse->rtable)
+	{
+
+		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
+		refname =  rte->alias->aliasname;
+		//elog(WARNING, "get_list_of_tablenames: tablename is %s!", refname);
+		if (rte->relid!=rti)
+			continue;
+		if (rti == rte->relid)
+			l = lappend(l, refname);
+			
+	}
+	foreach(lc, l)
+		{
+			elog(WARNING, "get_list_of_tablenames: tablename is %s!", (char *) lfirst(lc));
+		}
+	return l;
+		//elog(WARNING, "get_list_of_tablenames: length_list is %d!", list_length(l));
+		/*foreach(lc, l)
+		{
+			elog(WARNING, "get_list_of_tablenames: length of list is %s!", (char *) lfirst(lc));
+		}
+		return l;*/
+	
+		/*
+	for (rti = 1; rti < root->simple_rel_array_size; rti++)
    {
     RelOptInfo *rel = root->simple_rel_array[rti];
-    Assert(rel->relid == rti);      /* sanity check on array */
-	if (refname != "*RESULT*")
-		refname = root->simple_rte_array[rti]->eref->aliasname;
-	
-	l = lappend(l, refname);
-	
-	if (strlen(refname)>=0)
-	{
-		elog(ERROR, "get_list_of_tablenames: tablename is %s!",refname);
-	
-		elog(ERROR, "get_list_of_tablenames: tablelist in this function is %d!",list_length(l));
+    Assert(rel->relid == rti);     
+	if (root->simple_rte_array[rti]->relid == 0)
+		{
+			refname = "Invalid table name";
+			continue;
+		}
+	else{
+		refname = root->simple_rte_array[rti]->alias;
+
 	}
-   }
-	return l;
+	l = lappend(l, refname);
+   } */
+   
 }
+
 /*
  * Transforms given relids from path optimization stage format to list of
  * an absolute (independent on query optimization context) relids.

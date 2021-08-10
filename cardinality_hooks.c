@@ -26,7 +26,7 @@
  */
 
 #include "aqo.h"
-
+#include <string.h> 
 double predicted_ppi_rows;
 double fss_ppi_hash;
 
@@ -156,12 +156,12 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	Index       rti;
 	char	   *refname;
 	List       *tablesname = NIL;
-    for (rti = 1; rti < root->simple_rel_array_size; rti++)
+    /*for (rti = 1; rti < root->simple_rel_array_size; rti++)
    {
     RelOptInfo *rel = root->simple_rel_array[rti];
-    Assert(rel->relid == rti);      /* sanity check on array */
+    Assert(rel->relid == rti);     
 	
-	refname = root->simple_rte_array[rti]->eref->aliasname;
+	refname = get_rel_name(root->simple_rte_array[rti]->relid;
 	if (refname != "*RESULT*")
 		tablesname = lappend(tablesname, refname);
 	if (strlen(refname)>=0)
@@ -174,6 +174,40 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 		{
 			elog(ERROR, "aqo_set_baserel_rows_estimate: tablelist in ctx is %d!",list_length(tablesname));
 		}*/
+		ListCell *lc;
+	/*if (list_length(root->parse->rtable)>0)
+		elog(ERROR, "get_list_of_tablenames: tablename is %d!",list_length(root->parse->rtable));*/
+	foreach(lc, root->parse->rtable)
+	{
+		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
+		ListCell *lm;
+		refname =  rte->eref->aliasname;
+		if (rte->relid==0)
+			continue;
+		int relid_check;
+		//tablesname = lappend(tablesname, refname);
+		bool flag = false;
+		foreach(lm, relids)
+		{
+			relid_check = lfirst_int(lm);
+			if (relid_check == rte->relid)
+			{
+				flag = true;
+			}
+		}
+		if (flag)
+		{
+			tablesname = lappend(tablesname, refname);
+		}
+			/*if (strlen(refname)>=0)
+			{
+				elog(ERROR, "aqo_set_baserel_rows_estimate: tablename is %s!",refname);
+			}*/
+	}
+	/*foreach(lc, tablesname)
+	{
+		elog(WARNING, "aqo_set_baserel_rows_estimate: tablename is %s!", (char *) lfirst(lc));
+	}*/
 	// my code
 	restrict_clauses = list_copy(rel->baserestrictinfo);
 	predicted = predict_for_relation(restrict_clauses, selectivities,
@@ -264,11 +298,11 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	Index       rti;
 	char	   *refname;
 	List       *tablesname = NIL;
-    for (rti = 1; rti < root->simple_rel_array_size; rti++)
+    /*for (rti = 1; rti < root->simple_rel_array_size; rti++)
    {
-    RelOptInfo *rel = root->simple_rel_array[rti];   /* sanity check on array */
+    RelOptInfo *rel = root->simple_rel_array[rti];  
 	
-	refname = root->simple_rte_array[rti]->eref->aliasname;
+	refname = root->simple_rte_array[rti]->relid;
 	if (strlen(refname)>=0)
 	{
 		elog(ERROR, "aqo_get_parameterized_baserel_size: tablename is %s!",refname);
@@ -277,7 +311,37 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	}
 	if (refname != "*RESULT*")
 		tablesname = lappend(tablesname, refname);
-	}
+	}*/
+	ListCell *lc, *lm;
+	
+	foreach(lc, root->parse->rtable)
+	{
+		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
+		
+		refname =  rte->eref->aliasname;
+		if (rte->relid==0)
+			continue;
+		int relid_check;
+		//tablesname = lappend(tablesname, refname);
+		bool flag = false;
+		foreach(lm, relids)
+		{
+			relid_check = lfirst_int(lm);
+			if (relid_check == rte->relid)
+			{
+				flag = true;
+			}
+		}
+		if (flag)
+		{
+			tablesname = lappend(tablesname, refname);
+		}
+	
+			/*if (strlen(refname)>=0)
+			{
+				elog(ERROR, "aqo_get_parameterized_baserel_size: tablename is %s!",refname);
+			}*/
+		}
 	// my code
 	predicted = predict_for_relation(allclauses, selectivities, tablesname, &fss);
 
@@ -342,12 +406,12 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	Index       rti;
 	char	   *refname;
 	List       *tablesname = NIL;
-    for (rti = 1; rti < root->simple_rel_array_size; rti++)
+    /*for (rti = 1; rti < root->simple_rel_array_size; rti++)
    {
     RelOptInfo *rel = root->simple_rel_array[rti];
-    Assert(rel->relid == rti);      /* sanity check on array */
+    Assert(rel->relid == rti);      
 	
-	refname = root->simple_rte_array[rti]->eref->aliasname;
+	refname = root->simple_rte_array[rti]->relid;
 	if (strlen(refname)>=0)
 	{
 		elog(ERROR, "aqo_set_joinrel_size_estimates: tablename is %s!",refname);
@@ -356,6 +420,31 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	}
 	if (refname != "*RESULT*")
 		tablesname = lappend(tablesname, refname);
+	}*/
+	ListCell *lc, *lm;
+	
+	foreach(lc, root->parse->rtable)
+	{
+		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
+		
+		refname =  rte->eref->aliasname;
+		if (rte->relid==0)
+			continue;
+		int relid_check;
+		//tablesname = lappend(tablesname, refname);
+		bool flag = false;
+		foreach(lm, relids)
+		{
+			relid_check = lfirst_int(lm);
+			if (relid_check == rte->relid)
+			{
+				flag = true;
+			}
+		}
+		if (flag)
+		{
+			tablesname = lappend(tablesname, refname);
+		}
 	}
 	// my code
 	predicted = predict_for_relation(allclauses, selectivities, tablesname, &fss);
@@ -426,12 +515,12 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	Index       rti;
 	char	   *refname;
 	List       *tablesname = NIL;
-    for (rti = 1; rti < root->simple_rel_array_size; rti++)
+    /*for (rti = 1; rti < root->simple_rel_array_size; rti++)
    {
     RelOptInfo *rel = root->simple_rel_array[rti];
-    Assert(rel->relid == rti);      /* sanity check on array */
+    Assert(rel->relid == rti);      
 	
-	refname = root->simple_rte_array[rti]->eref->aliasname;
+	refname = root->simple_rte_array[rti]->relid;
 	if (strlen(refname)>=0)
 	{
 		elog(ERROR, "aqo_get_parameterized_joinrel_size: tablename is %s!",refname);
@@ -440,7 +529,32 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	}
 	if (refname != "*RESULT*")
 		tablesname = lappend(tablesname, refname);
-	}
+	}*/
+	ListCell *lc, *lm;
+	
+	foreach(lc, root->parse->rtable)
+	{
+		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
+		
+		refname =  rte->eref->aliasname;
+		if (rte->relid==0)
+			continue;
+		int relid_check;
+		//tablesname = lappend(tablesname, refname);
+		bool flag = false;
+		foreach(lm, relids)
+		{
+			relid_check = lfirst_int(lm);
+			if (relid_check == rte->relid)
+			{
+				flag = true;
+			}
+		}
+		if (flag)
+		{
+			tablesname = lappend(tablesname, refname);
+		}
+		}
 	// my code
 	predicted = predict_for_relation(allclauses, selectivities, tablesname, &fss);
 
