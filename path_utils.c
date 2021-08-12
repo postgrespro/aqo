@@ -130,7 +130,8 @@ get_list_of_relids(PlannerInfo *root, Relids relids)
 	while ((i = bms_next_member(relids, i)) >= 0)
 	{
 		entry = planner_rt_fetch(i, root);
-		l = lappend_int(l, entry->relid);
+		if (entry->relid != 0)
+			l = lappend_int(l, entry->relid);
 	}
 	return l;
 }
