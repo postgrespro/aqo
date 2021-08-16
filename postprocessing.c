@@ -802,25 +802,24 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
 	Index       rti;
 	char	   *refname;
 	ListCell *lc, *lm;
-	foreach(lc, es->rtable)
+	RangeTblEntry *entry;
+	int i=-1;
+	while ((i = bms_next_member(plan->path_relids, i)) >= 0)
 	{
-		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
-		bool flag = false;
-		foreach(lm, plan->path_relids)
+		foreach(lm, es->rtable)
 		{
-			rti = lfirst_int(lm);
-			if (rti == rte->relid)
+			entry = (RangeTblEntry*) lm;
+			
+			if (i == entry->relid)
 			{
-				flag = true;
+				refname =  entry->eref->aliasname;
 			}
-		}
-		if (flag)
-		{
-			refname =  rte->eref->aliasname;
+			else
+			continue;
 			//elog(WARNING, "get_list_of_tablenames: tablename is %s!", refname);
-			if (rte->relid==0)                       
-				continue;
+			
 			plan->tablenames = lappend(plan->tablenames, refname);
+		
 		}
 	}
 	//plan->tablenames = list_copy(es->rtable_names);

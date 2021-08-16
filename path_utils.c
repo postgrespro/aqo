@@ -71,7 +71,7 @@ get_list_of_tablenames(PlannerInfo *root, Relids relids)
 			l = lappend(l, refname);
 			
 	}*/
-	for (rti = 1; rti < root->simple_rel_array_size; rti++)
+	/*for (rti = 1; rti < root->simple_rel_array_size; rti++)
    {
     RelOptInfo *rel = root->simple_rel_array[rti];
     Assert(rel->relid == rti);     
@@ -82,15 +82,24 @@ get_list_of_tablenames(PlannerInfo *root, Relids relids)
 		}
 	else{
 		refname = root->simple_rte_array[rti]->eref->aliasname;
-
 	}
 	l = lappend(l, refname);
    } 
-   elog(WARNING, "get_list_of_tablenames: list is %d!", list_length(l));
-	foreach(lc, l)
+   // elog(WARNING, "get_list_of_tablenames: list is %d!", list_length(l));
+	/*foreach(lc, l)
 		{
 			elog(WARNING, "get_list_of_tablenames: table is %s!",(char *)lc );
-		}
+		}*/
+	RangeTblEntry *entry;
+	if (relids == NULL)
+		return NIL;
+
+	int i = -1;
+	while ((i = bms_next_member(relids, i)) >= 0)
+	{
+		entry = planner_rt_fetch(i, root);
+		l = lappend(l, entry->eref->aliasname);
+	}
 	return l;
 }
 		//elog(WARNING, "get_list_of_tablenames: length_list is %d!", list_length(l));

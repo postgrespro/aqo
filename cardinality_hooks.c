@@ -156,6 +156,24 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	Index       rti;
 	char	   *refname;
 	List       *tablesname = NIL;
+	RangeTblEntry *entry;
+	ListCell *lc;
+	int i = -1;
+	foreach(lc, root->parse->rtable)
+	{
+		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
+		
+	while ((i = bms_next_member(relids, i)) >= 0)
+	{
+		if (rte->relid!=i)
+		continue;
+		else
+		{
+		entry = planner_rt_fetch(i, root);
+		tablesname = lappend(tablesname, entry->eref->aliasname);
+		}
+	}
+	}
     /*for (rti = 1; rti < root->simple_rel_array_size; rti++)
    {
     RelOptInfo *rel = root->simple_rel_array[rti];
@@ -174,9 +192,9 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 		{
 			elog(ERROR, "aqo_set_baserel_rows_estimate: tablelist in ctx is %d!",list_length(tablesname));
 		}*/
-		ListCell *lc;
+		/*ListCell *lc;
 		for (rti = 1; rti < root->simple_rel_array_size; rti++)
-   {
+   
     RelOptInfo *rel = root->simple_rel_array[rti];
     Assert(rel->relid == rti);     
 	if (root->simple_rte_array[rti]->relid == 0)
@@ -189,7 +207,7 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 
 	}
 	tablesname = lappend(tablesname, refname);
-   } 
+   } */
 	/*if (list_length(root->parse->rtable)>0)
 		elog(ERROR, "get_list_of_tablenames: tablename is %d!",list_length(root->parse->rtable));*/
 	/*foreach(lc, root->parse->rtable)
@@ -313,6 +331,26 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	Index       rti;
 	char	   *refname;
 	List       *tablesname = NIL;
+	RangeTblEntry *entry;
+	
+
+	ListCell *lc;
+	int i = -1;
+	foreach(lc, root->parse->rtable)
+	{
+		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
+		
+	while ((i = bms_next_member(relids, i)) >= 0)
+	{
+		if (rte->relid!=i)
+		continue;
+		else
+		{
+		entry = planner_rt_fetch(i, root);
+		tablesname = lappend(tablesname, entry->eref->aliasname);
+		}
+	}
+	}
     /*for (rti = 1; rti < root->simple_rel_array_size; rti++)
    {
     RelOptInfo *rel = root->simple_rel_array[rti];  
@@ -327,7 +365,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	if (refname != "*RESULT*")
 		tablesname = lappend(tablesname, refname);
 	}*/
-	ListCell *lc, *lm;
+	/*ListCell *lc, *lm;
 	for (rti = 1; rti < root->simple_rel_array_size; rti++)
    {
     RelOptInfo *rel = root->simple_rel_array[rti];
@@ -342,7 +380,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 
 	}
 	tablesname = lappend(tablesname, refname);
-   } 
+   } */
 	/*foreach(lc, root->parse->rtable)
 	{
 		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
@@ -435,6 +473,25 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	Index       rti;
 	char	   *refname;
 	List       *tablesname = NIL;
+	RangeTblEntry *entry;
+
+	ListCell *lc;
+	int i = -1;
+	foreach(lc, root->parse->rtable)
+	{
+		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
+		
+	while ((i = bms_next_member(relids, i)) >= 0)
+	{
+		if (rte->relid!=i)
+		continue;
+		else
+		{
+		entry = planner_rt_fetch(i, root);
+		tablesname = lappend(tablesname, entry->eref->aliasname);
+		}
+	}
+	}
     /*for (rti = 1; rti < root->simple_rel_array_size; rti++)
    {
     RelOptInfo *rel = root->simple_rel_array[rti];
@@ -450,7 +507,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	if (refname != "*RESULT*")
 		tablesname = lappend(tablesname, refname);
 	}*/
-	ListCell *lc, *lm;
+	/*ListCell *lc, *lm;
 	for (rti = 1; rti < root->simple_rel_array_size; rti++)
    {
     RelOptInfo *rel = root->simple_rel_array[rti];
@@ -465,7 +522,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 
 	}
 	tablesname = lappend(tablesname, refname);
-   } 
+   } */
 	/*foreach(lc, root->parse->rtable)
 	{
 		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
@@ -558,6 +615,25 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	Index       rti;
 	char	   *refname;
 	List       *tablesname = NIL;
+	RangeTblEntry *entry;
+
+	ListCell *lc;
+	int i = -1;
+	foreach(lc, root->parse->rtable)
+	{
+		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
+		
+	while ((i = bms_next_member(relids, i)) >= 0)
+	{
+		if (rte->relid!=i)
+		continue;
+		else
+		{
+		entry = planner_rt_fetch(i, root);
+		tablesname = lappend(tablesname, entry->eref->aliasname);
+		}
+	}
+	}
     /*for (rti = 1; rti < root->simple_rel_array_size; rti++)
    {
     RelOptInfo *rel = root->simple_rel_array[rti];
@@ -573,7 +649,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	if (refname != "*RESULT*")
 		tablesname = lappend(tablesname, refname);
 	}*/
-	ListCell *lc, *lm;
+	//ListCell *lc, *lm;
 	
 	/*foreach(lc, root->parse->rtable)
 	{
@@ -598,7 +674,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 			tablesname = lappend(tablesname, refname);
 		}
 		}*/
-		for (rti = 1; rti < root->simple_rel_array_size; rti++)
+		/*for (rti = 1; rti < root->simple_rel_array_size; rti++)
    {
     RelOptInfo *rel = root->simple_rel_array[rti];
     Assert(rel->relid == rti);     
@@ -612,7 +688,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 
 	}
 	tablesname = lappend(tablesname, refname);
-   } 
+   } */
 	// my code
 	predicted = predict_for_relation(allclauses, selectivities, tablesname, &fss);
 
