@@ -41,6 +41,9 @@ bool	force_collect_stat;
  */
 bool	aqo_show_hash;
 bool	aqo_show_details;
+int 	aqo_profile_mem;
+
+int 	size_of_log_buffer = 0;
 
 /* GUC variables */
 static const struct config_enum_entry format_options[] = {
@@ -193,6 +196,21 @@ _PG_init(void)
 							 0,
 							 NULL,
 							 set_ignorance,
+							 NULL
+	);
+
+	DefineCustomIntVariable(
+							 "aqo.profile_mem",
+							 NULL,
+							 NULL,
+							 &aqo_profile_mem,
+							 -1,
+							 -1,
+							 INT_MAX,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
 							 NULL
 	);
 

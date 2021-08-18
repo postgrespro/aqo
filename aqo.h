@@ -175,6 +175,8 @@ extern int	aqo_mode;
 extern bool	force_collect_stat;
 extern bool aqo_show_hash;
 extern bool aqo_show_details;
+extern int 	aqo_profile_mem;
+extern int 	size_of_log_buffer;
 
 /*
  * It is mostly needed for auto tuning of query. with auto tuning mode aqo
@@ -218,6 +220,12 @@ typedef struct QueryContextData
 	instr_time	query_starttime;
 	double		query_planning_time;
 } QueryContextData;
+
+typedef struct ProfileMemData
+{
+	int hash;
+	double execution_time;
+} ProfileMemData;
 
 extern double predicted_ppi_rows;
 extern double fss_ppi_hash;
@@ -373,4 +381,5 @@ extern Oid get_aqo_schema(void);
 extern void init_lock_tag(LOCKTAG *tag, uint32 key1, uint32 key2);
 
 extern List *cur_classes;
+
 #endif

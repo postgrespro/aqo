@@ -25,7 +25,16 @@
 #include "optimizer/optimizer.h"
 #include "postgres_fdw.h"
 #include "utils/queryenvironment.h"
+#include "funcapi.h"
+#include "miscadmin.h"
 
+static HTAB *profile_mem_queries = NULL;
+
+typedef struct
+{
+	int key;
+	double time;
+} ProfileMemEntry;
 
 typedef struct
 {
@@ -73,6 +82,73 @@ static void StorePlanInternals(QueryDesc *queryDesc);
 static bool ExtractFromQueryEnv(QueryDesc *queryDesc);
 static void RemoveFromQueryEnv(QueryDesc *queryDesc);
 
+PG_FUNCTION_INFO_V1(aqo_profile_mem_hash);
+
+Datum
+aqo_profile_mem_hash(PG_FUNCTION_ARGS)
+{
+	HASH_SEQ_STATUS hash_seq;
+	ProfileMemEntry *entry;
+    TupleDesc tupdesc;
+	HeapTuple tuple;
+    AttInMetadata *attinmeta;
+	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	Tuplestorestate *tupstore;
+	MemoryContext per_query_ctx;
+	MemoryContext oldcontext;
+	
+	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("set-valued function called in context that cannot accept a set")));
+	if (!(rsinfo->allowedModes & SFRM_Materialize))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("materialize mode required, but it is not allowed in this context")));
+
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		elog(ERROR, "return type must be a row type");
+
+	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
+	oldcontext = MemoryContextSwitchTo(per_query_ctx);
+
+	tupstore = tuplestore_begin_heap(true, false, work_mem);
+	attinmeta = TupleDescGetAttInMetadata(tupdesc);
+	rsinfo->returnMode = SFRM_Materialize;
+	rsinfo->setResult = tupstore;
+	rsinfo->setDesc = tupdesc;
+
+	MemoryContextSwitchTo(oldcontext);
+
+	if (!profile_mem_queries)
+	{
+		ReleaseTupleDesc(tupdesc);
+		tuplestore_donestoring(tupstore);
+		elog(WARNING, "Hash table 'profile_mem_queries' doesn't exist");
+		PG_RETURN_VOID();
+	}
+
+	hash_seq_init(&hash_seq, profile_mem_queries);
+	while (((entry = (ProfileMemEntry *) hash_seq_search(&hash_seq)) != NULL))
+	{
+		char **values;
+		
+		values = (char **) palloc(2 * sizeof(char *));
+		values[0] = (char *) palloc(16 * sizeof(char));
+		values[1] = (char *) palloc(16 * sizeof(char));
+		
+		snprintf(values[0], 16, "%d", entry->key);
+		snprintf(values[1], 16, "%0.5f", entry->time);
+		
+		tuple = BuildTupleFromCStrings(attinmeta, values);
+		tuplestore_puttuple(tupstore, tuple);
+	}
+
+	ReleaseTupleDesc(tupdesc);
+	tuplestore_donestoring(tupstore);
+
+	PG_RETURN_VOID();
+}
 
 /*
  * This is the critical section: only one runner is allowed to be inside this
@@ -584,7 +660,10 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 {
 	double totaltime;
 	double cardinality_error;
+	HASHCTL hash_ctl;
+	bool found;
 	QueryStat *stat = NULL;
+	ProfileMemEntry *pentry;
 	instr_time endtime;
 	EphemeralNamedRelation enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
 	LOCKTAG tag;
@@ -592,6 +671,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	cardinality_sum_errors = 0.;
 	cardinality_num_objects = 0;
 
+	
 	if (!ExtractFromQueryEnv(queryDesc))
 		/* AQO keep all query-related preferences at the query context.
 		 * It is needed to prevent from possible recursive changes, at
@@ -600,7 +680,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		 * stage for this query.
 		 */
 		goto end;
-
+	
 	njoins = (enr != NULL) ? *(int *) enr->reldata : -1;
 
 	Assert(!IsParallelWorker());
@@ -630,6 +710,32 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 				 (uint32) query_context.fspace_hash);
 	LockAcquire(&tag, ExclusiveLock, false, false);
 
+	if (aqo_profile_mem > 0)
+	{
+		if (profile_mem_queries == NULL) 
+		{
+			hash_ctl.keysize = sizeof(int);
+			hash_ctl.entrysize = sizeof(ProfileMemEntry);
+
+			profile_mem_queries = ShmemInitHash("aqo_profile_mem_queries", aqo_profile_mem, aqo_profile_mem, &hash_ctl, HASH_ELEM | HASH_BLOBS);
+		}					 
+							
+		INSTR_TIME_SET_CURRENT(endtime);
+		INSTR_TIME_SUBTRACT(endtime, query_context.query_starttime);
+		totaltime = INSTR_TIME_GET_DOUBLE(endtime);
+
+		pentry = (ProfileMemEntry *) hash_search(profile_mem_queries, &query_context.query_hash, HASH_ENTER, &found);
+
+		if (found)
+		{
+			pentry->time += totaltime - query_context.query_planning_time;
+		}
+		else
+		{
+			pentry->time = totaltime - query_context.query_planning_time;
+		}
+	}
+
 	if (query_context.collect_stat)
 	{
 		INSTR_TIME_SET_CURRENT(endtime);
@@ -646,6 +752,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		{
 			/* Calculate AQO statistics. */
 			if (query_context.use_aqo)
+			{
 				/* For the case, when query executed with AQO predictions. */
 				update_query_stat_row(stat->execution_time_with_aqo,
 									 &stat->execution_time_with_aqo_size,
@@ -657,6 +764,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 									 totaltime - query_context.query_planning_time,
 									 cardinality_error,
 									 &stat->executions_with_aqo);
+			}
 			else
 				/* For the case, when query executed without AQO predictions. */
 				update_query_stat_row(stat->execution_time_without_aqo,
