@@ -170,7 +170,7 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 		else
 		{
 		entry = planner_rt_fetch(i, root);
-		tablesname = lappend(tablesname, entry->eref->aliasname);
+		tablesname = lappend(tablesname, (char) *(entry->eref->aliasname));
 		}
 	}
 	}
@@ -347,7 +347,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 		else
 		{
 		entry = planner_rt_fetch(i, root);
-		tablesname = lappend(tablesname, entry->eref->aliasname);
+		tablesname = lappend(tablesname, (char) *(entry->eref->aliasname));
 		}
 	}
 	}
@@ -488,7 +488,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 		else
 		{
 		entry = planner_rt_fetch(i, root);
-		tablesname = lappend(tablesname, entry->eref->aliasname);
+		tablesname = lappend(tablesname, (char) *(entry->eref->aliasname));
 		}
 	}
 	}
@@ -630,7 +630,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 		else
 		{
 		entry = planner_rt_fetch(i, root);
-		tablesname = lappend(tablesname, entry->eref->aliasname);
+		tablesname = lappend(tablesname, (char) *(entry->eref->aliasname));
 		}
 	}
 	}

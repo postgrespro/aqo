@@ -812,7 +812,7 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
 			
 			if (i == entry->relid)
 			{
-				refname =  entry->eref->aliasname;
+				refname = (char) *(entry->eref->aliasname);
 			}
 			else
 			continue;
