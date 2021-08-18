@@ -7,11 +7,10 @@ DECLARE
     aqo_query_texts_row aqo_query_texts%ROWTYPE;
     aqo_query_stat_row aqo_query_stat%ROWTYPE;
     oid_var oid;
-    fspace_hash_var numeric;
+    fspace_hash_var int;
     delete_row boolean DEFAULT false;
 BEGIN
     RAISE NOTICE 'Cleaning aqo_data records';
-
     FOR aqo_data_row IN
         SELECT * FROM aqo_data
     LOOP
@@ -25,7 +24,6 @@ BEGIN
                 END IF;
             END LOOP;
         END IF;
-
         FOR aqo_queries_row IN
             SELECT * FROM aqo_queries
         LOOP
@@ -33,7 +31,6 @@ BEGIN
                 fspace_hash_var <> 0 AND
                 fspace_hash_var = aqo_queries_row.fspace_hash AND
                 aqo_queries_row.fspace_hash = aqo_queries_row.query_hash) THEN
-
                 DELETE FROM aqo_data WHERE aqo_data = aqo_data_row;
                 DELETE FROM aqo_queries WHERE aqo_queries = aqo_queries_row;
                 FOR aqo_query_texts_row IN
@@ -51,5 +48,33 @@ BEGIN
             END IF;
         END LOOP;
     END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION public.top_execution_time_queries(n int)
+    RETURNS TABLE(num bigint,
+                  class int,
+                  execution_time double precision[]
+                  )
+        AS $$
+BEGIN
+    RAISE NOTICE 'Top % execution time classes of queries', n;
+    RETURN QUERY SELECT row_number() OVER(ORDER BY execution_time_without_aqo DESC) num, aqo_query_stat.query_hash, execution_time_without_aqo
+        FROM aqo_query_stat RIGHT OUTER JOIN aqo_queries ON aqo_queries.fspace_hash = aqo_query_stat.query_hash WHERE aqo_query_stat.query_hash <> 0
+            GROUP BY aqo_query_stat.query_hash ORDER BY execution_time_without_aqo DESC LIMIT n;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION public.top_cardinality_error_queries(n int)
+    RETURNS TABLE(num bigint,
+                  class int,
+                  cardinality_error double precision[]
+                  )
+        AS $$
+BEGIN
+    RAISE NOTICE 'Top % cardinality error classes of queries', n;
+    RETURN QUERY SELECT row_number() OVER(ORDER BY cardinality_error_without_aqo DESC) num, aqo_query_stat.query_hash, cardinality_error_without_aqo
+        FROM aqo_query_stat RIGHT OUTER JOIN aqo_queries ON aqo_queries.fspace_hash = aqo_query_stat.query_hash WHERE aqo_query_stat.query_hash <> 0
+            GROUP BY aqo_query_stat.query_hash ORDER BY cardinality_error_without_aqo DESC LIMIT n;
 END;
 $$ LANGUAGE plpgsql;
