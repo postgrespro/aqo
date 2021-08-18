@@ -21,7 +21,8 @@ REGRESS =	aqo_disabled \
 			gucs \
 			forced_stat_collection \
 			unsupported \
-			clean_aqo_data
+			clean_aqo_data \
+			top_queries
 
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw
 PG_CPPFLAGS += -I$(libpq_srcdir) -I$(fdw_srcdir)
