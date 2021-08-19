@@ -110,10 +110,7 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,List *table
 	int		i;
 
 	target = log(true_cardinality);
-	if (list_length(tablelist)>=0)
-		{
-			elog(ERROR, "learnsample: tablelist in this function is %d!",list_length(tablelist));
-		}
+	
 	fss_hash = get_fss_for_object(clauselist, selectivities, tablelist,
 								  &nfeatures, &features);
 
@@ -358,10 +355,7 @@ learnOnPlanState(PlanState *p, void *context)
 		elog(ERROR, "aqo_set_baserel_rows_estimate: tablename is %s!",string(lfirst(l)));
 		}
 		}*/
-		if (list_length(ctx->path_tablenames)>=0)
-		{
-			elog(ERROR, "learnOnPlanState: tablelist in ctx is %d!",list_length(ctx->path_tablenames));
-		}
+		
 		if (p->instrument && (p->righttree != NULL || p->lefttree == NULL ||
 							  p->plan->path_clauses != NIL ||
 							  IsA(p, ForeignScanState) ||
@@ -660,7 +654,7 @@ aqo_copy_generic_path_info(PlannerInfo *root, Plan *dest, Path *src)
 	dest->path_relids = list_concat(dest->path_relids,
 								get_list_of_relids(root, src->parent->relids));
 	
-	dest->tablenames = get_list_of_tablenames(root, dest->path_relids);
+	dest->tablenames = get_list_of_tablenames(root);
 	/*if (list_length(dest->tablenames)==0)
 		{
 			elog(WARNING, "aqo_copy_generic_path_info: tablenames in dest is %d!", list_length(dest->tablenames));
@@ -804,40 +798,27 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
 	ListCell *lc, *lm;
 	RangeTblEntry *entry;
 	int i=-1;
-	while ((i = bms_next_member(plan->path_relids, i)) >= 0)
+/*
+ * Create list of tables' names
+ */
+	foreach(lc, plan->path_relids)
 	{
 		foreach(lm, es->rtable)
 		{
 			entry = (RangeTblEntry*) lm;
 			
-			if (i == entry->relid)
+			if ((int)lc == entry->relid)
 			{
-				refname = (char) *(entry->eref->aliasname);
+				refname = entry->eref->aliasname;
 			}
 			else
 			continue;
-			//elog(WARNING, "get_list_of_tablenames: tablename is %s!", refname);
 			
 			plan->tablenames = lappend(plan->tablenames, refname);
 		
 		}
 	}
-	//plan->tablenames = list_copy(es->rtable_names);
-
-	/*foreach(l,plan->tablenames)
-	{
-		if (strlen(string(lfirst(l)))>=0)
-	{
-		elog(ERROR, "aqo_set_baserel_rows_estimate: tablename is %s!",string(lfirst(l)));
-	}
-	}*/
-
-	/*if (list_length(plan->tablenames)>=0)
-		{
-			elog(ERROR, "print_node_exlain: tablenames in plan is %d!", list_length(plan->tablenames));
-		}
-	if (!aqo_show_details || !plan || !ps->instrument)
-		goto explain_end;*/
+	
 
 	Assert(es->format == EXPLAIN_FORMAT_TEXT);
 

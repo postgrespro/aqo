@@ -107,10 +107,7 @@ get_fss_for_object(List *clauselist, List *selectivities, List *table_names,
 	int fss_hash;
 
 	n = list_length(clauselist);
-	if (list_length(table_names)==0)
-		{
-			elog(ERROR, "get_fss_for_object: tablelist in this function is null!");
-		}
+	
 	get_eclasses(clauselist, &nargs, &args_hash, &eclass_hash);
 
 	clause_hashes = palloc(sizeof(*clause_hashes) * n);
@@ -273,6 +270,9 @@ get_unsorted_unsafe_int_array_hash(int *arr, int len)
 	return get_int_array_hash(arr, len);
 }
 //my code
+/*
+ * Computes hash for given tablename.
+ */
 int
 get_tbl_names_hash(List *tbl_names)
 {

@@ -42,78 +42,29 @@ get_selectivities(PlannerInfo *root,
 
 	return res;
 }
+/*
+ * Returns list of tables' names using as an argument root.
+ */
 List* // my code
-get_list_of_tablenames(PlannerInfo *root, Relids relids)
+get_list_of_tablenames(PlannerInfo *root)
 {
 	List   *l = NIL;
 	char	   *refname;
 	ListCell *lc, *lm;
 	int rti;
-	//elog(WARNING, "get_list_of_tablenames: rti is %d 0: %d!", list_length(relids), relids[0]);
 	
-		//elog(WARNING, "get_list_of_tablenames: rti is %d!", relids[0]);
-	/*foreach(lm, relids)
-	{
-		rti = lfirst_int(lm);
-		break;
-	}*/
-	//rti = relids[0];
-	/*elog(WARNING, "get_list_of_tablenames: rti is %d!", rti);
-	foreach(lc, root->parse->rtable)
-	{
-
-		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
-		refname =  rte->alias->aliasname;
-		//elog(WARNING, "get_list_of_tablenames: tablename is %s!", refname);
-		if (rte->relid!=rti)
-			continue;
-		if (rti == rte->relid)
-			l = lappend(l, refname);
-			
-	}*/
 	for (rti = 1; rti < root->simple_rel_array_size; rti++)
    {
-    RelOptInfo *rel = root->simple_rel_array[rti];
-    Assert(rel->relid == rti);     
-	if (root->simple_rte_array[rti]->relid == 0)
-		{
-			refname = "Invalid table name";
-			continue;
-		}
-	else{
-		refname = root->simple_rte_array[rti]->eref->aliasname;
-	}
-	l = lappend(l, (char) *refname);
+    RelOptInfo *rel = root->simple_rel_array[rti];  
+	
+	refname = root->simple_rte_array[rti]->eref->aliasname;
+	if (refname != "*RESULT*")
+		l = lappend(l, refname);
    } 
-   // elog(WARNING, "get_list_of_tablenames: list is %d!", list_length(l));
-	/*foreach(lc, l)
-		{
-			elog(WARNING, "get_list_of_tablenames: table is %s!",(char *)lc );
-		}*/
-	RangeTblEntry *entry;
-	if (relids == NULL)
-		return NIL;
-
-	int i = -1;
-	while ((i = bms_next_member(relids, i)) >= 0)
-	{
-		entry = planner_rt_fetch(i, root);
-		l = lappend(l, (char) *(entry->eref->aliasname));
-	}
+   
 	return l;
 }
-		//elog(WARNING, "get_list_of_tablenames: length_list is %d!", list_length(l));
-		/*foreach(lc, l)
-		{
-			elog(WARNING, "get_list_of_tablenames: length of list is %s!", (char *) lfirst(lc));
-		}
-		return l;*/
-	
 		
-	
-   
-
-
 /*
  * Transforms given relids from path optimization stage format to list of
  * an absolute (independent on query optimization context) relids.
