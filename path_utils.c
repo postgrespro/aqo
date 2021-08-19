@@ -45,20 +45,17 @@ get_selectivities(PlannerInfo *root,
 /*
  * Returns list of tables' names using as an argument root.
  */
-List* // my code
+List* 
 get_list_of_tablenames(PlannerInfo *root)
 {
 	List   *l = NIL;
 	char	   *refname;
-	ListCell *lc, *lm;
 	int rti;
 	
 	for (rti = 1; rti < root->simple_rel_array_size; rti++)
-   {
-    RelOptInfo *rel = root->simple_rel_array[rti];  
-	
+   { 
 	refname = root->simple_rte_array[rti]->eref->aliasname;
-	if (refname != "*RESULT*")
+	if (strcmp(refname,"*RESULT*")== 0)
 		l = lappend(l, refname);
    } 
    

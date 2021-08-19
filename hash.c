@@ -27,13 +27,12 @@ static int	get_int_array_hash(int *arr, int len);
 static int	get_unsorted_unsafe_int_array_hash(int *arr, int len);
 static int	get_unordered_int_list_hash(List *lst);
 
-static int	get_relidslist_hash(List *relidslist);
 static int get_fss_hash(int clauses_hash, int eclasses_hash,
 			 int relidslist_hash);
-//my code
+
 static int get_unordered_int_list_tblnames(List *lst);
 static int get_tbl_names_hash(List *tbl_names);
-//my code
+
 static char *replace_patterns(const char *str, const char *start_pattern,
 				 bool (*end_pattern) (char ch));
 static char *remove_consts(const char *str);
@@ -95,7 +94,6 @@ get_fss_for_object(List *clauselist, List *selectivities, List *table_names,
 	int		   *eclass_hash;
 	int			clauses_hash;
 	int			eclasses_hash;
-	int			relidslist_hash;
 	List	  **args;
 	ListCell   *l;
 	int			i,
@@ -105,6 +103,7 @@ get_fss_for_object(List *clauselist, List *selectivities, List *table_names,
 	int			sh = 0,
 				old_sh;
 	int fss_hash;
+	int tableslist_hash;
 
 	n = list_length(clauselist);
 	
@@ -170,14 +169,10 @@ get_fss_for_object(List *clauselist, List *selectivities, List *table_names,
 	clauses_hash = get_int_array_hash(sorted_clauses, *nfeatures);
 	eclasses_hash = get_int_array_hash(eclass_hash, nargs);
 	// relidslist_hash = get_relidslist_hash(relidslist);
-	//my code
-	int         tableslist_hash;
+	
 	tableslist_hash = get_tbl_names_hash(table_names);
-	if (tableslist_hash==0)
-		{
-			elog(ERROR, "get_fss_for_object: tablelist_hash is 0!");
-		}
-	//my code
+	
+	
 	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, tableslist_hash);
 
 	pfree(clause_hashes);
@@ -269,7 +264,7 @@ get_unsorted_unsafe_int_array_hash(int *arr, int len)
 	qsort(arr, len, sizeof(*arr), int_cmp);
 	return get_int_array_hash(arr, len);
 }
-//my code
+
 /*
  * Computes hash for given tablename.
  */
@@ -295,7 +290,7 @@ get_unordered_int_list_tblnames(List *lst)
 	pfree(arr);
 	return hash;
 }
-//my code
+
 /*
  * Returns for an integer list a hash which does not depend on the order
  * of elements.
@@ -372,11 +367,7 @@ get_fss_hash(int clauses_hash, int eclasses_hash, int relidslist_hash)
  * Computes hash for given list of relids.
  * Hash is supposed to be relids-order-insensitive.
  */
-int
-get_relidslist_hash(List *relidslist)
-{
-	return get_unordered_int_list_hash(relidslist);
-}
+
 
 /*
  * Returns the C-string in which the substrings of kind "{CONST.*}" are

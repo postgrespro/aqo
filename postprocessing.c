@@ -30,7 +30,7 @@ typedef struct
 	List *clauselist;
 	List *selectivities;
 	List *relidslist;
-	List *path_tablenames; // my code
+	List *path_tablenames; 
 	bool learn;
 } aqo_obj_stat;
 
@@ -49,7 +49,7 @@ static void atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
 								  double **matrix, double *targets,
 								  double *features, double target);
 static void learn_sample(List *clauselist, List *selectivities, List *relidslist,List *tablelist,
-			 double true_cardinality, Plan *plan);// my code
+			 double true_cardinality, Plan *plan);
 static List *restore_selectivities(List *clauselist,
 								   List *relidslist,
 								   JoinType join_type,
@@ -792,12 +792,9 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
 {
 	int wrkrs = 1;
 	double error = -1.;
-	ListCell *l;
-	Index       rti;
 	char	   *refname;
 	ListCell *lc, *lm;
 	RangeTblEntry *entry;
-	int i=-1;
 /*
  * Create list of tables' names
  */
@@ -807,7 +804,7 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
 		{
 			entry = (RangeTblEntry*) lm;
 			
-			if ((int)lc == entry->relid)
+			if ((int64)lc == (int64)entry->relid)
 			{
 				refname = entry->eref->aliasname;
 			}
@@ -853,7 +850,7 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
 	else
 		appendStringInfo(es->str, "AQO not used");
 
-explain_end:
+	explain_end:
 	if (plan && aqo_show_hash)
 		appendStringInfo(es->str, ", fss=%d", plan->fss_hash);
 

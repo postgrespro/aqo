@@ -274,7 +274,7 @@ extern void ppi_hook(ParamPathInfo *ppi);
 /* Hash functions */
 int get_query_hash(Query *parse, const char *query_text);
 extern int get_fss_for_object(List *clauselist, List *selectivities, List *table_names,
-				   int *nfeatures, double **features);// my code
+				   int *nfeatures, double **features);
 void get_eclasses(List *clauselist, int *nargs, int **args_hash,
 				  int **eclass_hash);
 int get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash);
@@ -285,7 +285,7 @@ extern bool find_query(int qhash, Datum *search_values, bool *search_nulls);
 extern bool update_query(int qhash, int fhash,
 						 bool learn_aqo, bool use_aqo, bool auto_tuning);
 extern bool add_query_text(int query_hash);
-List *get_list_of_tablenames(PlannerInfo *root);// my code
+List *get_list_of_tablenames(PlannerInfo *root);
 extern bool load_fss(int fhash, int fss_hash,
 					 int ncols, double **matrix, double *targets, int *rows);
 extern bool update_fss(int fhash, int fss_hash, int nrows, int ncols,
@@ -347,7 +347,7 @@ List	   *get_path_clauses(Path *path, PlannerInfo *root, List **selectivities);
 
 /* Cardinality estimation */
 double predict_for_relation(List *restrict_clauses, List *selectivities,
-						List *tblnames, int *fss_hash);//my code
+						List *tblnames, int *fss_hash);
 
 /* Query execution statistics collecting hooks */
 void		aqo_ExecutorStart(QueryDesc *queryDesc, int eflags);

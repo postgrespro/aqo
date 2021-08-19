@@ -153,11 +153,11 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	relid = planner_rt_fetch(rel->relid, root)->relid;
 	relids = list_make1_int(relid);
 
-	// my code	
+	
 	
 	tablesname = list_copy(get_list_of_tablenames(root));
    
-	// my code
+	
 	restrict_clauses = list_copy(rel->baserestrictinfo);
 	predicted = predict_for_relation(restrict_clauses, selectivities,
 									 tablesname, &fss);
@@ -199,7 +199,6 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 {
 	double		predicted;
 	Oid			relid = InvalidOid;
-	List	   *relids = NULL;
 	List	   *allclauses = NULL;
 	List	   *selectivities = NULL;
 	ListCell   *l;
@@ -243,15 +242,9 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 														   param_clauses);
 	}
 
-	relids = list_make1_int(relid);
-	// my code
-	
 	
 	tablesname = list_copy(get_list_of_tablenames(root));
 	
-	
-		
-	// my code
 	predicted = predict_for_relation(allclauses, selectivities, tablesname, &fss);
 
 	predicted_ppi_rows = predicted;
@@ -277,7 +270,6 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 							   List *restrictlist)
 {
 	double		predicted;
-	List	   *relids;
 	List	   *outer_clauses;
 	List	   *inner_clauses;
 	List	   *allclauses;
@@ -302,7 +294,6 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 		return;
 	}
 
-	relids = get_list_of_relids(root, rel->relids);
 	outer_clauses = get_path_clauses(outer_rel->cheapest_total_path, root,
 									 &outer_selectivities);
 	inner_clauses = get_path_clauses(inner_rel->cheapest_total_path, root,
@@ -312,12 +303,9 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	selectivities = list_concat(current_selectivities,
 								list_concat(outer_selectivities,
 											inner_selectivities));
-	// my code
-	
 	
 	tablesname = list_copy(get_list_of_tablenames(root));
 	
-	// my code
 	predicted = predict_for_relation(allclauses, selectivities, tablesname, &fss);
 	rel->fss_hash = fss;
 
@@ -351,7 +339,6 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 								   List *restrict_clauses)
 {
 	double		predicted;
-	List	   *relids;
 	List	   *outer_clauses;
 	List	   *inner_clauses;
 	List	   *allclauses;
@@ -375,7 +362,6 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 														   restrict_clauses);
 	}
 
-	relids = get_list_of_relids(root, rel->relids);
 	outer_clauses = get_path_clauses(outer_path, root, &outer_selectivities);
 	inner_clauses = get_path_clauses(inner_path, root, &inner_selectivities);
 	allclauses = list_concat(list_copy(restrict_clauses),
@@ -383,10 +369,9 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	selectivities = list_concat(current_selectivities,
 								list_concat(outer_selectivities,
 											inner_selectivities));
-	// my code
 	
 	tablesname = list_copy(get_list_of_tablenames(root));
-	// my code
+	
 	predicted = predict_for_relation(allclauses, selectivities, tablesname, &fss);
 
 	predicted_ppi_rows = predicted;
