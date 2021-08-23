@@ -374,6 +374,12 @@ isQueryUsingSystemRelation_walker(Node *node, void *context)
 				if (is_catalog || is_aqo_rel)
 					return true;
 			}
+			else if (rte->rtekind == RTE_FUNCTION)
+			{
+				/*
+				 * TODO: Exclude queries with AQO functions.
+				 */
+			}
 		}
 
 		return query_tree_walker(query,

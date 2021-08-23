@@ -12,7 +12,7 @@ SELECT num FROM top_time_queries(10) AS tt WHERE
             WHERE query_text = 'SELECT count(*) FROM generate_series(1,1000000);'));
 
 --
--- num of query uses table t2 should be bigger than num of query uses table t1 and be the fisrt
+-- num of query uses table t2 should be bigger than num of query uses table t1 and be the first
 --
 CREATE TABLE t1 AS SELECT mod(gs,10) AS x, mod(gs+1,10) AS y
 	FROM generate_series(1,1000) AS gs;

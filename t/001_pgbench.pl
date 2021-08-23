@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use TestLib;
-use Test::More tests => 15;
+use Test::More tests => 18;
 use PostgresNode;
 
 my $node = PostgresNode->new('aqotest');
@@ -92,6 +92,36 @@ $stat_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_query_texts
 # This constants looks like magic numbers. But query set of the pgbench test
 # is fixed for a long time.
 is( (($fs_count == 7) and ($fs_samples_count == 6) and ($stat_count == 7)), 1);
+
+my $analytics = File::Temp->new();
+append_to_file($analytics, q{
+	\set border random(1, 1E5)
+	SELECT count(aid) FROM pgbench_accounts GROUP BY abalance ORDER BY abalance DESC;
+	SELECT count(aid) FROM pgbench_accounts GROUP BY abalance HAVING abalance < :border;
+
+	SELECT count(*) FROM pgbench_branches pgbb,
+	(SELECT count(aid) AS x FROM pgbench_accounts GROUP BY abalance HAVING abalance < :border) AS q1
+	WHERE pgbb.bid = q1.x;
+});
+# Look for top of problematic queries.
+$node->command_ok([ 'pgbench', '-t', "10", '-c', "$CLIENTS", '-j', "$THREADS",
+					'-f', "$analytics" ],
+					'analytical queries in pgbench (disabled mode)');
+
+$res = $node->safe_psql('postgres',
+						"SELECT count(*) FROM top_error_queries(10) v
+						JOIN aqo_query_texts t ON (t.query_hash = v.fspace_hash)
+						WHERE v.error > 0. AND t.query_text LIKE '%pgbench_accounts%'");
+is($res, 3);
+$res = $node->safe_psql('postgres',
+						"SELECT v.error, t.query_text FROM top_error_queries(10) v
+						JOIN aqo_query_texts t ON (t.query_hash = v.fspace_hash)
+						WHERE v.error > 0.");
+note("\n Queries: \n $res \n");
+$res = $node->safe_psql('postgres',
+						"SELECT count(*) FROM top_time_queries(10) v
+						WHERE v.execution_time > 0.");
+is($res, 10);
 
 # ##############################################################################
 #
