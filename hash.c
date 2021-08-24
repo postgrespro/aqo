@@ -50,6 +50,9 @@ static bool is_brace(char ch);
 static bool has_consts(List *lst);
 static List **get_clause_args_ptr(Expr *clause);
 static bool clause_is_eq_clause(Expr *clause);
+/*
+	* These functions allow us to get hash for tablenames list
+*/
 static int get_unordered_int_list_tblnames(List *lst);
 static int get_tbl_names_hash(List *tbl_names);
 /*
@@ -237,6 +240,10 @@ get_fss_for_object(List *relidslist, List *tablelist, List *clauselist,
 	}
 	return fss_hash;
 }
+
+/*
+ * These functions allow us to get hash for tablenames list
+*/
 int
 get_tbl_names_hash(List *tbl_names)
 {

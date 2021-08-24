@@ -555,6 +555,10 @@ RegisterAQOPlanNodeMethods(void)
 	RegisterExtensibleNodeMethods(&method);
 }
 
+/*
+ * This function fot getting list of tables' names 
+*/
+
 List *
 get_list_of_tablenames(PlannerInfo *root)
 {

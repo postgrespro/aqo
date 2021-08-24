@@ -141,7 +141,7 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	Oid			relid;
 	List	   *relids = NIL;
 	List	   *selectivities = NULL;
-	List *tablelist;
+	List       *tablelist;
 	List	*clauses;
 	int fss = 0;
 
