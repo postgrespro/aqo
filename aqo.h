@@ -270,7 +270,7 @@ extern void ppi_hook(ParamPathInfo *ppi);
 
 /* Hash functions */
 int get_query_hash(Query *parse, const char *query_text);
-extern int get_fss_for_object(List *relidslist, List *clauselist,
+extern int get_fss_for_object(List *relidslist, List *tablelist, List *clauselist,
 							  List *selectivities, int *nfeatures,
 							  double **features);
 void get_eclasses(List *clauselist, int *nargs, int **args_hash,
@@ -336,7 +336,7 @@ double aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 
 /* Cardinality estimation */
 double predict_for_relation(List *restrict_clauses, List *selectivities,
-					 List *relids, int *fss_hash);
+					 List *relids, List *tablelist, int *fss_hash);
 
 /* Query execution statistics collecting hooks */
 void		aqo_ExecutorStart(QueryDesc *queryDesc, int eflags);
@@ -373,4 +373,5 @@ extern Oid get_aqo_schema(void);
 extern void init_lock_tag(LOCKTAG *tag, uint32 key1, uint32 key2);
 
 extern List *cur_classes;
+List *get_list_of_tablenames(PlannerInfo *root);
 #endif

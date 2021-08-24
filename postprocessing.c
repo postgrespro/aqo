@@ -32,6 +32,7 @@ typedef struct
 	List *clauselist;
 	List *selectivities;
 	List *relidslist;
+	List *tablelist;
 	bool learn;
 } aqo_obj_stat;
 
@@ -54,6 +55,7 @@ static bool learnOnPlanState(PlanState *p, void *context);
 static void learn_sample(List *clauselist,
 						 List *selectivities,
 						 List *relidslist,
+						 List *tablelist,
 						 double true_cardinality,
 						 Plan *plan,
 						 bool notExecuted);
@@ -101,7 +103,7 @@ atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
 }
 
 static void
-learn_agg_sample(List *clauselist, List *selectivities, List *relidslist,
+learn_agg_sample(List *clauselist, List *selectivities, List *relidslist, List *tablelist,
 			 double true_cardinality, Plan *plan, bool notExecuted)
 {
 	int fhash = query_context.fspace_hash;
@@ -121,7 +123,7 @@ learn_agg_sample(List *clauselist, List *selectivities, List *relidslist,
 		return;
 
 	target = log(true_cardinality);
-	child_fss = get_fss_for_object(relidslist, clauselist, NIL, NULL, NULL);
+	child_fss = get_fss_for_object(relidslist, tablelist, clauselist, NIL, NULL, NULL);//? withot tablelist
 	fss = get_grouped_exprs_hash(child_fss, aqo_node->grouping_exprs);
 
 	for (i = 0; i < aqo_K; i++)
@@ -138,7 +140,7 @@ learn_agg_sample(List *clauselist, List *selectivities, List *relidslist,
  * true cardinalities) performs learning procedure.
  */
 static void
-learn_sample(List *clauselist, List *selectivities, List *relidslist,
+learn_sample(List *clauselist, List *selectivities, List *relidslist, List *tablenames,
 			 double true_cardinality, Plan *plan, bool notExecuted)
 {
 	int		fhash = query_context.fspace_hash;
@@ -152,7 +154,7 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 	AQOPlanNode *aqo_node = get_aqo_plan_node(plan, false);
 
 	target = log(true_cardinality);
-	fss_hash = get_fss_for_object(relidslist, clauselist,
+	fss_hash = get_fss_for_object(relidslist, tablenames, clauselist,
 								  selectivities, &nfeatures, &features);
 
 	/* Only Agg nodes can have non-empty a grouping expressions list. */
@@ -293,7 +295,7 @@ learn_subplan_recurse(PlanState *p, aqo_obj_stat *ctx)
 	foreach(lc, saved_subplan_list)
 	{
 		SubPlanState *sps = lfirst_node(SubPlanState, lc);
-		aqo_obj_stat SPCtx = {NIL, NIL, NIL, ctx->learn};
+		aqo_obj_stat SPCtx = {NIL, NIL, NIL, NIL, ctx->learn};
 
 		if (learnOnPlanState(sps->planstate, (void *) &SPCtx))
 			return true;
@@ -302,7 +304,7 @@ learn_subplan_recurse(PlanState *p, aqo_obj_stat *ctx)
 	foreach(lc, saved_initplan_list)
 	{
 		SubPlanState *sps = lfirst_node(SubPlanState, lc);
-		aqo_obj_stat SPCtx = {NIL, NIL, NIL, ctx->learn};
+		aqo_obj_stat SPCtx = {NIL, NIL, NIL, NIL, ctx->learn};
 
 		if (learnOnPlanState(sps->planstate, (void *) &SPCtx))
 			return true;
@@ -328,7 +330,7 @@ static bool
 learnOnPlanState(PlanState *p, void *context)
 {
 	aqo_obj_stat *ctx = (aqo_obj_stat *) context;
-	aqo_obj_stat SubplanCtx = {NIL, NIL, NIL, ctx->learn};
+	aqo_obj_stat SubplanCtx = {NIL, NIL, NIL, NIL, ctx->learn};
 	double predicted = 0.;
 	double learn_rows = 0.;
 	AQOPlanNode *aqo_node;
@@ -458,6 +460,7 @@ learnOnPlanState(PlanState *p, void *context)
 			 */
 			ctx->relidslist = list_copy(aqo_node->relids);
 
+			ctx->tablelist = list_copy(p->plan->tablelist);
 			if (p->instrument)
 			{
 				Assert(predicted >= 1. && learn_rows >= 1.);
@@ -466,13 +469,13 @@ learnOnPlanState(PlanState *p, void *context)
 				{
 					if (IsA(p, AggState))
 						learn_agg_sample(SubplanCtx.clauselist, NULL,
-										 aqo_node->relids, learn_rows,
+										 aqo_node->relids, ctx->tablelist,learn_rows,
 										 p->plan, notExecuted);
 
 					else
 						learn_sample(SubplanCtx.clauselist,
 									 SubplanCtx.selectivities,
-									 aqo_node->relids, learn_rows,
+									 aqo_node->relids, ctx->tablelist, learn_rows,//? withot tablelist
 									 p->plan, notExecuted);
 				}
 			}
@@ -614,7 +617,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	if (query_context.learn_aqo ||
 		(!query_context.learn_aqo && query_context.collect_stat))
 	{
-		aqo_obj_stat ctx = {NIL, NIL, NIL, query_context.learn_aqo};
+		aqo_obj_stat ctx = {NIL, NIL, NIL, NIL, query_context.learn_aqo};
 
 		/*
 		 * Analyze plan if AQO need to learn or need to collect statistics only.

@@ -358,7 +358,7 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 					src->type == T_HashPath);
 
 	node = get_aqo_plan_node(plan, true);
-
+	
 	if (node->had_path)
 	{
 		/*
@@ -414,6 +414,7 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 	}
 
 	node->had_path = true;
+	plan->tablelist = list_copy(get_list_of_tablenames(root));
 }
 
 static void
@@ -553,6 +554,20 @@ RegisterAQOPlanNodeMethods(void)
 	RegisterExtensibleNodeMethods(&method);
 }
 
+List *
+get_list_of_tablenames(PlannerInfo *root)
+{
+	Index       rti;
+	List   *l = NIL;
+	char	   *refname;
+    for (rti = 1; rti < root->simple_rel_array_size; rti++)
+   {	
+	refname = root->simple_rte_array[rti]->eref->aliasname;
+	if (strcmp(refname, "*RESULT*") != 0)
+		l = lappend(l, refname);
+	}
+	return l;
+}
 /*
  * Hook for create_upper_paths_hook
  *
@@ -569,6 +584,7 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 	List	*relids;
 	List	*clauses;
 	List	*selectivities;
+	List	*tablelist;
 
 	if (prev_create_upper_paths_hook)
 		(*prev_create_upper_paths_hook)(root, stage, input_rel, output_rel, extra);
@@ -583,6 +599,7 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 	clauses = get_path_clauses(input_rel->cheapest_total_path,
 													root, &selectivities);
 	relids = get_list_of_relids(root, input_rel->relids);
-	fss_node->val.ival = get_fss_for_object(relids, clauses, NIL, NULL, NULL);
+	tablelist = list_copy(get_list_of_tablenames(root));
+	fss_node->val.ival = get_fss_for_object(relids, NIL, clauses, NIL, NULL, NULL);//? without tablelist
 	output_rel->private = lappend(output_rel->private, (void *) fss_node);
 }

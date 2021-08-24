@@ -23,7 +23,7 @@
  */
 double
 predict_for_relation(List *clauses, List *selectivities,
-					 List *relids, int *fss_hash)
+					 List *relids, List *tablelist, int *fss_hash)
 {
 	int		nfeatures;
 	double	*matrix[aqo_K];
@@ -40,7 +40,7 @@ predict_for_relation(List *clauses, List *selectivities,
 		 */
 		return -4.;
 
-	*fss_hash = get_fss_for_object(relids, clauses,
+	*fss_hash = get_fss_for_object(relids, tablelist, clauses,
 								   selectivities, &nfeatures, &features);
 
 	if (nfeatures > 0)

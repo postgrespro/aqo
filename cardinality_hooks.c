@@ -141,6 +141,7 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	Oid			relid;
 	List	   *relids = NIL;
 	List	   *selectivities = NULL;
+	List *tablelist;
 	List	*clauses;
 	int fss = 0;
 
@@ -159,12 +160,13 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 
 	relid = planner_rt_fetch(rel->relid, root)->relid;
 	if (OidIsValid(relid))
-		/* Predict for a plane table only. */
+		{/* Predict for a plane table only. */
 		relids = list_make1_int(relid);
-
+		tablelist = get_list_of_tablenames(root);
+		}
 	clauses = aqo_get_clauses(root, rel->baserestrictinfo);
 	predicted = predict_for_relation(clauses, selectivities,
-									 relids, &fss);
+									 relids, tablelist, &fss);
 	rel->fss_hash = fss;
 
 	if (predicted >= 0)
@@ -206,6 +208,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	List	   *relids = NIL;
 	List	   *allclauses = NULL;
 	List	   *selectivities = NULL;
+	List   *tablelist;
 	ListCell   *l;
 	ListCell   *l2;
 	int			nargs;
@@ -253,9 +256,11 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 
 	if (OidIsValid(relid))
 		/* Predict for a plane table only. */
-		relids = list_make1_int(relid);
-
-	predicted = predict_for_relation(allclauses, selectivities, relids, &fss);
+		{
+			relids = list_make1_int(relid);
+			tablelist = list_copy(get_list_of_tablenames(root));
+		}
+	predicted = predict_for_relation(allclauses, selectivities, relids, tablelist, &fss);
 
 	predicted_ppi_rows = predicted;
 	fss_ppi_hash = fss;
@@ -284,6 +289,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	List	   *outer_clauses;
 	List	   *inner_clauses;
 	List	   *allclauses;
+	List	   *tablelist;
 	List	   *selectivities;
 	List	   *inner_selectivities;
 	List	   *outer_selectivities;
@@ -317,8 +323,8 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	selectivities = list_concat(current_selectivities,
 								list_concat(outer_selectivities,
 											inner_selectivities));
-
-	predicted = predict_for_relation(allclauses, selectivities, relids, &fss);
+	tablelist = list_copy(get_list_of_tablenames(root));
+	predicted = predict_for_relation(allclauses, selectivities, relids, tablelist, &fss);
 	rel->fss_hash = fss;
 
 	if (predicted >= 0)
@@ -355,6 +361,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	List	   *outer_clauses;
 	List	   *inner_clauses;
 	List	   *allclauses;
+	List	   *tablelist;
 	List	   *selectivities;
 	List	   *inner_selectivities;
 	List	   *outer_selectivities;
@@ -385,8 +392,8 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	selectivities = list_concat(current_selectivities,
 								list_concat(outer_selectivities,
 											inner_selectivities));
-
-	predicted = predict_for_relation(allclauses, selectivities, relids, &fss);
+	tablelist = list_copy(get_list_of_tablenames(root));
+	predicted = predict_for_relation(allclauses, selectivities, relids, tablelist, &fss);
 
 	predicted_ppi_rows = predicted;
 	fss_ppi_hash = fss;
@@ -418,10 +425,11 @@ predict_num_groups(PlannerInfo *root, Path *subpath, List *group_exprs,
 		List *relids;
 		List *clauses;
 		List *selectivities = NIL;
-
+		List *tablelist = NIL;
 		relids = get_list_of_relids(root, subpath->parent->relids);
 		clauses = get_path_clauses(subpath, root, &selectivities);
-		(void) predict_for_relation(clauses, selectivities, relids, &child_fss);
+		tablelist = list_copy(get_list_of_tablenames(root));
+		(void) predict_for_relation(clauses, selectivities, relids, tablelist, &child_fss);
 	}
 
 	*fss = get_grouped_exprs_hash(child_fss, group_exprs);

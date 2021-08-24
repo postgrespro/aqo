@@ -50,7 +50,8 @@ static bool is_brace(char ch);
 static bool has_consts(List *lst);
 static List **get_clause_args_ptr(Expr *clause);
 static bool clause_is_eq_clause(Expr *clause);
-
+static int get_unordered_int_list_tblnames(List *lst);
+static int get_tbl_names_hash(List *tbl_names);
 /*
  * Computes hash for given query.
  * Hash is supposed to be constant-insensitive.
@@ -105,7 +106,7 @@ get_grouped_exprs_hash(int child_fss, List *group_exprs)
  * Special case for nfeatures == NULL: don't calculate features.
  */
 int
-get_fss_for_object(List *relidslist, List *clauselist,
+get_fss_for_object(List *relidslist, List *tablelist, List *clauselist,
 				   List *selectivities, int *nfeatures, double **features)
 {
 	int			n;
@@ -120,6 +121,7 @@ get_fss_for_object(List *relidslist, List *clauselist,
 	int			clauses_hash;
 	int			eclasses_hash;
 	int			relidslist_hash;
+	int			tablelist_hash;
 	List	  **args;
 	ListCell   *lc;
 	int			i,
@@ -211,8 +213,10 @@ get_fss_for_object(List *relidslist, List *clauselist,
 	 */
 	clauses_hash = get_int_array_hash(sorted_clauses, n - sh);
 	eclasses_hash = get_int_array_hash(eclass_hash, nargs);
+	tablelist_hash = get_tbl_names_hash(tablelist);
 	relidslist_hash = get_relidslist_hash(relidslist);
 	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relidslist_hash);
+	//fss_hash = get_fss_hash(clauses_hash, eclasses_hash, tablelist_hash);
 
 	pfree(clause_hashes);
 	pfree(sorted_clauses);
@@ -229,7 +233,28 @@ get_fss_for_object(List *relidslist, List *clauselist,
 	}
 	return fss_hash;
 }
+int
+get_tbl_names_hash(List *tbl_names)
+{
+return get_unordered_int_list_tblnames(tbl_names);
+}
+int
+get_unordered_int_list_tblnames(List *lst)
+{
+	int			i = 0;
+	int			len;
+	int		   *arr;
+	ListCell   *l;
+	int			hash;
 
+	len = list_length(lst);
+	arr = palloc(sizeof(*arr) * len);
+	foreach(l, lst)
+		arr[i++] = get_str_hash((char *) lfirst(l));
+	hash = get_unsorted_unsafe_int_array_hash(arr, len);
+	pfree(arr);
+	return hash;
+}
 /*
  * Computes hash for given clause.
  * Hash is supposed to be constant-insensitive.
