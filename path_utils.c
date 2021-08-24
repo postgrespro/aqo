@@ -584,7 +584,6 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 	List	*relids;
 	List	*clauses;
 	List	*selectivities;
-	List	*tablelist;
 
 	if (prev_create_upper_paths_hook)
 		(*prev_create_upper_paths_hook)(root, stage, input_rel, output_rel, extra);
@@ -600,6 +599,6 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 													root, &selectivities);
 	relids = get_list_of_relids(root, input_rel->relids);
 	tablelist = list_copy(get_list_of_tablenames(root));
-	fss_node->val.ival = get_fss_for_object(relids, NIL, clauses, NIL, NULL, NULL);//? without tablelist
+	fss_node->val.ival = get_fss_for_object(relids, NIL, clauses, NIL, NULL, NULL);
 	output_rel->private = lappend(output_rel->private, (void *) fss_node);
 }

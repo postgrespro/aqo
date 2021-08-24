@@ -123,7 +123,7 @@ learn_agg_sample(List *clauselist, List *selectivities, List *relidslist, List *
 		return;
 
 	target = log(true_cardinality);
-	child_fss = get_fss_for_object(relidslist, tablelist, clauselist, NIL, NULL, NULL);//? withot tablelist
+	child_fss = get_fss_for_object(relidslist, tablelist, clauselist, NIL, NULL, NULL);
 	fss = get_grouped_exprs_hash(child_fss, aqo_node->grouping_exprs);
 
 	for (i = 0; i < aqo_K; i++)
@@ -475,7 +475,7 @@ learnOnPlanState(PlanState *p, void *context)
 					else
 						learn_sample(SubplanCtx.clauselist,
 									 SubplanCtx.selectivities,
-									 aqo_node->relids, ctx->tablelist, learn_rows,//? withot tablelist
+									 aqo_node->relids, ctx->tablelist, learn_rows,
 									 p->plan, notExecuted);
 				}
 			}
