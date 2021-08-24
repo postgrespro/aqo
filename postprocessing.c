@@ -460,7 +460,6 @@ learnOnPlanState(PlanState *p, void *context)
 			 */
 			ctx->relidslist = list_copy(aqo_node->relids);
 
-			ctx->tablelist = list_copy(p->plan->tablelist);
 			if (p->instrument)
 			{
 				Assert(predicted >= 1. && learn_rows >= 1.);
@@ -469,13 +468,13 @@ learnOnPlanState(PlanState *p, void *context)
 				{
 					if (IsA(p, AggState))
 						learn_agg_sample(SubplanCtx.clauselist, NULL,
-										 aqo_node->relids, ctx->tablelist,learn_rows,
+										 aqo_node->relids, p->plan->tablelist,learn_rows,
 										 p->plan, notExecuted);
 
 					else
 						learn_sample(SubplanCtx.clauselist,
 									 SubplanCtx.selectivities,
-									 aqo_node->relids, ctx->tablelist, learn_rows,
+									 aqo_node->relids, p->plan->tablelist, learn_rows,
 									 p->plan, notExecuted);
 				}
 			}

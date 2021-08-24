@@ -121,7 +121,7 @@ get_fss_for_object(List *relidslist, List *tablelist, List *clauselist,
 	int			clauses_hash;
 	int			eclasses_hash;
 	int			relidslist_hash;
-	int			tablelist_hash;
+	
 	List	  **args;
 	ListCell   *lc;
 	int			i,
@@ -213,10 +213,14 @@ get_fss_for_object(List *relidslist, List *tablelist, List *clauselist,
 	 */
 	clauses_hash = get_int_array_hash(sorted_clauses, n - sh);
 	eclasses_hash = get_int_array_hash(eclass_hash, nargs);
-	tablelist_hash = get_tbl_names_hash(tablelist);
+	
 	relidslist_hash = get_relidslist_hash(relidslist);
 	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relidslist_hash);
-	//fss_hash = get_fss_hash(clauses_hash, eclasses_hash, tablelist_hash);
+	/* 
+	These strings alow us to get tablelist_hash and target hash
+	tablelist_hash = get_tbl_names_hash(tablelist);
+	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, tablelist_hash); 
+	*/
 
 	pfree(clause_hashes);
 	pfree(sorted_clauses);

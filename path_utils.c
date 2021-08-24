@@ -414,6 +414,7 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 	}
 
 	node->had_path = true;
+	/* get tablename list and save it in Plan structure (plannodes.h string: 166) */
 	plan->tablelist = list_copy(get_list_of_tablenames(root));
 }
 
@@ -598,7 +599,6 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 	clauses = get_path_clauses(input_rel->cheapest_total_path,
 													root, &selectivities);
 	relids = get_list_of_relids(root, input_rel->relids);
-	tablelist = list_copy(get_list_of_tablenames(root));
 	fss_node->val.ival = get_fss_for_object(relids, NIL, clauses, NIL, NULL, NULL);
 	output_rel->private = lappend(output_rel->private, (void *) fss_node);
 }
