@@ -2,15 +2,16 @@
  *******************************************************************************
  *
  * NEW STORAGE
- * 
- * This module is responsible for organization and interaction with the storage 
+ *
+ * This module is responsible for organization and interaction with the storage
  * catalog pg_aqo in PGDATA
- * 
+ *
  * IDENTIFICATION
  *	  aqo/new_storage.c
 */
 
 #include "aqo.h"
+#include "new_storage.h"
 #include "storage/fd.h"
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -30,15 +31,14 @@ typedef struct query_note
 #define AqoFilePath(path, table_name) \
 	snprintf(path, MAXPGPATH, AQO_DIR "/%s.bin", table_name)
 
-void makeAqoDir(void);
-void createAqoFile(const char *name);
-void file_add_query_text(int qhash, const char *query_string);
-void file_read_query_text();
+bool use_file_storage;
 
-/* 
+static void createAqoFile(const char *name);
+
+/*
  * createAqoFile
  */
-void
+static void
 createAqoFile(const char *name)
 {
 	char path[MAXPGPATH];
@@ -50,7 +50,7 @@ createAqoFile(const char *name)
 	if (fd < 0)
 	{
 		elog(ERROR, "could not create file \"%s\": %m", path);
-	} 
+	}
 	file_add_query_text(qhash, "COMMON feature space (do not delete!)");
 	close(fd);
 }
@@ -116,7 +116,7 @@ file_read_query_text()
 	while (read(fd, &query_note_len, sizeof(query_note_len)))
 	{
 		qnote = calloc(query_note_len, 1);
-		if (read(fd, qnote, query_note_len) < 0) 
+		if (read(fd, qnote, query_note_len) < 0)
 		{
 			elog(ERROR, "could not read file \"%s\": %m", path);
 		}

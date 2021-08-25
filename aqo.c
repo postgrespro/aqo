@@ -12,6 +12,7 @@
 #include "cardinality_hooks.h"
 #include "ignorance.h"
 #include "path_utils.h"
+#include "new_storage.h"
 
 #include "access/relation.h"
 #include "access/table.h"
@@ -193,6 +194,19 @@ _PG_init(void)
 							 0,
 							 NULL,
 							 set_ignorance,
+							 NULL
+	);
+
+	DefineCustomBoolVariable(
+							 "aqo.use_file_storage",
+							 "Store AQO data in the pg_aqo directory instead of database",
+							 NULL,
+							 &use_file_storage,
+							 false,
+							 PGC_SUSET,
+							 0,
+							 NULL,
+							 NULL,
 							 NULL
 	);
 

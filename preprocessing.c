@@ -57,6 +57,7 @@
  */
 
 #include "aqo.h"
+#include "new_storage.h"
 #include "access/parallel.h"
 #include "access/table.h"
 #include "commands/extension.h"
@@ -233,8 +234,10 @@ aqo_planner(Query *parse,
 			 */
 			if (query_string != NULL)
 			{
-				add_query_text(query_context.query_hash, query_string);
-				file_add_query_text(query_context.query_hash, query_string);
+				if (!use_file_storage)
+					add_query_text(query_context.query_hash, query_string);
+				else
+					file_add_query_text(query_context.query_hash, query_string);
 			}
 		}
 	}
