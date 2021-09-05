@@ -16,6 +16,7 @@
 #include "path_utils.h"
 #include "nodes/readfuncs.h"
 #include "optimizer/optimizer.h"
+#include "utils/lsyscache.h"
 
 /*
  * Hook on creation of a plan node. We need to store AQO-specific data to
@@ -414,8 +415,7 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 	}
 
 	node->had_path = true;
-	/* get tablename list and save it in Plan structure (plannodes.h string: 166) */
-	plan->tablelist = list_copy(get_list_of_tablenames(root));
+	plan->tablelist = list_copy(get_list_of_tablenames(node->relids));
 }
 
 static void
@@ -555,20 +555,17 @@ RegisterAQOPlanNodeMethods(void)
 	RegisterExtensibleNodeMethods(&method);
 }
 
-/*
- * This function fot getting list of tables' names 
-*/
-
 List *
-get_list_of_tablenames(PlannerInfo *root)
+get_list_of_tablenames(List *relidslist)
 {
-	Index       rti;
+	
 	List   *l = NIL;
 	char	   *refname;
-    for (rti = 1; rti < root->simple_rel_array_size; rti++)
-   {	
-	refname = root->simple_rte_array[rti]->eref->aliasname;
-	if (strcmp(refname, "*RESULT*") != 0)
+	ListCell *ls;
+	foreach(ls, relidslist)
+	{
+		Oid			relid = lfirst_oid(ls);
+		refname = get_rel_name(relid);
 		l = lappend(l, refname);
 	}
 	return l;
@@ -589,6 +586,7 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 	List	*relids;
 	List	*clauses;
 	List	*selectivities;
+	List	*tablelist;
 
 	if (prev_create_upper_paths_hook)
 		(*prev_create_upper_paths_hook)(root, stage, input_rel, output_rel, extra);
@@ -603,6 +601,7 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 	clauses = get_path_clauses(input_rel->cheapest_total_path,
 													root, &selectivities);
 	relids = get_list_of_relids(root, input_rel->relids);
-	fss_node->val.ival = get_fss_for_object(relids, NIL, clauses, NIL, NULL, NULL);
+	tablelist = list_copy(get_list_of_tablenames(relids));
+	fss_node->val.ival = get_fss_for_object(relids, NIL, clauses, NIL, NULL, NULL);//? without tablelist
 	output_rel->private = lappend(output_rel->private, (void *) fss_node);
 }

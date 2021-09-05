@@ -141,7 +141,7 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	Oid			relid;
 	List	   *relids = NIL;
 	List	   *selectivities = NULL;
-	List       *tablelist;
+	List *tablelist;
 	List	*clauses;
 	int fss = 0;
 
@@ -162,7 +162,7 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	if (OidIsValid(relid))
 		{/* Predict for a plane table only. */
 		relids = list_make1_int(relid);
-		tablelist = get_list_of_tablenames(root);
+		tablelist = get_list_of_tablenames(relids);
 		}
 	clauses = aqo_get_clauses(root, rel->baserestrictinfo);
 	predicted = predict_for_relation(clauses, selectivities,
@@ -258,7 +258,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 		/* Predict for a plane table only. */
 		{
 			relids = list_make1_int(relid);
-			tablelist = list_copy(get_list_of_tablenames(root));
+			tablelist = list_copy(get_list_of_tablenames(relids));
 		}
 	predicted = predict_for_relation(allclauses, selectivities, relids, tablelist, &fss);
 
@@ -323,7 +323,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	selectivities = list_concat(current_selectivities,
 								list_concat(outer_selectivities,
 											inner_selectivities));
-	tablelist = list_copy(get_list_of_tablenames(root));
+	tablelist = list_copy(get_list_of_tablenames(relids));
 	predicted = predict_for_relation(allclauses, selectivities, relids, tablelist, &fss);
 	rel->fss_hash = fss;
 
@@ -392,7 +392,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	selectivities = list_concat(current_selectivities,
 								list_concat(outer_selectivities,
 											inner_selectivities));
-	tablelist = list_copy(get_list_of_tablenames(root));
+	tablelist = list_copy(get_list_of_tablenames(relids));
 	predicted = predict_for_relation(allclauses, selectivities, relids, tablelist, &fss);
 
 	predicted_ppi_rows = predicted;
@@ -428,7 +428,7 @@ predict_num_groups(PlannerInfo *root, Path *subpath, List *group_exprs,
 		List *tablelist = NIL;
 		relids = get_list_of_relids(root, subpath->parent->relids);
 		clauses = get_path_clauses(subpath, root, &selectivities);
-		tablelist = list_copy(get_list_of_tablenames(root));
+		tablelist = list_copy(get_list_of_tablenames(relids));
 		(void) predict_for_relation(clauses, selectivities, relids, tablelist, &child_fss);
 	}
 

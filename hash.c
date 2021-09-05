@@ -50,9 +50,6 @@ static bool is_brace(char ch);
 static bool has_consts(List *lst);
 static List **get_clause_args_ptr(Expr *clause);
 static bool clause_is_eq_clause(Expr *clause);
-/*
-	* These functions allow us to get hash for tablenames list
-*/
 static int get_unordered_int_list_tblnames(List *lst);
 static int get_tbl_names_hash(List *tbl_names);
 /*
@@ -124,7 +121,7 @@ get_fss_for_object(List *relidslist, List *tablelist, List *clauselist,
 	int			clauses_hash;
 	int			eclasses_hash;
 	int			relidslist_hash;
-	
+	int			tablelist_hash;
 	List	  **args;
 	ListCell   *lc;
 	int			i,
@@ -216,14 +213,8 @@ get_fss_for_object(List *relidslist, List *tablelist, List *clauselist,
 	 */
 	clauses_hash = get_int_array_hash(sorted_clauses, n - sh);
 	eclasses_hash = get_int_array_hash(eclass_hash, nargs);
-	
-	relidslist_hash = get_relidslist_hash(relidslist);
-	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relidslist_hash);
-	/* 
-	These strings alow us to get tablelist_hash and target hash
 	tablelist_hash = get_tbl_names_hash(tablelist);
-	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, tablelist_hash); 
-	*/
+	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, tablelist_hash);
 
 	pfree(clause_hashes);
 	pfree(sorted_clauses);
@@ -240,10 +231,6 @@ get_fss_for_object(List *relidslist, List *tablelist, List *clauselist,
 	}
 	return fss_hash;
 }
-
-/*
- * These functions allow us to get hash for tablenames list
-*/
 int
 get_tbl_names_hash(List *tbl_names)
 {

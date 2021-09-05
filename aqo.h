@@ -373,6 +373,5 @@ extern Oid get_aqo_schema(void);
 extern void init_lock_tag(LOCKTAG *tag, uint32 key1, uint32 key2);
 
 extern List *cur_classes;
-/* This function fot getting list of tables' names */
-List *get_list_of_tablenames(PlannerInfo *root);
+List *get_list_of_tablenames(List *relidslist);
 #endif
