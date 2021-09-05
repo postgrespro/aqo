@@ -1,0 +1,207 @@
+# Checking port 51540
+# Found port 51540
+Name: aqotest
+Data directory: /home/alena/test4/new2/postgres/contrib/aqo/tmp_check/t_001_pgbench_aqotest_data/pgdata
+Backup directory: /home/alena/test4/new2/postgres/contrib/aqo/tmp_check/t_001_pgbench_aqotest_data/backup
+Archive directory: /home/alena/test4/new2/postgres/contrib/aqo/tmp_check/t_001_pgbench_aqotest_data/archives
+Connection string: port=51540 host=/tmp/FD2uilkU37
+Log file: /home/alena/test4/new2/postgres/contrib/aqo/tmp_check/log/001_pgbench_aqotest.log
+# Running: initdb -D /home/alena/test4/new2/postgres/contrib/aqo/tmp_check/t_001_pgbench_aqotest_data/pgdata -A trust -N
+The files belonging to this database system will be owned by user "alena".
+This user must also own the server process.
+
+The database cluster will be initialized with locales
+  COLLATE:  en_GB.UTF-8
+  CTYPE:    en_GB.UTF-8
+  MESSAGES: C
+  MONETARY: ru_RU.UTF-8
+  NUMERIC:  ru_RU.UTF-8
+  TIME:     ru_RU.UTF-8
+The default database encoding has accordingly been set to "UTF8".
+The default text search configuration will be set to "english".
+
+Data page checksums are disabled.
+
+creating directory /home/alena/test4/new2/postgres/contrib/aqo/tmp_check/t_001_pgbench_aqotest_data/pgdata ... ok
+creating subdirectories ... ok
+selecting dynamic shared memory implementation ... posix
+selecting default max_connections ... 100
+selecting default shared_buffers ... 128MB
+selecting default time zone ... Europe/Moscow
+creating configuration files ... ok
+running bootstrap script ... ok
+performing post-bootstrap initialization ... ok
+
+Sync to disk skipped.
+The data directory might become corrupt if the operating system crashes.
+
+Success. You can now start the database server using:
+
+    pg_ctl -D /home/alena/test4/new2/postgres/contrib/aqo/tmp_check/t_001_pgbench_aqotest_data/pgdata -l logfile start
+
+# Running: /home/alena/test4/new2/postgres/contrib/aqo/../../src/test/regress/pg_regress --config-auth /home/alena/test4/new2/postgres/contrib/aqo/tmp_check/t_001_pgbench_aqotest_data/pgdata
+### Starting node "aqotest"
+# Running: pg_ctl -w -D /home/alena/test4/new2/postgres/contrib/aqo/tmp_check/t_001_pgbench_aqotest_data/pgdata -l /home/alena/test4/new2/postgres/contrib/aqo/tmp_check/log/001_pgbench_aqotest.log -o --cluster-name=aqotest start
+waiting for server to start.... done
+server started
+# Postmaster PID for node "aqotest" is 24070
+# Running: pgbench -i -s 1
+dropping old tables...
+NOTICE:  table "pgbench_accounts" does not exist, skipping
+NOTICE:  table "pgbench_branches" does not exist, skipping
+NOTICE:  table "pgbench_history" does not exist, skipping
+NOTICE:  table "pgbench_tellers" does not exist, skipping
+creating tables...
+generating data (client-side)...
+100000 of 100000 tuples (100%) done (elapsed 0.08 s, remaining 0.00 s)
+vacuuming...
+creating primary keys...
+done in 0.18 s (drop tables 0.00 s, create tables 0.00 s, client-side generate 0.09 s, vacuum 0.05 s, primary keys 0.03 s).
+ok 1 - init pgbench tables
+# Running: pgbench -t 1000 -c 20 -j 20
+pgbench (15devel)
+starting vacuum...end.
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 1
+query mode: simple
+number of clients: 20
+number of threads: 20
+number of transactions per client: 1000
+number of transactions actually processed: 20000/20000
+latency average = 8.481 ms
+initial connection time = 8.672 ms
+tps = 2358.127392 (without initial connection time)
+ok 2 - pgbench in intelligent mode
+# Running: pgbench -t 1000 -c 20 -j 20
+pgbench (15devel)
+starting vacuum...end.
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 1
+query mode: simple
+number of clients: 20
+number of threads: 20
+number of transactions per client: 1000
+number of transactions actually processed: 20000/20000
+latency average = 8.343 ms
+initial connection time = 9.036 ms
+tps = 2397.271809 (without initial connection time)
+ok 3 - pgbench in controlled mode
+# Running: pgbench -t 1000 -c 20 -j 20
+pgbench (15devel)
+starting vacuum...end.
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 1
+query mode: simple
+number of clients: 20
+number of threads: 20
+number of transactions per client: 1000
+number of transactions actually processed: 20000/20000
+latency average = 7.675 ms
+initial connection time = 6.901 ms
+tps = 2606.008178 (without initial connection time)
+ok 4 - pgbench in disabled mode
+ok 5
+# Running: pgbench -t 1000 -c 20 -j 20
+pgbench (15devel)
+starting vacuum...end.
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 1
+query mode: simple
+number of clients: 20
+number of threads: 20
+number of transactions per client: 1000
+number of transactions actually processed: 20000/20000
+latency average = 11.710 ms
+initial connection time = 7.188 ms
+tps = 1707.941201 (without initial connection time)
+ok 6 - pgbench in disabled mode
+ok 7
+ok 8
+# Running: pgbench -t 10 -c 20 -j 20 -f /tmp/Fam7DlrWKo
+pgbench (15devel)
+starting vacuum...end.
+transaction type: /tmp/Fam7DlrWKo
+scaling factor: 1
+query mode: simple
+number of clients: 20
+number of threads: 20
+number of transactions per client: 10
+number of transactions actually processed: 200/200
+latency average = 1332.707 ms
+initial connection time = 9.865 ms
+tps = 15.007052 (without initial connection time)
+ok 9 - analytical queries in pgbench (disabled mode)
+#### Begin standard error
+psql:<stdin>:3: NOTICE:  Top 10 cardinality error queries
+#### End standard error
+ok 10
+#### Begin standard error
+psql:<stdin>:3: NOTICE:  Top 10 cardinality error queries
+#### End standard error
+# 
+#  Queries: 
+#  6.39|SELECT count(aid) FROM pgbench_accounts GROUP BY abalance ORDER BY abalance DESC;
+# 4.79|SELECT count(aid) FROM pgbench_accounts GROUP BY abalance HAVING abalance < 28542;
+# 3.53|SELECT count(*) FROM pgbench_branches pgbb,
+# 	(SELECT count(aid) AS x FROM pgbench_accounts GROUP BY abalance HAVING abalance < 53450) AS q1
+# 	WHERE pgbb.bid = q1.x;
+# 0.549|select count(*) from pgbench_branches 
+#### Begin standard error
+psql:<stdin>:2: NOTICE:  Top 10 execution time queries
+#### End standard error
+ok 11
+# Running: pgbench -t 1000 -c 20 -j 20
+pgbench (15devel)
+starting vacuum...end.
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 1
+query mode: simple
+number of clients: 20
+number of threads: 20
+number of transactions per client: 1000
+number of transactions actually processed: 20000/20000
+latency average = 17.832 ms
+initial connection time = 6.084 ms
+tps = 1121.608306 (without initial connection time)
+ok 12 - pgbench in learn mode
+# Running: pgbench -t 1000 -c 20 -j 20
+pgbench (15devel)
+starting vacuum...end.
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 1
+query mode: simple
+number of clients: 20
+number of threads: 20
+number of transactions per client: 1000
+number of transactions actually processed: 20000/20000
+latency average = 13.204 ms
+initial connection time = 8.029 ms
+tps = 1514.652368 (without initial connection time)
+ok 13 - pgbench in frozen mode
+# oids: 16444, 16447, 16441, 16438
+### Restarting node "aqotest"
+# Running: pg_ctl -w -D /home/alena/test4/new2/postgres/contrib/aqo/tmp_check/t_001_pgbench_aqotest_data/pgdata -l /home/alena/test4/new2/postgres/contrib/aqo/tmp_check/log/001_pgbench_aqotest.log restart
+waiting for server to shut down.... done
+server stopped
+waiting for server to start.... done
+server started
+# Postmaster PID for node "aqotest" is 24512
+ok 14
+# pgbench-related rows: aqo_data - 6/6,
+# 	aqo_queries: 5/8, aqo_query_texts: 5/8,
+# 	aqo_query_stat: 5/7
+#### Begin standard error
+psql:<stdin>:1: NOTICE:  Cleaning aqo_data records
+#### End standard error
+# Total AQO rows after dropping pgbench-related  tables:
+# 	aqo_queries: 3, aqo_data: 0,
+# 	aqo_query_texts: 3, aqo_query_stat: 2
+ok 15 - Total number of feature spaces
+ok 16 - Total number of feature subspaces
+ok 17 - Total number of samples in aqo_query_texts
+ok 18 - Total number of samples in aqo_query_texts
+### Stopping node "aqotest" using mode fast
+# Running: pg_ctl -D /home/alena/test4/new2/postgres/contrib/aqo/tmp_check/t_001_pgbench_aqotest_data/pgdata -m fast stop
+waiting for server to shut down.... done
+server stopped
+# No postmaster PID for node "aqotest"
