@@ -790,3 +790,26 @@ index 9dd444e1ff..b0b5a65618 100644
  extern double estimate_num_groups(PlannerInfo *root, List *groupExprs,
  								  double input_rows, List **pgset,
  								  EstimationInfo *estinfo);
+diff --git a/src/include/nodes/plannodes.h b/src/include/nodes/plannodes.h
+index ec9a8b0c81..5ee0214706 100644
+--- a/src/include/nodes/plannodes.h
++++ b/src/include/nodes/plannodes.h
+@@ -144,7 +144,7 @@ typedef struct Plan
+ 	struct Plan *righttree;
+ 	List	   *initPlan;		/* Init Plan nodes (un-correlated expr
+ 								 * subselects) */
+-
++	List *tablelist;
+ 	/*
+ 	 * Information for management of parameter-change-driven rescanning
+ 	 *
+@@ -158,6 +158,9 @@ typedef struct Plan
+ 	 */
+ 	Bitmapset  *extParam;
+ 	Bitmapset  *allParam;
++
++	/* Additional field for an extension purposes. */
++	List		*private;
+ } Plan;
+ 
+ /* ----------------
