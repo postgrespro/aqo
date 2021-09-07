@@ -20,6 +20,7 @@
 #include "hash.h"
 #include "ignorance.h"
 #include "path_utils.h"
+#include "profile_mem.h"
 
 #include "access/parallel.h"
 #include "optimizer/optimizer.h"
@@ -629,6 +630,8 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	init_lock_tag(&tag, (uint32) query_context.query_hash,
 				 (uint32) query_context.fspace_hash);
 	LockAcquire(&tag, ExclusiveLock, false, false);
+
+	update_profile_mem_table();
 
 	if (query_context.collect_stat)
 	{

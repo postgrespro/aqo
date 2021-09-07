@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use TestLib;
-use Test::More tests => 18;
+use Test::More tests => 21;
 use PostgresNode;
 
 my $node = PostgresNode->new('aqotest');
@@ -139,6 +139,20 @@ $node->command_ok([ 'pgbench', '-t',
 					"$TRANSACTIONS", '-c', "$CLIENTS", '-j', "$THREADS" ],
 					'pgbench in learn mode');
 
+$node->safe_psql('postgres', "ALTER SYSTEM SET aqo.profile_mem = '8'");
+$node->safe_psql('postgres', "SELECT pg_reload_conf()");
+$node->command_ok([ 'pgbench', '-t',
+					"$TRANSACTIONS", '-c', "$CLIENTS", '-j', "$THREADS" ],
+					'pgbench with profile_mem enabled');
+$node->safe_psql('postgres', "ALTER SYSTEM SET aqo.profile_mem = '-1'");
+$node->safe_psql('postgres', "SELECT pg_reload_conf()");
+
+my $total_time = $node->safe_psql('postgres', "SELECT sum(execution_time) FROM aqo_profile_mem_hash();" );
+note("profile_mem:
+	total_time: $total_time");
+is(($total_time < 160.0), 1);
+my $profile_mem_queries = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_profile_mem_hash();");
+is($profile_mem_queries, 6);
 
 $node->safe_psql('postgres', "ALTER SYSTEM SET aqo.mode = 'frozen'");
 $node->safe_psql('postgres', "SELECT pg_reload_conf()");

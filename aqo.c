@@ -12,6 +12,7 @@
 #include "cardinality_hooks.h"
 #include "ignorance.h"
 #include "path_utils.h"
+#include "profile_mem.h"
 
 #include "access/relation.h"
 #include "access/table.h"
@@ -193,6 +194,21 @@ _PG_init(void)
 							 0,
 							 NULL,
 							 set_ignorance,
+							 NULL
+	);
+
+	DefineCustomIntVariable(
+							 "aqo.profile_mem",
+							 NULL,
+							 NULL,
+							 &aqo_profile_mem,
+							 -1,
+							 -1,
+							 INT_MAX,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 set_profile_mem,
 							 NULL
 	);
 
