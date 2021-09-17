@@ -15,8 +15,8 @@ $node->append_conf('postgresql.conf', qq{
 
 # Test constants.
 my $TRANSACTIONS = 1000;
-my $CLIENTS = 20;
-my $THREADS = 20;
+my $CLIENTS = 10;
+my $THREADS = 10;
 
 # General purpose variables.
 my $res;
