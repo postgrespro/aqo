@@ -135,3 +135,11 @@ BEGIN
     ORDER BY error DESC LIMIT n;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION public.file_read_query_text()
+RETURNS setof record
+AS 'MODULE_PATHNAME', 'file_read_query_text'
+LANGUAGE C VOLATILE;
+
+CREATE VIEW file_aqo_query_texts AS
+	SELECT * FROM public.file_read_query_text() AS f(query_hash integer, query_text text);
