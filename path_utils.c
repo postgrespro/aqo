@@ -159,16 +159,16 @@ subplan_hunter(Node *node, void *context)
 		PlannerInfo	*root = (PlannerInfo *) context;
 		PlannerInfo	*subroot;
 		RelOptInfo	*upper_rel;
-		Value		*fss;
+		A_Const		*fss;
 
 		subroot = (PlannerInfo *) list_nth(root->glob->subroots,
 										   splan->plan_id - 1);
 		upper_rel = fetch_upper_rel(subroot, UPPERREL_FINAL, NULL);
 
 		Assert(list_length(upper_rel->private) == 1);
-		Assert(IsA((Node *) linitial(upper_rel->private), Integer));
+		Assert(IsA((Node *) linitial(upper_rel->private), A_Const));
 
-		fss = (Value *) linitial(upper_rel->private);
+		fss = (A_Const *) linitial(upper_rel->private);
 		return (Node *) copyObject(fss);
 	}
 	return expression_tree_mutator(node, subplan_hunter, context);
@@ -565,7 +565,7 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 							   RelOptInfo *output_rel,
 							   void *extra)
 {
-	Value	*fss_node = (Value *) newNode(sizeof(Value), T_Integer);
+	A_Const	*fss_node = makeNode(A_Const);
 	List	*relids;
 	List	*clauses;
 	List	*selectivities;
@@ -583,6 +583,8 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 	clauses = get_path_clauses(input_rel->cheapest_total_path,
 													root, &selectivities);
 	relids = get_list_of_relids(root, input_rel->relids);
-	fss_node->val.ival = get_fss_for_object(relids, clauses, NIL, NULL, NULL);
+	fss_node->val.ival.type = T_Integer;
+	fss_node->location = -1;
+	fss_node->val.ival.val = get_fss_for_object(relids, clauses, NIL, NULL, NULL);
 	output_rel->private = lappend(output_rel->private, (void *) fss_node);
 }
