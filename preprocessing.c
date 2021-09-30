@@ -235,7 +235,7 @@ aqo_planner(Query *parse,
 				add_query_text(query_context.query_hash, query_string);
 		}
 	}
-	else
+	else /* Query class exists in a ML knowledge base. */
 	{
 		query_context.adding_query = false;
 		query_context.learn_aqo = DatumGetBool(query_params[1]);
@@ -244,8 +244,11 @@ aqo_planner(Query *parse,
 		query_context.auto_tuning = DatumGetBool(query_params[4]);
 		query_context.collect_stat = query_context.auto_tuning;
 
+		/*
+		 * Deactivate query if no one reason exists for usage of an AQO machinery.
+		 */
 		if (!query_context.learn_aqo && !query_context.use_aqo &&
-			!query_context.auto_tuning)
+			!query_context.auto_tuning && !force_collect_stat)
 			add_deactivated_query(query_context.query_hash);
 
 		/*

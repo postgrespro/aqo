@@ -295,8 +295,8 @@ extern bool my_index_insert(Relation indexRelation,	Datum *values, bool *isnull,
 							IndexUniqueCheck checkUnique);
 void init_deactivated_queries_storage(void);
 void fini_deactivated_queries_storage(void);
-bool query_is_deactivated(int query_hash);
-void add_deactivated_query(int query_hash);
+extern bool query_is_deactivated(int query_hash);
+extern void add_deactivated_query(int query_hash);
 
 /* Query preprocessing hooks */
 extern void get_query_text(ParseState *pstate, Query *query,
