@@ -22,6 +22,7 @@ REGRESS =	aqo_disabled \
 			forced_stat_collection \
 			unsupported \
 			clean_aqo_data \
+			plancache	\
 			top_queries
 
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw

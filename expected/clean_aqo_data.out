@@ -318,3 +318,4 @@ SELECT count(*) FROM aqo_query_stat WHERE
      0
 (1 row)
 
+DROP EXTENSION aqo;
