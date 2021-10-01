@@ -20,6 +20,7 @@
 #include "hash.h"
 #include "ignorance.h"
 #include "path_utils.h"
+#include "preprocessing.h"
 
 #include "access/parallel.h"
 #include "optimizer/optimizer.h"
@@ -541,18 +542,37 @@ update_query_stat_row(double *et, int *et_size,
 void
 aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 {
-	instr_time	current_time;
+	instr_time	now;
 	bool use_aqo;
 
-	use_aqo = !IsParallelWorker() && (query_context.use_aqo ||
-									  query_context.learn_aqo ||
-									  force_collect_stat);
+	if (IsQueryDisabled())
+		/* Fast path */
+		use_aqo = false;
+	else
+		use_aqo = !IsParallelWorker() && (query_context.use_aqo ||
+										  query_context.learn_aqo ||
+										  force_collect_stat);
 
 	if (use_aqo)
 	{
-		INSTR_TIME_SET_CURRENT(current_time);
-		INSTR_TIME_SUBTRACT(current_time, query_context.query_starttime);
-		query_context.query_planning_time = INSTR_TIME_GET_DOUBLE(current_time);
+		if (!INSTR_TIME_IS_ZERO(query_context.start_planning_time))
+		{
+			INSTR_TIME_SET_CURRENT(now);
+			INSTR_TIME_SUBTRACT(now, query_context.start_planning_time);
+			query_context.planning_time = INSTR_TIME_GET_DOUBLE(now);
+		}
+		else
+			query_context.planning_time = -1;
+
+		/*
+		 * To zero this timestamp preventing a false time calculation in the
+		 * case, when the plan was got from a plan cache.
+		 */
+		INSTR_TIME_SET_ZERO(query_context.start_planning_time);
+
+		/* Make a timestamp for execution stage. */
+		INSTR_TIME_SET_CURRENT(now);
+		query_context.start_execution_time = now;
 
 		query_context.explain_only = ((eflags & EXEC_FLAG_EXPLAIN_ONLY) != 0);
 
@@ -582,7 +602,7 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 void
 aqo_ExecutorEnd(QueryDesc *queryDesc)
 {
-	double totaltime;
+	double execution_time;
 	double cardinality_error;
 	QueryStat *stat = NULL;
 	instr_time endtime;
@@ -632,9 +652,11 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 
 	if (query_context.collect_stat)
 	{
+		/* Calculate execution time. */
 		INSTR_TIME_SET_CURRENT(endtime);
-		INSTR_TIME_SUBTRACT(endtime, query_context.query_starttime);
-		totaltime = INSTR_TIME_GET_DOUBLE(endtime);
+		INSTR_TIME_SUBTRACT(endtime, query_context.start_execution_time);
+		execution_time = INSTR_TIME_GET_DOUBLE(endtime);
+
 		if (cardinality_num_objects > 0)
 			cardinality_error = cardinality_sum_errors / cardinality_num_objects;
 		else
@@ -653,8 +675,8 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 									 &stat->planning_time_with_aqo_size,
 									 stat->cardinality_error_with_aqo,
 									 &stat->cardinality_error_with_aqo_size,
-									 query_context.query_planning_time,
-									 totaltime - query_context.query_planning_time,
+									 query_context.planning_time,
+									 execution_time,
 									 cardinality_error,
 									 &stat->executions_with_aqo);
 			else
@@ -665,8 +687,8 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 									 &stat->planning_time_without_aqo_size,
 									 stat->cardinality_error_without_aqo,
 									 &stat->cardinality_error_without_aqo_size,
-									 query_context.query_planning_time,
-									 totaltime - query_context.query_planning_time,
+									 query_context.planning_time,
+									 execution_time,
 									 cardinality_error,
 									 &stat->executions_without_aqo);
 		}

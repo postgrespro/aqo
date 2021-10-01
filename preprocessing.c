@@ -57,6 +57,8 @@
  */
 
 #include "aqo.h"
+#include "preprocessing.h"
+
 #include "access/parallel.h"
 #include "access/table.h"
 #include "commands/extension.h"
@@ -152,8 +154,6 @@ aqo_planner(Query *parse,
 	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
 	cur_classes = lappend_int(cur_classes, query_context.query_hash);
 	MemoryContextSwitchTo(oldCxt);
-
-	INSTR_TIME_SET_CURRENT(query_context.query_starttime);
 
 	/*
 	 * find-add query and query text must be atomic operation to prevent
@@ -307,6 +307,10 @@ aqo_planner(Query *parse,
 		query_context.fspace_hash = query_context.query_hash;
 	}
 
+	if (!IsQueryDisabled())
+		/* It's good place to set timestamp of start of a planning process. */
+		INSTR_TIME_SET_CURRENT(query_context.start_planning_time);
+
 	return call_default_planner(parse,
 								query_string,
 								cursorOptions,
@@ -319,11 +323,30 @@ aqo_planner(Query *parse,
 void
 disable_aqo_for_query(void)
 {
-	query_context.adding_query = false;
+
 	query_context.learn_aqo = false;
 	query_context.use_aqo = false;
 	query_context.auto_tuning = false;
 	query_context.collect_stat = false;
+	query_context.adding_query = false;
+	query_context.explain_only = false;
+
+	INSTR_TIME_SET_ZERO(query_context.start_planning_time);
+}
+
+/*
+ * AQO is really needed for any activity?
+ */
+bool
+IsQueryDisabled(void)
+{
+	if (!query_context.learn_aqo && !query_context.use_aqo &&
+		!query_context.auto_tuning && !query_context.collect_stat &&
+		!query_context.adding_query && !query_context.explain_only &&
+		INSTR_TIME_IS_ZERO(query_context.start_planning_time))
+		return true;
+
+	return false;
 }
 
 /*

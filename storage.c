@@ -16,6 +16,7 @@
  */
 
 #include "aqo.h"
+#include "preprocessing.h"
 
 #include "access/heapam.h"
 #include "access/table.h"

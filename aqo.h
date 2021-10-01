@@ -206,17 +206,25 @@ typedef struct
 typedef struct QueryContextData
 {
 	int			query_hash;
+	int			fspace_hash;
 	bool		learn_aqo;
 	bool		use_aqo;
-	int			fspace_hash;
 	bool		auto_tuning;
 	bool		collect_stat;
 	bool		adding_query;
 	bool		explain_only;
 
-	/* Query execution time */
-	instr_time	query_starttime;
-	double		query_planning_time;
+	/*
+	 * Timestamp of start of query planning process. Must be zeroed on execution
+	 * start or in the case of ERROR. Query context is stored in an query env
+	 * field. So, if query has a cached plan, a planning step could be skipped
+	 * by an optimizer. We should realize it at an execution stage by zero value
+	 * of this field.
+	 */
+	instr_time	start_planning_time;
+
+	instr_time	start_execution_time;
+	double		planning_time;
 } QueryContextData;
 
 extern double predicted_ppi_rows;
@@ -315,7 +323,6 @@ extern void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 							   const instr_time *planduration,
 							   QueryEnvironment *queryEnv);
 extern void print_node_explain(ExplainState *es, PlanState *ps, Plan *plan);
-extern void disable_aqo_for_query(void);
 
 /* Cardinality estimation hooks */
 extern void aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel);
