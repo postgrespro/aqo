@@ -15,6 +15,8 @@
  *
  */
 
+#include "postgres.h"
+
 #include "aqo.h"
 
 /*

@@ -18,6 +18,9 @@
  *	  aqo/hash.c
  *
  */
+
+#include "postgres.h"
+
 #include "math.h"
 
 #include "aqo.h"

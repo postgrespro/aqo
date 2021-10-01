@@ -8,17 +8,20 @@
  *	  aqo/aqo.c
  */
 
-#include "aqo.h"
-#include "cardinality_hooks.h"
-#include "ignorance.h"
-#include "path_utils.h"
-#include "preprocessing.h"
+#include "postgres.h"
 
 #include "access/relation.h"
 #include "access/table.h"
 #include "catalog/pg_extension.h"
 #include "commands/extension.h"
 #include "utils/selfuncs.h"
+
+#include "aqo.h"
+#include "cardinality_hooks.h"
+#include "ignorance.h"
+#include "path_utils.h"
+#include "preprocessing.h"
+
 
 PG_MODULE_MAGIC;
 

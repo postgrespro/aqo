@@ -15,12 +15,15 @@
  *
  */
 
-#include "aqo.h"
-#include "preprocessing.h"
+#include "postgres.h"
 
 #include "access/heapam.h"
 #include "access/table.h"
 #include "access/tableam.h"
+
+#include "aqo.h"
+#include "preprocessing.h"
+
 
 HTAB *deactivated_queries = NULL;
 

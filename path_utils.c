@@ -12,10 +12,14 @@
  *
  */
 
-#include "aqo.h"
-#include "path_utils.h"
+#include "postgres.h"
+
 #include "nodes/readfuncs.h"
 #include "optimizer/optimizer.h"
+#include "path_utils.h"
+
+#include "aqo.h"
+
 
 /*
  * Hook on creation of a plan node. We need to store AQO-specific data to

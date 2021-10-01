@@ -1,12 +1,15 @@
-#include "aqo.h"
-#include "ignorance.h"
-#include "path_utils.h"
+#include "postgres.h"
 
 #include "access/heapam.h"
 #include "access/parallel.h"
 #include "executor/spi.h"
 #include "utils/lsyscache.h"
 #include "miscadmin.h"
+
+#include "aqo.h"
+#include "ignorance.h"
+#include "path_utils.h"
+
 
 bool aqo_log_ignorance;
 

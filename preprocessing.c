@@ -56,12 +56,15 @@
  *
  */
 
-#include "aqo.h"
-#include "preprocessing.h"
+#include "postgres.h"
 
 #include "access/parallel.h"
 #include "access/table.h"
 #include "commands/extension.h"
+
+#include "aqo.h"
+#include "preprocessing.h"
+
 
 /* List of feature spaces, that are processing in this backend. */
 List *cur_classes = NIL;

@@ -16,16 +16,18 @@
  *
  */
 
-#include "aqo.h"
-#include "hash.h"
-#include "ignorance.h"
-#include "path_utils.h"
-#include "preprocessing.h"
+#include "postgres.h"
 
 #include "access/parallel.h"
 #include "optimizer/optimizer.h"
 #include "postgres_fdw.h"
 #include "utils/queryenvironment.h"
+
+#include "aqo.h"
+#include "hash.h"
+#include "ignorance.h"
+#include "path_utils.h"
+#include "preprocessing.h"
 
 
 typedef struct

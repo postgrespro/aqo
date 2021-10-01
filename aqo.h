@@ -116,10 +116,6 @@
 
 #include <math.h>
 
-#include "postgres.h"
-
-#include "fmgr.h"
-
 #include "access/hash.h"
 #include "access/htup_details.h"
 #include "access/xact.h"
@@ -307,8 +303,6 @@ extern bool query_is_deactivated(int query_hash);
 extern void add_deactivated_query(int query_hash);
 
 /* Query preprocessing hooks */
-extern void get_query_text(ParseState *pstate, Query *query,
-						   JumbleState *jstate);
 extern void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 							   ExplainState *es, const char *queryString,
 							   ParamListInfo params,

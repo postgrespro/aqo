@@ -25,6 +25,8 @@
  *
  */
 
+#include "postgres.h"
+
 #include "aqo.h"
 #include "cardinality_hooks.h"
 #include "hash.h"
