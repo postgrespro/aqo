@@ -309,14 +309,6 @@ extern void add_deactivated_query(int query_hash);
 /* Query preprocessing hooks */
 extern void get_query_text(ParseState *pstate, Query *query,
 						   JumbleState *jstate);
-extern PlannedStmt *call_default_planner(Query *parse,
-										 const char *query_string,
-										 int cursorOptions,
-										 ParamListInfo boundParams);
-extern PlannedStmt *aqo_planner(Query *parse,
-								const char *query_string,
-								int cursorOptions,
-								ParamListInfo boundParams);
 extern void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 							   ExplainState *es, const char *queryString,
 							   ParamListInfo params,

@@ -72,7 +72,6 @@ static void update_query_stat_row(double *et, int *et_size,
 static void StoreToQueryEnv(QueryDesc *queryDesc);
 static void StorePlanInternals(QueryDesc *queryDesc);
 static bool ExtractFromQueryEnv(QueryDesc *queryDesc);
-static void RemoveFromQueryEnv(QueryDesc *queryDesc);
 
 
 /*
@@ -542,8 +541,15 @@ update_query_stat_row(double *et, int *et_size,
 void
 aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 {
-	instr_time	now;
+	instr_time now;
 	bool use_aqo;
+
+	/*
+	 * If the plan pulled from a plan cache, planning don't needed. Restore
+	 * query context from the query environment.
+	 */
+	if (ExtractFromQueryEnv(queryDesc))
+		Assert(INSTR_TIME_IS_ZERO(query_context.start_planning_time));
 
 	if (IsQueryDisabled())
 		/* Fast path */
@@ -713,8 +719,6 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 
 	cur_classes = list_delete_int(cur_classes, query_context.query_hash);
 
-	RemoveFromQueryEnv(queryDesc);
-
 end:
 	if (prev_ExecutorEnd_hook)
 		prev_ExecutorEnd_hook(queryDesc);
@@ -728,9 +732,11 @@ end:
 }
 
 /*
- * Store into query environment field AQO data related to the query.
+ * Store into a query environment field an AQO data related to the query.
  * We introduce this machinery to avoid problems with subqueries, induced by
  * top-level query.
+ * If such enr exists, routine will replace it with current value of the
+ * query context.
  */
 static void
 StoreToQueryEnv(QueryDesc *queryDesc)
@@ -740,16 +746,20 @@ StoreToQueryEnv(QueryDesc *queryDesc)
 	MemoryContext	oldCxt;
 
 	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
-	enr = palloc0(sizeof(EphemeralNamedRelationData));
+
 	if (queryDesc->queryEnv == NULL)
-		queryDesc->queryEnv = create_queryEnv();
+			queryDesc->queryEnv = create_queryEnv();
+
+	enr = get_ENR(queryDesc->queryEnv, AQOPrivateData);
+	if (enr == NULL)
+		/* If such query environment don't exists, allocate new. */
+		enr = palloc0(sizeof(EphemeralNamedRelationData));
 
 	enr->md.name = AQOPrivateData;
 	enr->md.enrtuples = 0;
 	enr->md.enrtype = 0;
 	enr->md.reliddesc = InvalidOid;
 	enr->md.tupdesc = NULL;
-
 	enr->reldata = palloc0(qcsize);
 	memcpy(enr->reldata, &query_context, qcsize);
 
@@ -782,9 +792,14 @@ StorePlanInternals(QueryDesc *queryDesc)
 	planstate_tree_walker(queryDesc->planstate, calculateJoinNum, &njoins);
 
 	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
-	enr = palloc0(sizeof(EphemeralNamedRelationData));
+
 	if (queryDesc->queryEnv == NULL)
 			queryDesc->queryEnv = create_queryEnv();
+
+	enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
+	if (enr == NULL)
+		/* If such query environment don't exists, allocate new. */
+		enr = palloc0(sizeof(EphemeralNamedRelationData));
 
 	enr->md.name = PlanStateInfo;
 	enr->md.enrtuples = 0;
@@ -821,21 +836,6 @@ ExtractFromQueryEnv(QueryDesc *queryDesc)
 	memcpy(&query_context, enr->reldata, sizeof(QueryContextData));
 
 	return true;
-}
-
-static void
-RemoveFromQueryEnv(QueryDesc *queryDesc)
-{
-	EphemeralNamedRelation enr = get_ENR(queryDesc->queryEnv, AQOPrivateData);
-	unregister_ENR(queryDesc->queryEnv, AQOPrivateData);
-	pfree(enr->reldata);
-	pfree(enr);
-
-	/* Remove the plan state internals */
-	enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
-	unregister_ENR(queryDesc->queryEnv, PlanStateInfo);
-	pfree(enr->reldata);
-	pfree(enr);
 }
 
 void

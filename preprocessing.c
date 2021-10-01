@@ -72,7 +72,7 @@ static bool isQueryUsingSystemRelation_walker(Node *node, void *context);
 /*
  * Calls standard query planner or its previous hook.
  */
-PlannedStmt *
+static PlannedStmt *
 call_default_planner(Query *parse,
 					 const char *query_string,
 					 int cursorOptions,
@@ -150,6 +150,9 @@ aqo_planner(Query *parse,
 									cursorOptions,
 									boundParams);
 	}
+
+	elog(DEBUG1, "AQO will be used for query '%s', class %d",
+		 query_string ? query_string : "null string", query_context.query_hash);
 
 	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
 	cur_classes = lappend_int(cur_classes, query_context.query_hash);
@@ -353,7 +356,7 @@ IsQueryDisabled(void)
  * Examine a fully-parsed query, and return TRUE iff any relation underlying
  * the query is a system relation.
  */
-bool
+static bool
 isQueryUsingSystemRelation(Query *query)
 {
 	return isQueryUsingSystemRelation_walker((Node *) query, NULL);
@@ -375,7 +378,7 @@ IsAQORelation(Relation rel)
 	return false;
 }
 
-bool
+static bool
 isQueryUsingSystemRelation_walker(Node *node, void *context)
 {
 	if (node == NULL)
