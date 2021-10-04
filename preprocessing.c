@@ -94,6 +94,30 @@ call_default_planner(Query *parse,
 }
 
 /*
+ * Check, that a 'CREATE EXTENSION aqo' command has been executed.
+ * This function allows us to execute the get_extension_oid routine only once
+ * at each backend.
+ * If any AQO-related table is missed we will set aqo_enabled to false (see
+ * a storage implementation module).
+ */
+static bool
+aqoIsEnabled(void)
+{
+	if (creating_extension)
+		/* Nothing to tell in this mode. */
+		return false;
+
+	if (aqo_enabled)
+		/* Fast path. Dropping should be detected by absence of any table. */
+		return true;
+
+	if (get_extension_oid("aqo", true) != InvalidOid)
+		aqo_enabled = true;
+
+	return aqo_enabled;
+}
+
+/*
  * Before query optimization we determine machine learning settings
  * for the query.
  * This hook computes query_hash, and sets values of learn_aqo,
@@ -120,18 +144,23 @@ aqo_planner(Query *parse,
 	  * the heap during planning. Transactions is synchronized between parallel
 	  * sections. See GetCurrentCommandId() comments also.
 	  */
-	if ((parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT &&
+	if (!aqoIsEnabled() ||
+		(parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT &&
 		parse->commandType != CMD_UPDATE && parse->commandType != CMD_DELETE) ||
-		strstr(application_name, "postgres_fdw") != NULL || /* Prevent distributed deadlocks */
-		strstr(application_name, "pgfdw:") != NULL || /* caused by fdw */
-		get_extension_oid("aqo", true) == InvalidOid ||
 		creating_extension ||
 		IsInParallelMode() || IsParallelWorker() ||
 		(aqo_mode == AQO_MODE_DISABLED && !force_collect_stat) ||
+		strstr(application_name, "postgres_fdw") != NULL || /* Prevent distributed deadlocks */
+		strstr(application_name, "pgfdw:") != NULL || /* caused by fdw */
 		isQueryUsingSystemRelation(parse) ||
 		RecoveryInProgress())
 	{
+		/*
+		 * We should disable AQO for this query to remember this decision along
+		 * all execution stages.
+		 */
 		disable_aqo_for_query();
+
 		return call_default_planner(parse,
 									query_string,
 									cursorOptions,

@@ -31,6 +31,8 @@ void _PG_init(void);
 
 /* Strategy of determining feature space for new queries. */
 int		aqo_mode;
+bool	aqo_enabled = false; /* Signals that CREATE EXTENSION have executed and
+								all extension tables is ready for use. */
 bool	force_collect_stat;
 
 /*

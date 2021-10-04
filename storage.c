@@ -60,7 +60,16 @@ open_aqo_relation(char *heaprelnspname, char *heaprelname,
 	*hrel = table_openrv_extended(rv,  lockmode, true);
 	if (!OidIsValid(reloid) || *hrel == NULL)
 	{
+		/*
+		 * Absence of any AQO-related table tell us that someone executed
+		 * a 'DROP EXTENSION aqo' command. We disable AQO for all future queries
+		 * in this backend. For performance reasons we do it locally.
+		 * Also, we gently disable AQO for the rest of the current query
+		 * execution process.
+		 */
+		aqo_enabled = false;
 		disable_aqo_for_query();
+
 		return false;
 	}
 
