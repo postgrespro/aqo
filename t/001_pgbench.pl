@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use TestLib;
-use Test::More tests => 18;
+use Test::More tests => 20;
 use PostgresNode;
 
 my $node = PostgresNode->new('aqotest');
@@ -250,4 +250,46 @@ is($new_fs_samples_count == $fs_samples_count - $pgb_fs_samples_count, 1, 'Total
 is($new_stat_count == $stat_count - $pgb_stat_count, 1, 'Total number of samples in aqo_query_texts');
 
 $node->safe_psql('postgres', "DROP EXTENSION aqo");
+
+# ##############################################################################
+#
+# Check CREATE/DROP AQO extension commands in a highly concurrent environment.
+#
+# ##############################################################################
+
+$node->command_ok([ 'pgbench', '-i', '-s', '1' ], 'init pgbench tables');
+my $bank = File::Temp->new();
+append_to_file($bank, q{
+	\set aid random(1, 100000 * :scale)
+	\set bid random(1, 1 * :scale)
+	\set tid random(1, 10 * :scale)
+	\set delta random(-5000, 5000)
+	\set drop_aqo random(0, 5)
+	\if :client_id = 0 AND :drop_aqo = 0
+		DROP EXTENSION aqo;
+	\sleep 10 ms
+		CREATE EXTENSION aqo;
+	\else
+	BEGIN;
+	UPDATE pgbench_accounts SET abalance = abalance + :delta WHERE aid = :aid;
+	SELECT abalance FROM pgbench_accounts WHERE aid = :aid;
+	UPDATE pgbench_tellers SET tbalance = tbalance + :delta WHERE tid = :tid;
+	UPDATE pgbench_branches SET bbalance = bbalance + :delta WHERE bid = :bid;
+	INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (:tid, :bid, :aid, :delta, CURRENT_TIMESTAMP);
+	END;
+	\endif
+});
+
+$node->safe_psql('postgres', "
+	CREATE EXTENSION aqo;
+	ALTER SYSTEM SET aqo.mode = 'intelligent';
+	ALTER SYSTEM SET log_statement = 'all';
+	SELECT pg_reload_conf();
+");
+$node->restart();
+
+$node->command_ok([ 'pgbench', '-T',
+					"5", '-c', "$CLIENTS", '-j', "$THREADS" , '-f', "$bank"],
+					'Conflicts with an AQO dropping command.');
+
 $node->stop();

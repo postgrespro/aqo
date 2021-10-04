@@ -42,6 +42,31 @@ static bool my_simple_heap_update(Relation relation,
 								  HeapTuple tup,
 								  bool *update_indexes);
 
+/*
+ * Open an AQO-related relation.
+ * It should be done carefully because of a possible concurrent DROP EXTENSION
+ * command. In such case AQO must be disabled in this backend.
+ */
+static bool
+open_aqo_relation(char *heaprelnspname, char *heaprelname,
+				  char *indrelname, LOCKMODE lockmode,
+				  Relation *hrel, Relation *irel)
+{
+	Oid reloid;
+	RangeVar *rv;
+
+	reloid = RelnameGetRelid(indrelname);
+	rv = makeRangeVar(heaprelnspname, heaprelname, -1);
+	*hrel = table_openrv_extended(rv,  lockmode, true);
+	if (!OidIsValid(reloid) || *hrel == NULL)
+	{
+		disable_aqo_for_query();
+		return false;
+	}
+
+	*irel = index_open(reloid,  lockmode);
+	return true;
+}
 
 /*
  * Returns whether the query with given hash is in aqo_queries.
@@ -53,28 +78,19 @@ static bool my_simple_heap_update(Relation relation,
 bool
 find_query(int qhash, Datum *search_values, bool *search_nulls)
 {
-	RangeVar   *rv;
 	Relation	hrel;
 	Relation	irel;
 	HeapTuple	tuple;
 	TupleTableSlot *slot;
 	bool shouldFree;
-	Oid			reloid;
 	IndexScanDesc scan;
 	ScanKeyData key;
 	SnapshotData snap;
 	bool		find_ok = false;
 
-	reloid = RelnameGetRelid("aqo_queries_query_hash_idx");
-	if (!OidIsValid(reloid))
-	{
-		disable_aqo_for_query();
+	if (!open_aqo_relation("public", "aqo_queries", "aqo_queries_query_hash_idx",
+		AccessShareLock, &hrel, &irel))
 		return false;
-	}
-
-	rv = makeRangeVar("public", "aqo_queries", -1);
-	hrel = table_openrv(rv,  AccessShareLock);
-	irel = index_open(reloid,  AccessShareLock);
 
 	InitDirtySnapshot(snap);
 	scan = index_beginscan(hrel, irel, &snap, 1, 0);
@@ -112,7 +128,6 @@ bool
 update_query(int qhash, int fhash,
 			 bool learn_aqo, bool use_aqo, bool auto_tuning)
 {
-	RangeVar   *rv;
 	Relation	hrel;
 	Relation	irel;
 	TupleTableSlot *slot;
@@ -124,7 +139,6 @@ update_query(int qhash, int fhash,
 	bool		shouldFree;
 	bool		result = true;
 	bool		update_indexes;
-	Oid			reloid;
 	IndexScanDesc scan;
 	ScanKeyData key;
 	SnapshotData snap;
@@ -133,16 +147,9 @@ update_query(int qhash, int fhash,
 	if (XactReadOnly)
 		return false;
 
-	reloid = RelnameGetRelid("aqo_queries_query_hash_idx");
-	if (!OidIsValid(reloid))
-	{
-		disable_aqo_for_query();
+	if (!open_aqo_relation("public", "aqo_queries", "aqo_queries_query_hash_idx",
+		RowExclusiveLock, &hrel, &irel))
 		return false;
-	}
-
-	rv = makeRangeVar("public", "aqo_queries", -1);
-	hrel = table_openrv(rv, RowExclusiveLock);
-	irel = index_open(reloid, RowExclusiveLock);
 
 	/*
 	 * Start an index scan. Use dirty snapshot to check concurrent updates that
@@ -225,13 +232,11 @@ update_query(int qhash, int fhash,
 bool
 add_query_text(int qhash, const char *query_string)
 {
-	RangeVar   *rv;
 	Relation	hrel;
 	Relation	irel;
 	HeapTuple	tuple;
 	Datum		values[2];
 	bool		isnull[2] = {false, false};
-	Oid			reloid;
 
 	values[0] = Int32GetDatum(qhash);
 	values[1] = CStringGetTextDatum(query_string);
@@ -240,16 +245,11 @@ add_query_text(int qhash, const char *query_string)
 	if (XactReadOnly)
 		return false;
 
-	reloid = RelnameGetRelid("aqo_query_texts_query_hash_idx");
-	if (!OidIsValid(reloid))
-	{
-		disable_aqo_for_query();
+	if (!open_aqo_relation("public", "aqo_query_texts",
+						   "aqo_query_texts_query_hash_idx",
+						   RowExclusiveLock, &hrel, &irel))
 		return false;
-	}
 
-	rv = makeRangeVar("public", "aqo_query_texts", -1);
-	hrel = table_openrv(rv, RowExclusiveLock);
-	irel = index_open(reloid, RowExclusiveLock);
 	tuple = heap_form_tuple(RelationGetDescr(hrel), values, isnull);
 
 	simple_heap_insert(hrel, tuple);
@@ -329,32 +329,24 @@ load_fss(int fhash, int fss_hash,
 		 int ncols, double **matrix, double *targets, int *rows,
 		 List **relids)
 {
-	RangeVar	*rv;
 	Relation	hrel;
 	Relation	irel;
 	HeapTuple	tuple;
 	TupleTableSlot *slot;
 	bool		shouldFree;
 	bool		find_ok = false;
-	Oid			reloid;
 	IndexScanDesc scan;
 	ScanKeyData	key[2];
 	Datum		values[6];
 	bool		isnull[6];
 	bool		success = true;
 
-	reloid = RelnameGetRelid("aqo_fss_access_idx");
-	if (!OidIsValid(reloid))
-	{
-		disable_aqo_for_query();
+	if (!open_aqo_relation("public", "aqo_data",
+						   "aqo_fss_access_idx",
+						   AccessShareLock, &hrel, &irel))
 		return false;
-	}
 
-	rv = makeRangeVar("public", "aqo_data", -1);
-	hrel = table_openrv(rv, AccessShareLock);
-	irel = index_open(reloid, AccessShareLock);
 	scan = index_beginscan(hrel, irel, SnapshotSelf, 2, 0);
-
 	ScanKeyInit(&key[0], 1, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fhash));
 	ScanKeyInit(&key[1], 2, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fss_hash));
 	index_rescan(scan, key, 2, NULL, 0);
@@ -418,7 +410,6 @@ bool
 update_fss(int fhash, int fsshash, int nrows, int ncols,
 		   double **matrix, double *targets, List *relids)
 {
-	RangeVar   *rv;
 	Relation	hrel;
 	Relation	irel;
 	SnapshotData snap;
@@ -432,7 +423,6 @@ update_fss(int fhash, int fsshash, int nrows, int ncols,
 	bool		shouldFree;
 	bool		find_ok = false;
 	bool		update_indexes;
-	Oid			reloid;
 	IndexScanDesc scan;
 	ScanKeyData	key[2];
 	bool result = true;
@@ -441,18 +431,12 @@ update_fss(int fhash, int fsshash, int nrows, int ncols,
 	if (XactReadOnly)
 		return false;
 
-	reloid = RelnameGetRelid("aqo_fss_access_idx");
-	if (!OidIsValid(reloid))
-	{
-		disable_aqo_for_query();
+	if (!open_aqo_relation("public", "aqo_data",
+						   "aqo_fss_access_idx",
+						   RowExclusiveLock, &hrel, &irel))
 		return false;
-	}
 
-	rv = makeRangeVar("public", "aqo_data", -1);
-	hrel = table_openrv(rv, RowExclusiveLock);
-	irel = index_open(reloid, RowExclusiveLock);
 	tupDesc = RelationGetDescr(hrel);
-
 	InitDirtySnapshot(snap);
 	scan = index_beginscan(hrel, irel, &snap, 2, 0);
 
@@ -553,26 +537,19 @@ update_fss(int fhash, int fsshash, int nrows, int ncols,
 QueryStat *
 get_aqo_stat(int qhash)
 {
-	RangeVar   *rv;
 	Relation	hrel;
 	Relation	irel;
 	TupleTableSlot *slot;
-	Oid			reloid;
 	IndexScanDesc scan;
 	ScanKeyData key;
 	QueryStat  *stat = palloc_query_stat();
 	bool		shouldFree;
 
-	reloid = RelnameGetRelid("aqo_query_stat_idx");
-	if (!OidIsValid(reloid))
-	{
-		disable_aqo_for_query();
-		return NULL;
-	}
 
-	rv = makeRangeVar("public", "aqo_query_stat", -1);
-	hrel = table_openrv(rv, AccessShareLock);
-	irel = index_open(reloid, AccessShareLock);
+	if (!open_aqo_relation("public", "aqo_query_stat",
+						   "aqo_query_stat_idx",
+						   AccessShareLock, &hrel, &irel))
+		return false;
 
 	scan = index_beginscan(hrel, irel, SnapshotSelf, 1, 0);
 	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(qhash));
@@ -614,7 +591,6 @@ get_aqo_stat(int qhash)
 void
 update_aqo_stat(int qhash, QueryStat *stat)
 {
-	RangeVar   *rv;
 	Relation	hrel;
 	Relation	irel;
 	SnapshotData snap;
@@ -631,7 +607,6 @@ update_aqo_stat(int qhash, QueryStat *stat)
 								true, true, true };
 	bool		shouldFree;
 	bool		update_indexes;
-	Oid			reloid;
 	IndexScanDesc scan;
 	ScanKeyData	key;
 
@@ -639,16 +614,11 @@ update_aqo_stat(int qhash, QueryStat *stat)
 	if (XactReadOnly)
 		return;
 
-	reloid = RelnameGetRelid("aqo_query_stat_idx");
-	if (!OidIsValid(reloid))
-	{
-		disable_aqo_for_query();
+	if (!open_aqo_relation("public", "aqo_query_stat",
+						   "aqo_query_stat_idx",
+						   RowExclusiveLock, &hrel, &irel))
 		return;
-	}
 
-	rv = makeRangeVar("public", "aqo_query_stat", -1);
-	hrel = table_openrv(rv, RowExclusiveLock);
-	irel = index_open(reloid, RowExclusiveLock);
 	tupDesc = RelationGetDescr(hrel);
 
 	InitDirtySnapshot(snap);
