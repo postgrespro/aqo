@@ -747,7 +747,7 @@ StoreToQueryEnv(QueryDesc *queryDesc)
 	int	qcsize = sizeof(QueryContextData);
 	MemoryContext	oldCxt;
 
-	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
+	oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc));
 
 	if (queryDesc->queryEnv == NULL)
 			queryDesc->queryEnv = create_queryEnv();
@@ -793,7 +793,7 @@ StorePlanInternals(QueryDesc *queryDesc)
 	njoins = 0;
 	planstate_tree_walker(queryDesc->planstate, calculateJoinNum, &njoins);
 
-	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
+	oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc));
 
 	if (queryDesc->queryEnv == NULL)
 			queryDesc->queryEnv = create_queryEnv();
