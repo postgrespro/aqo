@@ -527,7 +527,7 @@ update_query_stat_row(double *et, int *et_size,
 			pt[i - 1] = pt[i];
 
 	*pt_size = (*pt_size >= aqo_stat_size) ? aqo_stat_size : (*pt_size + 1);
-	pt[*pt_size - 1] = planning_time;
+	pt[*pt_size - 1] = planning_time; /* Just remember: planning time can be negative. */
 	(*n_exec)++;
 }
 
@@ -570,6 +570,10 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 			query_context.planning_time = INSTR_TIME_GET_DOUBLE(now);
 		}
 		else
+			/*
+			 * Should set anyway. It will be stored in a query env. The query
+			 * can be reused later by extracting from a plan cache.
+			 */
 			query_context.planning_time = -1;
 
 		/*

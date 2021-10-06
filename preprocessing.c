@@ -367,6 +367,7 @@ disable_aqo_for_query(void)
 	query_context.explain_only = false;
 
 	INSTR_TIME_SET_ZERO(query_context.start_planning_time);
+	query_context.planning_time = -1.;
 }
 
 /*
@@ -378,7 +379,8 @@ IsQueryDisabled(void)
 	if (!query_context.learn_aqo && !query_context.use_aqo &&
 		!query_context.auto_tuning && !query_context.collect_stat &&
 		!query_context.adding_query && !query_context.explain_only &&
-		INSTR_TIME_IS_ZERO(query_context.start_planning_time))
+		INSTR_TIME_IS_ZERO(query_context.start_planning_time) &&
+		query_context.planning_time < 0.)
 		return true;
 
 	return false;
