@@ -19,6 +19,7 @@
 #include "path_utils.h"
 
 #include "aqo.h"
+#include "hash.h"
 
 
 /*

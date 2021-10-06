@@ -1,8 +1,6 @@
 #ifndef IGNORANCE_H
 #define IGNORANCE_H
 
-#include "postgres.h"
-
 extern bool aqo_log_ignorance;
 
 extern void set_ignorance(bool newval, void *extra);

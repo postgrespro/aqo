@@ -1,8 +1,6 @@
 #ifndef PATH_UTILS_H
 #define PATH_UTILS_H
 
-#include "postgres.h"
-
 #include "nodes/extensible.h"
 #include "nodes/pathnodes.h"
 #include "optimizer/planmain.h"

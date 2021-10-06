@@ -66,6 +66,7 @@ get_query_hash(Query *parse, const char *query_text)
 	char	   *str_repr;
 	int			hash;
 
+	/* XXX: remove_locations and remove_consts are heavy routines. */
 	str_repr = remove_locations(remove_consts(nodeToString(parse)));
 	hash = DatumGetInt32(hash_any((const unsigned char *) str_repr,
 								  strlen(str_repr) * sizeof(*str_repr)));
@@ -344,7 +345,7 @@ get_unordered_int_list_hash(List *lst)
  * "<start_pattern>[^<end_pattern>]*" are replaced with substring
  * "<start_pattern>".
  */
-char *
+static char *
 replace_patterns(const char *str, const char *start_pattern,
 				 bool (*end_pattern) (char ch))
 {
@@ -399,7 +400,7 @@ get_relidslist_hash(List *relidslist)
  * Returns the C-string in which the substrings of kind "{CONST.*}" are
  * replaced with substring "{CONST}".
  */
-char *
+static char *
 remove_consts(const char *str)
 {
 	char *res;
@@ -413,7 +414,7 @@ remove_consts(const char *str)
  * Returns the C-string in which the substrings of kind " :location.*}" are
  * replaced with substring " :location}".
  */
-char *
+static char *
 remove_locations(const char *str)
 {
 	return replace_patterns(str, " :location", is_brace);

@@ -63,6 +63,7 @@
 #include "commands/extension.h"
 
 #include "aqo.h"
+#include "hash.h"
 #include "preprocessing.h"
 
 

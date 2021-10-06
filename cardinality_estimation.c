@@ -20,6 +20,7 @@
 #include "optimizer/optimizer.h"
 
 #include "aqo.h"
+#include "hash.h"
 
 
 /*
