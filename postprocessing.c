@@ -28,6 +28,7 @@
 #include "ignorance.h"
 #include "path_utils.h"
 #include "preprocessing.h"
+#include "profile_mem.h"
 
 
 typedef struct
@@ -559,7 +560,8 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 	else
 		use_aqo = !IsParallelWorker() && (query_context.use_aqo ||
 										  query_context.learn_aqo ||
-										  force_collect_stat);
+										  force_collect_stat ||
+					(aqo_profile_classes > 0 && aqo_profile_enable));
 
 	if (use_aqo)
 	{
@@ -712,6 +714,14 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 			update_aqo_stat(query_context.fspace_hash, stat);
 			pfree_query_stat(stat);
 		}
+
+		/*
+		 * Now we have values of execution_time and planning_time and can add
+		 * total execution time into the profile hash table.
+		 */
+		update_profile_mem_table((query_context.planning_time > 0) ?
+								 query_context.planning_time + execution_time :
+								 execution_time);
 
 		/* Allow concurrent queries to update this feature space. */
 		LockRelease(&tag, ExclusiveLock, false);

@@ -135,3 +135,37 @@ BEGIN
     ORDER BY error DESC LIMIT n;
 END;
 $$ LANGUAGE plpgsql;
+
+--
+-- Classes profiling machinery.
+--
+-- It is supported by two GUC's:
+-- aqo.profile_classes - allocates shared memory for a profiling buffer. Can be
+-- changed on startup only.
+-- aqo.profile_enable - enables/disables profiling machinery. Can be changed by
+-- any user.
+--
+
+--
+-- Get classes profiling info. Use the aqo.profile_classes and
+-- aqo.profile_enable GUC's to enable this feature.
+--
+CREATE OR REPLACE FUNCTION public.aqo_show_classes()
+RETURNS TABLE (
+  query_hash integer,	-- Query class identifier
+  execution_time float,	-- Sum of execution times of all queries belong to a class.
+  counter integer		-- Number of executions of queries of a class.
+)
+AS 'MODULE_PATHNAME', 'aqo_show_classes'
+LANGUAGE C STRICT;
+
+--
+-- Clear classes profiling info.
+--
+CREATE OR REPLACE FUNCTION public.aqo_clear_classes()
+RETURNS bigint
+AS 'MODULE_PATHNAME', 'aqo_clear_classes'
+LANGUAGE C STRICT;
+
+-- Clean classes buffer on the extension creation.
+SELECT public.aqo_clear_classes();

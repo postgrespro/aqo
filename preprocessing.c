@@ -65,6 +65,7 @@
 #include "aqo.h"
 #include "hash.h"
 #include "preprocessing.h"
+#include "profile_mem.h"
 
 
 /* List of feature spaces, that are processing in this backend. */
@@ -150,7 +151,8 @@ aqo_planner(Query *parse,
 		parse->commandType != CMD_UPDATE && parse->commandType != CMD_DELETE) ||
 		creating_extension ||
 		IsInParallelMode() || IsParallelWorker() ||
-		(aqo_mode == AQO_MODE_DISABLED && !force_collect_stat) ||
+		(aqo_mode == AQO_MODE_DISABLED && !force_collect_stat &&
+		aqo_profile_enable <= 0) ||
 		strstr(application_name, "postgres_fdw") != NULL || /* Prevent distributed deadlocks */
 		strstr(application_name, "pgfdw:") != NULL || /* caused by fdw */
 		isQueryUsingSystemRelation(parse) ||
@@ -341,6 +343,13 @@ ignore_query_settings:
 		query_context.collect_stat = true;
 		query_context.fspace_hash = query_context.query_hash;
 	}
+
+	if (aqo_profile_classes > 0 && aqo_profile_enable)
+		/*
+		 * Disable disabled status of the query. We want to store planning and
+		 * execution time of this query.
+		 */
+		query_context.planning_time = 0.;
 
 	if (!IsQueryDisabled())
 		/* It's good place to set timestamp of start of a planning process. */

@@ -23,6 +23,7 @@
 
 #include "aqo.h"
 #include "preprocessing.h"
+#include "profile_mem.h"
 
 
 HTAB *deactivated_queries = NULL;
@@ -64,10 +65,12 @@ open_aqo_relation(char *heaprelnspname, char *heaprelname,
 		 * Absence of any AQO-related table tell us that someone executed
 		 * a 'DROP EXTENSION aqo' command. We disable AQO for all future queries
 		 * in this backend. For performance reasons we do it locally.
+		 * Clear profiling hash table.
 		 * Also, we gently disable AQO for the rest of the current query
 		 * execution process.
 		 */
 		aqo_enabled = false;
+		(void) profile_clear_hash_table();
 		disable_aqo_for_query();
 
 		return false;
