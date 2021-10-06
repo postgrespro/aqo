@@ -109,7 +109,7 @@ find_query(int qhash, Datum *search_values, bool *search_nulls)
 	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
 	find_ok = index_getnext_slot(scan, ForwardScanDirection, slot);
 
-	if (find_ok)
+	if (find_ok && search_values != NULL)
 	{
 		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
 		Assert(shouldFree != true);
@@ -247,6 +247,12 @@ add_query_text(int qhash, const char *query_string)
 	Datum		values[2];
 	bool		isnull[2] = {false, false};
 
+	/* Variables for checking of concurrent writings. */
+	TupleTableSlot *slot;
+	IndexScanDesc scan;
+	ScanKeyData key;
+	SnapshotData snap;
+
 	values[0] = Int32GetDatum(qhash);
 	values[1] = CStringGetTextDatum(query_string);
 
@@ -261,10 +267,28 @@ add_query_text(int qhash, const char *query_string)
 
 	tuple = heap_form_tuple(RelationGetDescr(hrel), values, isnull);
 
-	simple_heap_insert(hrel, tuple);
-	my_index_insert(irel, values, isnull, &(tuple->t_self), hrel,
-															UNIQUE_CHECK_YES);
+	/*
+	 * Start an index scan. Use dirty snapshot to check concurrent updates that
+	 * can be made before, but still not visible.
+	 */
+	InitDirtySnapshot(snap);
+	scan = index_beginscan(hrel, irel, &snap, 1, 0);
+	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(qhash));
 
+	index_rescan(scan, &key, 1, NULL, 0);
+	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
+
+	if (!index_getnext_slot(scan, ForwardScanDirection, slot))
+	{
+		tuple = heap_form_tuple(RelationGetDescr(hrel), values, isnull);
+
+		simple_heap_insert(hrel, tuple);
+		my_index_insert(irel, values, isnull, &(tuple->t_self), hrel,
+															UNIQUE_CHECK_YES);
+	}
+
+	ExecDropSingleTupleTableSlot(slot);
+	index_endscan(scan);
 	index_close(irel, RowExclusiveLock);
 	table_close(hrel, RowExclusiveLock);
 

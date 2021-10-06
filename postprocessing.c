@@ -653,12 +653,9 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		list_free(ctx.selectivities);
 	}
 
-	/* Prevent concurrent updates. */
-	init_lock_tag(&tag, (uint32) query_context.query_hash,
-				 (uint32) query_context.fspace_hash);
-	LockAcquire(&tag, ExclusiveLock, false, false);
-
 	if (query_context.collect_stat)
+		stat = get_aqo_stat(query_context.query_hash);
+
 	{
 		/* Calculate execution time. */
 		INSTR_TIME_SET_CURRENT(endtime);
@@ -670,7 +667,10 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		else
 			cardinality_error = -1;
 
-		stat = get_aqo_stat(query_context.query_hash);
+		/* Prevent concurrent updates. */
+		init_lock_tag(&tag, (uint32) query_context.query_hash,
+					 (uint32) query_context.fspace_hash);
+		LockAcquire(&tag, ExclusiveLock, false, false);
 
 		if (stat != NULL)
 		{
@@ -699,26 +699,21 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 									 execution_time,
 									 cardinality_error,
 									 &stat->executions_without_aqo);
+
+			/* Store all learn data into the AQO service relations. */
+			if (!query_context.adding_query && query_context.auto_tuning)
+				automatical_query_tuning(query_context.query_hash, stat);
+
+			/* Write AQO statistics to the aqo_query_stat table */
+			update_aqo_stat(query_context.fspace_hash, stat);
+			pfree_query_stat(stat);
 		}
+
+		/* Allow concurrent queries to update this feature space. */
+		LockRelease(&tag, ExclusiveLock, false);
 	}
+
 	selectivity_cache_clear();
-
-	/*
-	 * Store all learn data into the AQO service relations.
-	 */
-	if ((query_context.collect_stat) && (stat != NULL))
-	{
-		if (!query_context.adding_query && query_context.auto_tuning)
-			automatical_query_tuning(query_context.query_hash, stat);
-
-		/* Write AQO statistics to the aqo_query_stat table */
-		update_aqo_stat(query_context.fspace_hash, stat);
-		pfree_query_stat(stat);
-	}
-
-	/* Allow concurrent queries to update this feature space. */
-	LockRelease(&tag, ExclusiveLock, false);
-
 	cur_classes = list_delete_int(cur_classes, query_context.query_hash);
 
 end:

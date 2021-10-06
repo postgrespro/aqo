@@ -132,7 +132,7 @@ aqo_planner(Query *parse,
 			int cursorOptions,
 			ParamListInfo boundParams)
 {
-	bool		query_is_stored;
+	bool		query_is_stored = false;
 	Datum		query_params[5];
 	bool		query_nulls[5] = {false, false, false, false, false};
 	LOCKTAG		tag;
@@ -173,7 +173,8 @@ aqo_planner(Query *parse,
 	if (query_is_deactivated(query_context.query_hash) ||
 		list_member_int(cur_classes, query_context.query_hash))
 	{
-		/* Disable AQO for deactivated query or for query belonged to a
+		/*
+		 * Disable AQO for deactivated query or for query belonged to a
 		 * feature space, that is processing yet (disallow invalidation
 		 * recursion, as an example).
 		 */
@@ -191,12 +192,12 @@ aqo_planner(Query *parse,
 	cur_classes = lappend_int(cur_classes, query_context.query_hash);
 	MemoryContextSwitchTo(oldCxt);
 
-	/*
-	 * find-add query and query text must be atomic operation to prevent
-	 * concurrent insertions.
-	 */
-	init_lock_tag(&tag, (uint32) query_context.query_hash, (uint32) 0);
-	LockAcquire(&tag, ExclusiveLock, false, false);
+	if (aqo_mode == AQO_MODE_DISABLED)
+	{
+		/* Skip access to a database in this mode. */
+		disable_aqo_for_query();
+		goto ignore_query_settings;
+	}
 
 	query_is_stored = find_query(query_context.query_hash, &query_params[0],
 															&query_nulls[0]);
@@ -243,32 +244,11 @@ aqo_planner(Query *parse,
 				break;
 			case AQO_MODE_DISABLED:
 				/* Should never happen */
-				query_context.fspace_hash = query_context.query_hash;
+				Assert(0);
 				break;
 			default:
 				elog(ERROR, "unrecognized mode in AQO: %d", aqo_mode);
 				break;
-		}
-
-		if (query_context.adding_query || force_collect_stat)
-		{
-			/*
-			 * Add query into the AQO knowledge base. To process an error with
-			 * concurrent addition from another backend we will try to restart
-			 * preprocessing routine.
-			 */
-			update_query(query_context.query_hash,
-							  query_context.fspace_hash,
-							  query_context.learn_aqo,
-							  query_context.use_aqo,
-							  query_context.auto_tuning);
-
-			/*
-			 * Add query text into the ML-knowledge base. Just for further
-			 * analysis. In the case of cached plans we could have NULL query text.
-			 */
-			if (query_string != NULL)
-				add_query_text(query_context.query_hash, query_string);
 		}
 	}
 	else /* Query class exists in a ML knowledge base. */
@@ -324,14 +304,33 @@ aqo_planner(Query *parse,
 		}
 	}
 
-	LockRelease(&tag, ExclusiveLock, false);
+ignore_query_settings:
+	if (!query_is_stored && (query_context.adding_query || force_collect_stat))
+	{
+		/*
+		 * find-add query and query text must be atomic operation to prevent
+		 * concurrent insertions.
+		 */
+		init_lock_tag(&tag, (uint32) query_context.query_hash, (uint32) 0);
+		LockAcquire(&tag, ExclusiveLock, false, false);
+		/*
+		 * Add query into the AQO knowledge base. To process an error with
+		 * concurrent addition from another backend we will try to restart
+		 * preprocessing routine.
+		 */
+		update_query(query_context.query_hash, query_context.fspace_hash,
+					 query_context.learn_aqo, query_context.use_aqo,
+					 query_context.auto_tuning);
 
-	/*
-	 * This mode is possible here, because force collect statistics uses AQO
-	 * machinery.
-	 */
-	if (aqo_mode == AQO_MODE_DISABLED)
-		disable_aqo_for_query();
+		/*
+		 * Add query text into the ML-knowledge base. Just for further
+		 * analysis. In the case of cached plans we could have NULL query text.
+		 */
+		if (query_string != NULL)
+			add_query_text(query_context.query_hash, query_string);
+
+		LockRelease(&tag, ExclusiveLock, false);
+	}
 
 	if (force_collect_stat)
 	{
