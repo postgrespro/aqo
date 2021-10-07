@@ -11,7 +11,6 @@ use PostgresNode;
 my $node = PostgresNode->new('profiling');
 $node->init;
 $node->append_conf('postgresql.conf', qq{
-						shared_preload_libraries = 'aqo'
 						aqo.mode = 'disabled'
 						aqo.profile_classes = -1
 						aqo.profile_enable = 'true'
@@ -30,8 +29,12 @@ my $res;
 my $total_classes;
 
 $node->start();
+ # ERROR: AQO allow to load library only on startup
+$node->psql('postgres', "CREATE EXTENSION aqo");
 
-$node->safe_psql('postgres', "CREATE EXTENSION aqo");
+$node->append_conf('postgresql.conf', qq{shared_preload_libraries = 'aqo'});
+$node->restart();
+$node->safe_psql('postgres', "CREATE EXTENSION aqo"); # Now it should pass.
 
 # ##############################################################################
 #

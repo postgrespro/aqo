@@ -14,6 +14,7 @@
 #include "access/table.h"
 #include "catalog/pg_extension.h"
 #include "commands/extension.h"
+#include "miscadmin.h"
 #include "utils/selfuncs.h"
 
 #include "aqo.h"
@@ -138,6 +139,16 @@ aqo_free_callback(ResourceReleasePhase phase,
 void
 _PG_init(void)
 {
+	/*
+	 * In order to create our shared memory area, we have to be loaded via
+	 * shared_preload_libraries.  If not, report an ERROR.
+	 */
+	if (!process_shared_preload_libraries_in_progress)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("AQO module could be loaded only on startup."),
+				 errdetail("Add 'aqo' into the shared_preload_libraries list.")));
+
 	DefineCustomEnumVariable("aqo.mode",
 							 "Mode of aqo usage.",
 							 NULL,
