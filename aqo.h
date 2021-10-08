@@ -307,23 +307,6 @@ extern void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 							   QueryEnvironment *queryEnv);
 extern void print_node_explain(ExplainState *es, PlanState *ps, Plan *plan);
 
-/* Cardinality estimation hooks */
-extern void aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel);
-double aqo_get_parameterized_baserel_size(PlannerInfo *root,
-								   RelOptInfo *rel,
-								   List *param_clauses);
-void aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
-							   RelOptInfo *outer_rel,
-							   RelOptInfo *inner_rel,
-							   SpecialJoinInfo *sjinfo,
-							   List *restrictlist);
-double aqo_get_parameterized_joinrel_size(PlannerInfo *root,
-								   RelOptInfo *rel,
-								   Path *outer_path,
-								   Path *inner_path,
-								   SpecialJoinInfo *sjinfo,
-								   List *restrict_clauses);
-
 /* Cardinality estimation */
 double predict_for_relation(List *restrict_clauses, List *selectivities,
 					 List *relids, int *fss_hash);
@@ -361,6 +344,7 @@ extern void selectivity_cache_clear(void);
 
 extern Oid get_aqo_schema(void);
 extern void init_lock_tag(LOCKTAG *tag, uint32 key1, uint32 key2);
+extern bool IsQueryDisabled(void);
 
 extern List *cur_classes;
 #endif

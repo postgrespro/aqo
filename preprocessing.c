@@ -110,7 +110,10 @@ aqoIsEnabled(void)
 		return false;
 
 	if (aqo_enabled)
-		/* Fast path. Dropping should be detected by absence of any table. */
+		/*
+		 * Fast path. Dropping should be detected by absence of any AQO-related
+		 * table.
+		 */
 		return true;
 
 	if (get_extension_oid("aqo", true) != InvalidOid)
@@ -138,8 +141,6 @@ aqo_planner(Query *parse,
 	bool		query_nulls[5] = {false, false, false, false, false};
 	LOCKTAG		tag;
 	MemoryContext oldCxt;
-
-	selectivity_cache_clear();
 
 	 /*
 	  * We do not work inside an parallel worker now by reason of insert into
@@ -170,6 +171,7 @@ aqo_planner(Query *parse,
 									boundParams);
 	}
 
+	selectivity_cache_clear();
 	query_context.query_hash = get_query_hash(parse, query_string);
 
 	if (query_is_deactivated(query_context.query_hash) ||
@@ -377,22 +379,6 @@ disable_aqo_for_query(void)
 
 	INSTR_TIME_SET_ZERO(query_context.start_planning_time);
 	query_context.planning_time = -1.;
-}
-
-/*
- * AQO is really needed for any activity?
- */
-bool
-IsQueryDisabled(void)
-{
-	if (!query_context.learn_aqo && !query_context.use_aqo &&
-		!query_context.auto_tuning && !query_context.collect_stat &&
-		!query_context.adding_query && !query_context.explain_only &&
-		INSTR_TIME_IS_ZERO(query_context.start_planning_time) &&
-		query_context.planning_time < 0.)
-		return true;
-
-	return false;
 }
 
 /*

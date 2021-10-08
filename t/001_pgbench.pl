@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use TestLib;
-use Test::More tests => 20;
+use Test::More tests => 21;
 use PostgresNode;
 
 my $node = PostgresNode->new('aqotest');
@@ -27,12 +27,17 @@ my $stat_count;
 
 $node->start();
 
+# The AQO module loaded, but extension still not created.
+$node->command_ok([ 'pgbench', '-i', '-s', '1' ], 'init pgbench tables');
+$node->command_ok([ 'pgbench', '-t',
+					"$TRANSACTIONS", '-c', "$CLIENTS", '-j', "$THREADS" ],
+					'pgbench without enabled AQO');
+
 # Check conflicts of accessing to the ML knowledge base
 # intelligent mode
 $node->safe_psql('postgres', "CREATE EXTENSION aqo");
 $node->safe_psql('postgres', "ALTER SYSTEM SET aqo.mode = 'intelligent'");
 $node->safe_psql('postgres', "SELECT pg_reload_conf()");
-$node->command_ok([ 'pgbench', '-i', '-s', '1' ], 'init pgbench tables');
 $node->command_ok([ 'pgbench', '-t',
 					"$TRANSACTIONS", '-c', "$CLIENTS", '-j', "$THREADS" ],
 					'pgbench in intelligent mode');

@@ -248,6 +248,8 @@ _PG_init(void)
 	ExecutorStart_hook							= aqo_ExecutorStart;
 	prev_ExecutorEnd_hook						= ExecutorEnd_hook;
 	ExecutorEnd_hook							= aqo_ExecutorEnd;
+
+	/* Cardinality prediction hooks. */
 	prev_set_baserel_rows_estimate_hook			= set_baserel_rows_estimate_hook;
 	set_foreign_rows_estimate_hook				= aqo_set_baserel_rows_estimate;
 	set_baserel_rows_estimate_hook				= aqo_set_baserel_rows_estimate;
@@ -257,17 +259,22 @@ _PG_init(void)
 	set_joinrel_size_estimates_hook				= aqo_set_joinrel_size_estimates;
 	prev_get_parameterized_joinrel_size_hook	= get_parameterized_joinrel_size_hook;
 	get_parameterized_joinrel_size_hook			= aqo_get_parameterized_joinrel_size;
+	prev_estimate_num_groups_hook				= estimate_num_groups_hook;
+	estimate_num_groups_hook					= aqo_estimate_num_groups_hook;
+	parampathinfo_postinit_hook					= ppi_hook;
+
 	prev_create_plan_hook						= create_plan_hook;
 	create_plan_hook							= aqo_create_plan_hook;
+
+	/* Service hooks. */
 	prev_ExplainOnePlan_hook					= ExplainOnePlan_hook;
 	ExplainOnePlan_hook							= print_into_explain;
 	prev_ExplainOneNode_hook					= ExplainOneNode_hook;
 	ExplainOneNode_hook							= print_node_explain;
-	parampathinfo_postinit_hook					= ppi_hook;
+
 	prev_create_upper_paths_hook				= create_upper_paths_hook;
 	create_upper_paths_hook						= aqo_store_upper_signature_hook;
-	prev_estimate_num_groups_hook				= estimate_num_groups_hook;
-	estimate_num_groups_hook					= aqo_estimate_num_groups_hook;
+
 	prev_shmem_startup_hook						= shmem_startup_hook;
 	shmem_startup_hook							= profile_shmem_startup;
 
@@ -354,4 +361,20 @@ init_lock_tag(LOCKTAG *tag, uint32 key1, uint32 key2)
 	tag->locktag_field4 = 0;
 	tag->locktag_type = LOCKTAG_USERLOCK;
 	tag->locktag_lockmethodid = USER_LOCKMETHOD;
+}
+
+/*
+ * AQO is really needed for any activity?
+ */
+bool
+IsQueryDisabled(void)
+{
+	if (!query_context.learn_aqo && !query_context.use_aqo &&
+		!query_context.auto_tuning && !query_context.collect_stat &&
+		!query_context.adding_query && !query_context.explain_only &&
+		INSTR_TIME_IS_ZERO(query_context.start_planning_time) &&
+		query_context.planning_time < 0.)
+		return true;
+
+	return false;
 }

@@ -578,10 +578,11 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 	if (prev_create_upper_paths_hook)
 		(*prev_create_upper_paths_hook)(root, stage, input_rel, output_rel, extra);
 
-	if (stage != UPPERREL_FINAL)
+	if (!query_context.use_aqo && !query_context.learn_aqo && !force_collect_stat)
+		/* Includes 'disabled query' state. */
 		return;
 
-	if (!query_context.use_aqo && !query_context.learn_aqo &&! force_collect_stat)
+	if (stage != UPPERREL_FINAL)
 		return;
 
 	set_cheapest(input_rel);

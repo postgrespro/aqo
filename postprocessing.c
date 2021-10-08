@@ -554,14 +554,10 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 	if (ExtractFromQueryEnv(queryDesc))
 		Assert(INSTR_TIME_IS_ZERO(query_context.start_planning_time));
 
-	if (IsQueryDisabled())
-		/* Fast path */
-		use_aqo = false;
-	else
-		use_aqo = !IsParallelWorker() && (query_context.use_aqo ||
-										  query_context.learn_aqo ||
-										  force_collect_stat ||
-					(aqo_profile_classes > 0 && aqo_profile_enable));
+	use_aqo = !IsQueryDisabled() && !IsParallelWorker() &&
+				(query_context.use_aqo || query_context.learn_aqo ||
+				force_collect_stat ||
+				(aqo_profile_classes > 0 && aqo_profile_enable));
 
 	if (use_aqo)
 	{
@@ -603,7 +599,6 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 	else
 		standard_ExecutorStart(queryDesc, eflags);
 
-	/* Plan state has initialized */
 	if (use_aqo)
 		StorePlanInternals(queryDesc);
 }
@@ -637,6 +632,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 
 	njoins = (enr != NULL) ? *(int *) enr->reldata : -1;
 
+	Assert(!IsQueryDisabled());
 	Assert(!IsParallelWorker());
 
 	if (query_context.explain_only)
@@ -860,6 +856,9 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan)
 	if (prev_ExplainOneNode_hook)
 		prev_ExplainOneNode_hook(es, ps, plan);
 
+	if (IsQueryDisabled())
+		return;
+
 	if (es->format != EXPLAIN_FORMAT_TEXT)
 		/* Only text format is supported. */
 		return;
@@ -929,7 +928,7 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 		prev_ExplainOnePlan_hook(plannedstmt, into, es, queryString,
 								 params, planduration, queryEnv);
 
-	if (!aqo_show_details)
+	if (IsQueryDisabled() || !aqo_show_details)
 		return;
 
 	/* Report to user about aqo state only in verbose mode */
