@@ -232,8 +232,6 @@ profile_shmem_startup(void)
 	if (aqo_profile_classes <= 0)
 		return;
 
-	Assert(profile_mem_queries == NULL);
-
 	ctl.keysize = sizeof(int);
 	ctl.entrysize = sizeof(ProfileMemEntry);
 	profile_mem_queries = ShmemInitHash("aqo_profile_mem_queries",

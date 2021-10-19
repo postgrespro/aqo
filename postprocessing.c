@@ -42,7 +42,12 @@ typedef struct
 static double cardinality_sum_errors;
 static int	cardinality_num_objects;
 
-/* It is needed to recognize stored Query-related aqo data in the query
+/*
+ * Store an AQO-related query data into the Query Environment structure.
+ *
+ * It is very sad that we have to use such unsuitable field, but alternative is
+ * to introduce a private field in a PlannedStmt struct.
+ * It is needed to recognize stored Query-related aqo data in the query
  * environment field.
  */
 static char *AQOPrivateData = "AQOPrivateData";
@@ -751,16 +756,20 @@ StoreToQueryEnv(QueryDesc *queryDesc)
 	EphemeralNamedRelation	enr;
 	int	qcsize = sizeof(QueryContextData);
 	MemoryContext	oldCxt;
+	bool newentry = false;
 
-	oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc));
+	oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc->plannedstmt));
 
 	if (queryDesc->queryEnv == NULL)
 			queryDesc->queryEnv = create_queryEnv();
 
 	enr = get_ENR(queryDesc->queryEnv, AQOPrivateData);
 	if (enr == NULL)
+	{
 		/* If such query environment don't exists, allocate new. */
 		enr = palloc0(sizeof(EphemeralNamedRelationData));
+		newentry = true;
+	}
 
 	enr->md.name = AQOPrivateData;
 	enr->md.enrtuples = 0;
@@ -770,7 +779,9 @@ StoreToQueryEnv(QueryDesc *queryDesc)
 	enr->reldata = palloc0(qcsize);
 	memcpy(enr->reldata, &query_context, qcsize);
 
-	register_ENR(queryDesc->queryEnv, enr);
+	if (newentry)
+		register_ENR(queryDesc->queryEnv, enr);
+
 	MemoryContextSwitchTo(oldCxt);
 }
 
@@ -794,19 +805,23 @@ StorePlanInternals(QueryDesc *queryDesc)
 {
 	EphemeralNamedRelation enr;
 	MemoryContext	oldCxt;
+	bool newentry = false;
 
 	njoins = 0;
 	planstate_tree_walker(queryDesc->planstate, calculateJoinNum, &njoins);
 
-	oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc));
+	oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc->plannedstmt));
 
 	if (queryDesc->queryEnv == NULL)
 			queryDesc->queryEnv = create_queryEnv();
 
 	enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
 	if (enr == NULL)
-		/* If such query environment don't exists, allocate new. */
+	{
+		/* If such query environment field doesn't exist, allocate new. */
 		enr = palloc0(sizeof(EphemeralNamedRelationData));
+		newentry = true;
+	}
 
 	enr->md.name = PlanStateInfo;
 	enr->md.enrtuples = 0;
@@ -815,7 +830,10 @@ StorePlanInternals(QueryDesc *queryDesc)
 	enr->md.tupdesc = NULL;
 	enr->reldata = palloc0(sizeof(int));
 	memcpy(enr->reldata, &njoins, sizeof(int));
-	register_ENR(queryDesc->queryEnv, enr);
+
+	if (newentry)
+		register_ENR(queryDesc->queryEnv, enr);
+
 	MemoryContextSwitchTo(oldCxt);
 }
 
