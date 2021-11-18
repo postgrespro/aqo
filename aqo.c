@@ -131,7 +131,8 @@ aqo_free_callback(ResourceReleasePhase phase,
 
 	if (isTopLevel)
 	{
-		list_free(cur_classes);
+		//list_free(cur_classes);
+		list_free_deep(cur_classes);
 		cur_classes = NIL;
 	}
 }

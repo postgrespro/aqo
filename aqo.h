@@ -202,8 +202,8 @@ typedef struct
 /* Parameters for current query */
 typedef struct QueryContextData
 {
-	int			query_hash;
-	int			fspace_hash;
+	uint64			query_hash;
+	uint64			fspace_hash;
 	bool		learn_aqo;
 	bool		use_aqo;
 	bool		auto_tuning;
@@ -280,24 +280,24 @@ int get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash);
 
 
 /* Storage interaction */
-extern bool find_query(int qhash, Datum *search_values, bool *search_nulls);
-extern bool update_query(int qhash, int fhash,
+extern bool find_query(uint64 qhash, Datum *search_values, bool *search_nulls);
+extern bool update_query(uint64 qhash, uint64 fhash,
 						 bool learn_aqo, bool use_aqo, bool auto_tuning);
-extern bool add_query_text(int query_hash, const char *query_string);
-extern bool load_fss(int fhash, int fss_hash,
+extern bool add_query_text(uint64 query_hash, const char *query_string);
+extern bool load_fss(uint64 fhash, int fss_hash,
 					 int ncols, double **matrix, double *targets, int *rows,
 					 List **relids);
-extern bool update_fss(int fhash, int fss_hash, int nrows, int ncols,
+extern bool update_fss(uint64 fhash, int fss_hash, int nrows, int ncols,
 					   double **matrix, double *targets, List *relids);
-QueryStat *get_aqo_stat(int query_hash);
-void update_aqo_stat(int query_hash, QueryStat * stat);
+QueryStat *get_aqo_stat(uint64 query_hash);
+void update_aqo_stat(uint64 query_hash, QueryStat * stat);
 extern bool my_index_insert(Relation indexRelation,	Datum *values, bool *isnull,
 							ItemPointer heap_t_ctid, Relation heapRelation,
 							IndexUniqueCheck checkUnique);
 void init_deactivated_queries_storage(void);
 void fini_deactivated_queries_storage(void);
-extern bool query_is_deactivated(int query_hash);
-extern void add_deactivated_query(int query_hash);
+extern bool query_is_deactivated(uint64 query_hash);
+extern void add_deactivated_query(uint64 query_hash);
 
 /* Query preprocessing hooks */
 extern void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
@@ -324,7 +324,7 @@ extern int OkNNr_learn(int matrix_rows, int matrix_cols,
 			double *features, double target);
 
 /* Automatic query tuning */
-extern void automatical_query_tuning(int query_hash, QueryStat * stat);
+extern void automatical_query_tuning(uint64 query_hash, QueryStat * stat);
 
 /* Utilities */
 int			int_cmp(const void *a, const void *b);

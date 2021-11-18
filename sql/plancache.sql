@@ -18,7 +18,7 @@ CREATE FUNCTION f1() RETURNS TABLE (
 ) AS $$
 DECLARE
   i				integer;
-  qhash			integer;
+  qhash			bigint;
 BEGIN
   PREPARE fooplan (int) AS SELECT count(*) FROM test WHERE x = $1;
 

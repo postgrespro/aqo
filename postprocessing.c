@@ -55,7 +55,7 @@ static char *PlanStateInfo = "PlanStateInfo";
 
 
 /* Query execution statistics collecting utilities */
-static void atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
+static void atomic_fss_learn_step(uint64 fhash, int fss_hash, int ncols,
 								  double **matrix, double *targets,
 								  double *features, double target,
 								  List *relids);
@@ -88,7 +88,7 @@ static bool ExtractFromQueryEnv(QueryDesc *queryDesc);
  * matrix and targets are just preallocated memory for computations.
  */
 static void
-atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
+atomic_fss_learn_step(uint64 fhash, int fss_hash, int ncols,
 					 double **matrix, double *targets,
 					 double *features, double target,
 					 List *relids)
@@ -112,7 +112,7 @@ static void
 learn_agg_sample(List *clauselist, List *selectivities, List *relidslist,
 			 double true_cardinality, Plan *plan, bool notExecuted)
 {
-	int fhash = query_context.fspace_hash;
+	uint64 fhash = query_context.fspace_hash;
 	int child_fss;
 	int fss;
 	double target;
@@ -149,7 +149,7 @@ static void
 learn_sample(List *clauselist, List *selectivities, List *relidslist,
 			 double true_cardinality, Plan *plan, bool notExecuted)
 {
-	int		fhash = query_context.fspace_hash;
+	uint64		fhash = query_context.fspace_hash;
 	int		fss_hash;
 	int		nfeatures;
 	double	*matrix[aqo_K];
@@ -729,7 +729,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	}
 
 	selectivity_cache_clear();
-	cur_classes = list_delete_int(cur_classes, query_context.query_hash);
+	cur_classes = ldelete_uint64(cur_classes, query_context.query_hash);
 
 end:
 	if (prev_ExecutorEnd_hook)

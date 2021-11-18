@@ -14,7 +14,7 @@ static HTAB   *profile_mem_queries = NULL;
 
 typedef struct ProfileMemEntry
 {
-	int key;
+	uint64 key;
 	double time;
 	unsigned int counter;
 } ProfileMemEntry;
@@ -95,7 +95,7 @@ aqo_show_classes(PG_FUNCTION_ARGS)
 		Datum values[3];
 		bool  nulls[3] = {0, 0, 0};
 
-		values[0] = Int32GetDatum(entry->key);
+		values[0] = UInt64GetDatum(entry->key);
 		values[1] = Float8GetDatum(entry->time);
 		values[2] = UInt32GetDatum(entry->counter);
 
@@ -232,7 +232,7 @@ profile_shmem_startup(void)
 	if (aqo_profile_classes <= 0)
 		return;
 
-	ctl.keysize = sizeof(int);
+	ctl.keysize = sizeof(uint64);
 	ctl.entrysize = sizeof(ProfileMemEntry);
 	profile_mem_queries = ShmemInitHash("aqo_profile_mem_queries",
 										aqo_profile_classes,

@@ -60,20 +60,70 @@ static bool clause_is_eq_clause(Expr *clause);
  * XXX: Hashing depend on Oids of database objects. It is restrict usability of
  * the AQO knowledge base by current database at current Postgres instance.
  */
-int
+uint64
 get_query_hash(Query *parse, const char *query_text)
 {
 	char	   *str_repr;
-	int			hash;
+	uint64			hash;
 
 	/* XXX: remove_locations and remove_consts are heavy routines. */
 	str_repr = remove_locations(remove_consts(nodeToString(parse)));
-	hash = DatumGetInt32(hash_any((const unsigned char *) str_repr,
-								  strlen(str_repr) * sizeof(*str_repr)));
+	hash = string_hash((void *) str_repr, strlen(str_repr));
 	pfree(str_repr);
 
 	return hash;
 }
+
+/*********************************************************************************
+ *
+ * Because List natively works with OID, integer and a postgres node types,
+ * implement separate set of functions which manages list of uint64 values
+ * (need for the query hash type).
+ *
+ ********************************************************************************/
+
+bool
+list_member_uint64(const List *list, uint64 datum)
+{
+	const ListCell *cell;
+
+	foreach(cell, list)
+	{
+		if (*((uint64 *)lfirst(cell)) == datum)
+			return true;
+	}
+
+	return false;
+}
+
+List *
+lappend_uint64(List *list, uint64 datum)
+{
+	uint64 *val = palloc(sizeof(uint64));
+
+	*val = datum;
+	list = lappend(list, (void *) val);
+	return list;
+}
+
+List *
+ldelete_uint64(List *list, uint64 datum)
+{
+	ListCell *cell;
+
+	foreach(cell, list)
+	{
+		if (*((uint64 *)lfirst(cell)) == datum)
+		{
+			list = list_delete_ptr(list, lfirst(cell));
+			return list;
+		}
+	}
+	return list;
+}
+
+/********************************************************************************/
+
 
 int
 get_grouped_exprs_hash(int child_fss, List *group_exprs)

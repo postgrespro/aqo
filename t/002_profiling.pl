@@ -4,11 +4,12 @@
 
 use strict;
 use warnings;
-use TestLib;
+use PostgreSQL::Test::Cluster;
+use PostgreSQL::Test::Utils;
 use Test::More tests => 20;
 use PostgresNode;
 
-my $node = PostgresNode->new('profiling');
+my $node = PostgreSQL::Test::Cluster->new('profiling');
 $node->init;
 $node->append_conf('postgresql.conf', qq{
 						aqo.mode = 'disabled'

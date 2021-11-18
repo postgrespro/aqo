@@ -61,11 +61,51 @@
 #include "access/parallel.h"
 #include "access/table.h"
 #include "commands/extension.h"
-
+#include "parser/scansup.h"
 #include "aqo.h"
 #include "hash.h"
 #include "preprocessing.h"
 #include "profile_mem.h"
+
+const char *
+CleanQuerytext(const char *query, int *location, int *len)
+{
+	int			query_location = *location;
+	int			query_len = *len;
+
+	/* First apply starting offset, unless it's -1 (unknown). */
+	if (query_location >= 0)
+	{
+		Assert(query_location <= strlen(query));
+		query += query_location;
+		/* Length of 0 (or -1) means "rest of string" */
+		if (query_len <= 0)
+			query_len = strlen(query);
+		else
+			Assert(query_len <= strlen(query));
+	}
+	else
+	{
+		/* If query location is unknown, distrust query_len as well */
+		query_location = 0;
+		query_len = strlen(query);
+	}
+
+	/*
+	 * Discard leading and trailing whitespace, too.  Use scanner_isspace()
+	 * not libc's isspace(), because we want to match the lexer's behavior.
+	 */
+	while (query_len > 0 && scanner_isspace(query[0]))
+		query++, query_location++, query_len--;
+	while (query_len > 0 && scanner_isspace(query[query_len - 1]))
+		query_len--;
+
+	*location = query_location;
+	*len = query_len;
+
+	return query;
+}
+
 
 
 /* List of feature spaces, that are processing in this backend. */
@@ -175,7 +215,7 @@ aqo_planner(Query *parse,
 	query_context.query_hash = get_query_hash(parse, query_string);
 
 	if (query_is_deactivated(query_context.query_hash) ||
-		list_member_int(cur_classes, query_context.query_hash))
+		list_member_uint64(cur_classes,query_context.query_hash))
 	{
 		/*
 		 * Disable AQO for deactivated query or for query belonged to a
@@ -189,11 +229,11 @@ aqo_planner(Query *parse,
 									boundParams);
 	}
 
-	elog(DEBUG1, "AQO will be used for query '%s', class %d",
+	elog(DEBUG1, "AQO will be used for query '%s', class %lu",
 		 query_string ? query_string : "null string", query_context.query_hash);
 
 	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
-	cur_classes = lappend_int(cur_classes, query_context.query_hash);
+	cur_classes = lappend_uint64(cur_classes, query_context.query_hash);
 	MemoryContextSwitchTo(oldCxt);
 
 	if (aqo_mode == AQO_MODE_DISABLED)
@@ -260,7 +300,7 @@ aqo_planner(Query *parse,
 		query_context.adding_query = false;
 		query_context.learn_aqo = DatumGetBool(query_params[1]);
 		query_context.use_aqo = DatumGetBool(query_params[2]);
-		query_context.fspace_hash = DatumGetInt32(query_params[3]);
+		query_context.fspace_hash = DatumGetInt64(query_params[3]);
 		query_context.auto_tuning = DatumGetBool(query_params[4]);
 		query_context.collect_stat = query_context.auto_tuning;
 
