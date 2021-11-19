@@ -136,10 +136,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION public.file_read_query_text()
+CREATE OR REPLACE FUNCTION public.file_read_query_text(
+    OUT query_hash integer, 
+    OUT query_text text
+)
 RETURNS setof record
 AS 'MODULE_PATHNAME', 'file_read_query_text'
 LANGUAGE C VOLATILE;
 
-CREATE VIEW file_aqo_query_texts AS
-	SELECT * FROM public.file_read_query_text() AS f(query_hash integer, query_text text);
+CREATE VIEW file_read_query_texts AS
+	SELECT * FROM public.file_read_query_text();

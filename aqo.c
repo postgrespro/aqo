@@ -12,7 +12,7 @@
 #include "cardinality_hooks.h"
 #include "ignorance.h"
 #include "path_utils.h"
-#include "new_storage.h"
+#include "file_storage.h"
 
 #include "access/relation.h"
 #include "access/table.h"
