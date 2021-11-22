@@ -55,7 +55,7 @@ static char *PlanStateInfo = "PlanStateInfo";
 
 
 /* Query execution statistics collecting utilities */
-static void atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
+static void atomic_fss_learn_step(uint64 fhash, int fss_hash, int ncols,
 								  double **matrix, double *targets,
 								  double *features, double target,
 								  List *relids);
@@ -88,7 +88,7 @@ static bool ExtractFromQueryEnv(QueryDesc *queryDesc);
  * matrix and targets are just preallocated memory for computations.
  */
 static void
-atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
+atomic_fss_learn_step(uint64 fhash, int fss_hash, int ncols,
 					 double **matrix, double *targets,
 					 double *features, double target,
 					 List *relids)
@@ -96,7 +96,7 @@ atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
 	LOCKTAG	tag;
 	int		nrows;
 
-	init_lock_tag(&tag, (uint32) fhash, (uint32) fss_hash);
+	init_lock_tag(&tag, (uint32) fhash, fss_hash);
 	LockAcquire(&tag, ExclusiveLock, false, false);
 
 	if (!load_fss(fhash, fss_hash, ncols, matrix, targets, &nrows, NULL))
@@ -112,7 +112,7 @@ static void
 learn_agg_sample(List *clauselist, List *selectivities, List *relidslist,
 			 double true_cardinality, Plan *plan, bool notExecuted)
 {
-	int fhash = query_context.fspace_hash;
+	uint64 fhash = query_context.fspace_hash;
 	int child_fss;
 	int fss;
 	double target;
@@ -149,7 +149,7 @@ static void
 learn_sample(List *clauselist, List *selectivities, List *relidslist,
 			 double true_cardinality, Plan *plan, bool notExecuted)
 {
-	int		fhash = query_context.fspace_hash;
+	uint64		fhash = query_context.fspace_hash;
 	int		fss_hash;
 	int		nfeatures;
 	double	*matrix[aqo_K];
@@ -180,6 +180,7 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 		 * If ignorance logging is enabled and the feature space was existed in
 		 * the ML knowledge base, log this issue.
 		 */
+		Assert(query_context.query_hash>=0);
 		update_ignorance(query_context.query_hash, fhash, fss_hash, plan);
 	}
 
@@ -673,10 +674,10 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 			cardinality_error = cardinality_sum_errors / cardinality_num_objects;
 		else
 			cardinality_error = -1;
-
+		Assert(query_context.query_hash>=0);
 		/* Prevent concurrent updates. */
-		init_lock_tag(&tag, (uint32) query_context.query_hash,
-					 (uint32) query_context.fspace_hash);
+		init_lock_tag(&tag, (uint32) query_context.query_hash,//my code
+					 (uint32) query_context.fspace_hash);//possible here
 		LockAcquire(&tag, ExclusiveLock, false, false);
 
 		if (stat != NULL)
@@ -708,6 +709,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 									 &stat->executions_without_aqo);
 
 			/* Store all learn data into the AQO service relations. */
+			Assert(query_context.query_hash>=0);
 			if (!query_context.adding_query && query_context.auto_tuning)
 				automatical_query_tuning(query_context.query_hash, stat);
 
@@ -729,7 +731,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	}
 
 	selectivity_cache_clear();
-	cur_classes = list_delete_int(cur_classes, query_context.query_hash);
+	cur_classes = ldelete_uint64(cur_classes, query_context.query_hash);
 
 end:
 	if (prev_ExecutorEnd_hook)
@@ -983,6 +985,7 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 	 */
 	if (aqo_mode != AQO_MODE_DISABLED || force_collect_stat)
 	{
+		Assert(query_context.query_hash>=0);
 		if (aqo_show_hash)
 			ExplainPropertyInteger("Query hash", NULL,
 									query_context.query_hash, es);

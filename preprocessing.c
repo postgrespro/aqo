@@ -61,12 +61,51 @@
 #include "access/parallel.h"
 #include "access/table.h"
 #include "commands/extension.h"
-
+#include "parser/scansup.h"
 #include "aqo.h"
 #include "hash.h"
 #include "preprocessing.h"
 #include "profile_mem.h"
 
+
+const char *
+CleanQuerytext(const char *query, int *location, int *len)
+{
+	int			query_location = *location;
+	int			query_len = *len;
+
+	/* First apply starting offset, unless it's -1 (unknown). */
+	if (query_location >= 0)
+	{
+		Assert(query_location <= strlen(query));
+		query += query_location;
+		/* Length of 0 (or -1) means "rest of string" */
+		if (query_len <= 0)
+			query_len = strlen(query);
+		else
+			Assert(query_len <= strlen(query));
+	}
+	else
+	{
+		/* If query location is unknown, distrust query_len as well */
+		query_location = 0;
+		query_len = strlen(query);
+	}
+
+	/*
+	 * Discard leading and trailing whitespace, too.  Use scanner_isspace()
+	 * not libc's isspace(), because we want to match the lexer's behavior.
+	 */
+	while (query_len > 0 && scanner_isspace(query[0]))
+		query++, query_location++, query_len--;
+	while (query_len > 0 && scanner_isspace(query[query_len - 1]))
+		query_len--;
+
+	*location = query_location;
+	*len = query_len;
+
+	return query;
+}
 
 /* List of feature spaces, that are processing in this backend. */
 List *cur_classes = NIL;
@@ -175,7 +214,7 @@ aqo_planner(Query *parse,
 	query_context.query_hash = get_query_hash(parse, query_string);
 
 	if (query_is_deactivated(query_context.query_hash) ||
-		list_member_int(cur_classes, query_context.query_hash))
+		list_member_uint64(cur_classes,query_context.query_hash))
 	{
 		/*
 		 * Disable AQO for deactivated query or for query belonged to a
@@ -189,11 +228,11 @@ aqo_planner(Query *parse,
 									boundParams);
 	}
 
-	elog(DEBUG1, "AQO will be used for query '%s', class %d",
+	elog(DEBUG1, "AQO will be used for query '%s', class %ld",
 		 query_string ? query_string : "null string", query_context.query_hash);
 
 	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
-	cur_classes = lappend_int(cur_classes, query_context.query_hash);
+	cur_classes = lappend_uint64(cur_classes, query_context.query_hash);
 	MemoryContextSwitchTo(oldCxt);
 
 	if (aqo_mode == AQO_MODE_DISABLED)
@@ -260,13 +299,14 @@ aqo_planner(Query *parse,
 		query_context.adding_query = false;
 		query_context.learn_aqo = DatumGetBool(query_params[1]);
 		query_context.use_aqo = DatumGetBool(query_params[2]);
-		query_context.fspace_hash = DatumGetInt32(query_params[3]);
+		query_context.fspace_hash = DatumGetInt64(query_params[3]);
 		query_context.auto_tuning = DatumGetBool(query_params[4]);
 		query_context.collect_stat = query_context.auto_tuning;
 
 		/*
 		 * Deactivate query if no one reason exists for usage of an AQO machinery.
 		 */
+		Assert(query_context.query_hash>=0);
 		if (!query_context.learn_aqo && !query_context.use_aqo &&
 			!query_context.auto_tuning && !force_collect_stat)
 			add_deactivated_query(query_context.query_hash);
@@ -292,6 +332,7 @@ aqo_planner(Query *parse,
 			 * In this mode we want to learn with incoming query (if it is not
 			 * suppressed manually) and collect stats.
 			 */
+			Assert(query_context.query_hash>=0);
 			query_context.collect_stat = true;
 			query_context.fspace_hash = query_context.query_hash;
 			break;
@@ -315,13 +356,15 @@ ignore_query_settings:
 		 * find-add query and query text must be atomic operation to prevent
 		 * concurrent insertions.
 		 */
-		init_lock_tag(&tag, (uint32) query_context.query_hash, (uint32) 0);
+		Assert(query_context.query_hash>=0);
+		init_lock_tag(&tag, (uint32) query_context.query_hash, (uint32) 0);//my code
 		LockAcquire(&tag, ExclusiveLock, false, false);
 		/*
 		 * Add query into the AQO knowledge base. To process an error with
 		 * concurrent addition from another backend we will try to restart
 		 * preprocessing routine.
 		 */
+		Assert(query_context.query_hash>=0);
 		update_query(query_context.query_hash, query_context.fspace_hash,
 					 query_context.learn_aqo, query_context.use_aqo,
 					 query_context.auto_tuning);
@@ -330,6 +373,7 @@ ignore_query_settings:
 		 * Add query text into the ML-knowledge base. Just for further
 		 * analysis. In the case of cached plans we could have NULL query text.
 		 */
+		Assert(query_context.query_hash>=0);
 		if (query_string != NULL)
 			add_query_text(query_context.query_hash, query_string);
 
@@ -343,6 +387,7 @@ ignore_query_settings:
 		 * query execution statistics in any mode.
 		 */
 		query_context.collect_stat = true;
+		Assert(query_context.query_hash>=0);
 		query_context.fspace_hash = query_context.query_hash;
 	}
 
@@ -390,6 +435,7 @@ isQueryUsingSystemRelation(Query *query)
 {
 	return isQueryUsingSystemRelation_walker((Node *) query, NULL);
 }
+
 
 static bool
 IsAQORelation(Relation rel)

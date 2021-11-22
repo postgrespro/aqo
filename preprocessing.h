@@ -3,7 +3,6 @@
 
 #include "nodes/pathnodes.h"
 #include "nodes/plannodes.h"
-
 extern PlannedStmt *aqo_planner(Query *parse,
 								const char *query_string,
 								int cursorOptions,

@@ -1,10 +1,13 @@
 use strict;
 use warnings;
-use TestLib;
-use Test::More tests => 21;
-use PostgresNode;
 
-my $node = PostgresNode->new('aqotest');
+use Config;
+use PostgreSQL::Test::Cluster;
+use PostgreSQL::Test::Utils;
+
+use Test::More tests => 21;
+
+my $node = PostgreSQL::Test::Cluster->new('aqotest');
 $node->init;
 $node->append_conf('postgresql.conf', qq{
 						shared_preload_libraries = 'aqo'

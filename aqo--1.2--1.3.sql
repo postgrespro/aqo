@@ -10,7 +10,7 @@ DECLARE
     aqo_query_texts_row aqo_query_texts%ROWTYPE;
     aqo_query_stat_row aqo_query_stat%ROWTYPE;
     oid_var oid;
-    fspace_hash_var int;
+    fspace_hash_var bigint;
     delete_row boolean DEFAULT false;
 BEGIN
   RAISE NOTICE 'Cleaning aqo_data records';
@@ -89,8 +89,8 @@ $$ LANGUAGE plpgsql;
 --
 CREATE OR REPLACE FUNCTION public.top_time_queries(n int)
   RETURNS TABLE(num bigint,
-                fspace_hash int,
-                query_hash int,
+                fspace_hash bigint,
+                query_hash bigint,
                 execution_time float,
                 deviation float
                )
@@ -115,8 +115,8 @@ $$ LANGUAGE plpgsql;
 --
 CREATE OR REPLACE FUNCTION public.top_error_queries(n int)
   RETURNS TABLE(num bigint,
-                fspace_hash int,
-                query_hash int,
+                fspace_hash bigint,
+                query_hash bigint,
                 error float,
                 deviation float
                )
@@ -152,7 +152,7 @@ $$ LANGUAGE plpgsql;
 --
 CREATE OR REPLACE FUNCTION public.aqo_show_classes()
 RETURNS TABLE (
-  query_hash integer,	-- Query class identifier
+  query_hash bigint,	-- Query class identifier integer
   execution_time float,	-- Sum of execution times of all queries belong to a class.
   counter integer		-- Number of executions of queries of a class.
 )
