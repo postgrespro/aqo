@@ -41,8 +41,8 @@ SET aqo.log_ignorance = 'on';
              Table "public.aqo_ignorance"
   Column   |  Type   | Collation | Nullable | Default 
 -----------+---------+-----------+----------+---------
- qhash     | integer |           |          | 
- fhash     | integer |           |          | 
+ qhash     | bigint  |           |          | 
+ fhash     | bigint  |           |          | 
  fss_hash  | integer |           |          | 
  node_type | integer |           |          | 
  node      | text    |           |          | 

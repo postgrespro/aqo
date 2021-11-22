@@ -59,7 +59,7 @@ create_ignorance_table(bool fail_ok)
 			return false;
 	}
 
-	sql = psprintf("CREATE TABLE %s.aqo_ignorance (qhash int, fhash int, fss_hash int, node_type int, node text);"
+	sql = psprintf("CREATE TABLE %s.aqo_ignorance (qhash bigint, fhash bigint, fss_hash int, node_type int, node text);"
 				   "CREATE UNIQUE INDEX aqo_ignorance_idx ON aqo_ignorance (qhash, fhash, fss_hash);",
 					nspname);
 
@@ -78,7 +78,7 @@ create_ignorance_table(bool fail_ok)
 }
 
 void
-update_ignorance(int qhash, int fhash, int fss_hash, Plan *plan)
+update_ignorance(uint64 qhash, uint64 fhash, int fss_hash, Plan *plan)
 {
 	RangeVar	*rv;
 	Relation	hrel;
@@ -116,7 +116,7 @@ update_ignorance(int qhash, int fhash, int fss_hash, Plan *plan)
 				elog(PANIC, "Ignorance table does not exists!");
 	}
 
-	init_lock_tag(&tag, (uint32) fhash, (uint32) fss_hash);
+	init_lock_tag(&tag, (uint32) fhash, fss_hash);//mycode !!! here half parted 32 bit!!!
 	LockAcquire(&tag, ExclusiveLock, false, false);
 
 	rv = makeRangeVar(nspname, "aqo_ignorance", -1);
@@ -127,8 +127,8 @@ update_ignorance(int qhash, int fhash, int fss_hash, Plan *plan)
 	InitDirtySnapshot(snap);
 	scan = index_beginscan(hrel, irel, &snap, 3, 0);
 
-	ScanKeyInit(&key[0], 1, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(qhash));
-	ScanKeyInit(&key[1], 2, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fhash));
+	ScanKeyInit(&key[0], 1, BTEqualStrategyNumber, F_INT4EQ, Int64GetDatum(qhash));//?
+	ScanKeyInit(&key[1], 2, BTEqualStrategyNumber, F_INT4EQ, Int64GetDatum(fhash));//?
 	ScanKeyInit(&key[2], 3, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fss_hash));
 	index_rescan(scan, key, 3, NULL, 0);
 	slot = MakeSingleTupleTableSlot(tupDesc, &TTSOpsBufferHeapTuple);
@@ -147,8 +147,8 @@ update_ignorance(int qhash, int fhash, int fss_hash, Plan *plan)
 			/*
 			 * AQO failed to predict cardinality for this node.
 			 */
-			values[0] = Int32GetDatum(qhash);
-			values[1] = Int32GetDatum(fhash);
+			values[0] = Int64GetDatum(qhash);//?
+			values[1] = Int64GetDatum(fhash);//?
 			values[2] = Int32GetDatum(fss_hash);
 			values[3] = Int32GetDatum(nodeTag(plan));
 			values[4] = CStringGetTextDatum(nodestr);

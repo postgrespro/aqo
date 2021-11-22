@@ -2,20 +2,20 @@
 \echo Use "CREATE EXTENSION aqo" to load this file. \quit
 
 CREATE TABLE public.aqo_queries (
-	query_hash		int PRIMARY KEY,
+	query_hash		bigint PRIMARY KEY,
 	learn_aqo		boolean NOT NULL,
 	use_aqo			boolean NOT NULL,
-	fspace_hash		int NOT NULL,
+	fspace_hash		bigint NOT NULL,
 	auto_tuning		boolean NOT NULL
 );
 
 CREATE TABLE public.aqo_query_texts (
-	query_hash		int PRIMARY KEY REFERENCES public.aqo_queries ON DELETE CASCADE,
+	query_hash		bigint PRIMARY KEY REFERENCES public.aqo_queries ON DELETE CASCADE,
 	query_text		varchar NOT NULL
 );
 
 CREATE TABLE public.aqo_query_stat (
-	query_hash		int PRIMARY KEY REFERENCES public.aqo_queries ON DELETE CASCADE,
+	query_hash		bigint PRIMARY KEY REFERENCES public.aqo_queries ON DELETE CASCADE,
 	execution_time_with_aqo					double precision[],
 	execution_time_without_aqo				double precision[],
 	planning_time_with_aqo					double precision[],
@@ -27,7 +27,7 @@ CREATE TABLE public.aqo_query_stat (
 );
 
 CREATE TABLE public.aqo_data (
-	fspace_hash		int NOT NULL REFERENCES public.aqo_queries ON DELETE CASCADE,
+	fspace_hash		bigint NOT NULL REFERENCES public.aqo_queries ON DELETE CASCADE,
 	fsspace_hash	int NOT NULL,
 	nfeatures		int NOT NULL,
 	features		double precision[][],

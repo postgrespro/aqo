@@ -88,7 +88,7 @@ open_aqo_relation(char *heaprelnspname, char *heaprelname,
  * wait in the XactLockTableWait routine.
  */
 bool
-find_query(int qhash, Datum *search_values, bool *search_nulls)
+find_query(uint64 qhash, Datum *search_values, bool *search_nulls)
 {
 	Relation	hrel;
 	Relation	irel;
@@ -106,7 +106,7 @@ find_query(int qhash, Datum *search_values, bool *search_nulls)
 
 	InitDirtySnapshot(snap);
 	scan = index_beginscan(hrel, irel, &snap, 1, 0);
-	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(qhash));
+	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT4EQ, Int64GetDatum(qhash));
 
 	index_rescan(scan, &key, 1, NULL, 0);
 	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
@@ -137,7 +137,7 @@ find_query(int qhash, Datum *search_values, bool *search_nulls)
  * not break any learning logic besides possible additional learning iterations.
  */
 bool
-update_query(int qhash, int fhash,
+update_query(uint64 qhash, uint64 fhash,
 			 bool learn_aqo, bool use_aqo, bool auto_tuning)
 {
 	Relation	hrel;
@@ -174,10 +174,10 @@ update_query(int qhash, int fhash,
 	index_rescan(scan, &key, 1, NULL, 0);
 	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
 
-	values[0] = Int32GetDatum(qhash);
+	values[0] = Int64GetDatum(qhash);
 	values[1] = BoolGetDatum(learn_aqo);
 	values[2] = BoolGetDatum(use_aqo);
-	values[3] = Int32GetDatum(fhash);
+	values[3] = Int64GetDatum(fhash);
 	values[4] = BoolGetDatum(auto_tuning);
 
 	if (!index_getnext_slot(scan, ForwardScanDirection, slot))
@@ -214,7 +214,7 @@ update_query(int qhash, int fhash,
 			 * Ooops, somebody concurrently updated the tuple. It is possible
 			 * only in the case of changes made by third-party code.
 			 */
-			elog(ERROR, "AQO feature space data for signature (%d, %d) concurrently"
+			elog(ERROR, "AQO feature space data for signature (%ld, %ld) concurrently"
 						" updated by a stranger backend.",
 						qhash, fhash);
 			result = false;
@@ -242,7 +242,7 @@ update_query(int qhash, int fhash,
  * Returns false if the operation failed, true otherwise.
  */
 bool
-add_query_text(int qhash, const char *query_string)
+add_query_text(uint64 qhash, const char *query_string)
 {
 	Relation	hrel;
 	Relation	irel;
@@ -256,7 +256,7 @@ add_query_text(int qhash, const char *query_string)
 	ScanKeyData key;
 	SnapshotData snap;
 
-	values[0] = Int32GetDatum(qhash);
+	values[0] = Int64GetDatum(qhash);
 	values[1] = CStringGetTextDatum(query_string);
 
 	/* Couldn't allow to write if xact must be read-only. */
@@ -361,7 +361,7 @@ deform_oids_vector(Datum datum)
  *			objects in the given feature space
  */
 bool
-load_fss(int fhash, int fss_hash,
+load_fss(uint64 fhash, int fss_hash,
 		 int ncols, double **matrix, double *targets, int *rows,
 		 List **relids)
 {
@@ -415,7 +415,7 @@ load_fss(int fhash, int fss_hash,
 				*relids = deform_oids_vector(values[5]);
 		}
 		else
-			elog(ERROR, "unexpected number of features for hash (%d, %d):\
+			elog(ERROR, "unexpected number of features for hash (%ld, %d):\
 						   expected %d features, obtained %d",
 						   fhash, fss_hash, ncols, DatumGetInt32(values[2]));
 	}
@@ -443,7 +443,7 @@ load_fss(int fhash, int fss_hash,
  * Caller guaranteed that no one AQO process insert or update this data row.
  */
 bool
-update_fss(int fhash, int fsshash, int nrows, int ncols,
+update_fss(uint64 fhash, int fsshash, int nrows, int ncols,
 		   double **matrix, double *targets, List *relids)
 {
 	Relation	hrel;
@@ -541,7 +541,7 @@ update_fss(int fhash, int fsshash, int nrows, int ncols,
 			 * Ooops, somebody concurrently updated the tuple. It is possible
 			 * only in the case of changes made by third-party code.
 			 */
-			elog(ERROR, "AQO data piece (%d %d) concurrently updated"
+			elog(ERROR, "AQO data piece (%ld %d) concurrently updated"
 				 " by a stranger backend.",
 				 fhash, fsshash);
 			result = false;
@@ -571,7 +571,7 @@ update_fss(int fhash, int fsshash, int nrows, int ncols,
  * is not found.
  */
 QueryStat *
-get_aqo_stat(int qhash)
+get_aqo_stat(uint64 qhash)
 {
 	Relation	hrel;
 	Relation	irel;
@@ -625,7 +625,7 @@ get_aqo_stat(int qhash)
  * Executes disable_aqo_for_query if aqo_query_stat is not found.
  */
 void
-update_aqo_stat(int qhash, QueryStat *stat)
+update_aqo_stat(uint64 qhash, QueryStat *stat)
 {
 	Relation	hrel;
 	Relation	irel;
@@ -659,7 +659,7 @@ update_aqo_stat(int qhash, QueryStat *stat)
 
 	InitDirtySnapshot(snap);
 	scan = index_beginscan(hrel, irel, &snap, 1, 0);
-	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(qhash));
+	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT4EQ, Int64GetDatum(qhash));
 	index_rescan(scan, &key, 1, NULL, 0);
 	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
 
@@ -677,7 +677,7 @@ update_aqo_stat(int qhash, QueryStat *stat)
 	if (!index_getnext_slot(scan, ForwardScanDirection, slot))
 	{
 		/* Such signature (hash) doesn't yet exist in the ML knowledge base. */
-		values[0] = Int32GetDatum(qhash);
+		values[0] = Int64GetDatum(qhash);
 		tuple = heap_form_tuple(tupDesc, values, isnull);
 		simple_heap_insert(hrel, tuple);
 		my_index_insert(irel, values, isnull, &(tuple->t_self),
@@ -705,7 +705,7 @@ update_aqo_stat(int qhash, QueryStat *stat)
 			 * Ooops, somebody concurrently updated the tuple. It is possible
 			 * only in the case of changes made by third-party code.
 			 */
-			elog(ERROR, "AQO statistic data for query signature %d concurrently"
+			elog(ERROR, "AQO statistic data for query signature %ld concurrently"
 						" updated by a stranger backend.",
 				 qhash);
 		}
@@ -924,7 +924,7 @@ fini_deactivated_queries_storage(void)
 
 /* Checks whether the query with given hash is deactivated */
 bool
-query_is_deactivated(int query_hash)
+query_is_deactivated(uint64 query_hash)
 {
 	bool		found;
 
@@ -934,7 +934,7 @@ query_is_deactivated(int query_hash)
 
 /* Adds given query hash into the set of hashes of deactivated queries*/
 void
-add_deactivated_query(int query_hash)
+add_deactivated_query(uint64 query_hash)
 {
 	hash_search(deactivated_queries, &query_hash, HASH_ENTER, NULL);
 }
