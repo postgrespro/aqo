@@ -147,6 +147,7 @@ _PG_init(void)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("AQO module could be loaded only on startup."),
 				 errdetail("Add 'aqo' into the shared_preload_libraries list.")));
+	EnableQueryId();
 
 	DefineCustomEnumVariable("aqo.mode",
 							 "Mode of aqo usage.",
