@@ -22,7 +22,6 @@
 #include "ignorance.h"
 #include "path_utils.h"
 #include "preprocessing.h"
-#include "profile_mem.h"
 
 
 PG_MODULE_MAGIC;
@@ -214,34 +213,6 @@ _PG_init(void)
 							 NULL
 	);
 
-	DefineCustomIntVariable(
-							 "aqo.profile_classes",
-							 "Sets the maximum number of classes to be used in a query profiling hash table.",
-							 NULL,
-							 &aqo_profile_classes,
-							 100,
-							 -1,
-							 INT_MAX,
-							 PGC_POSTMASTER, /* Defines a max size of used shared memory segment. So, change only on restart. */
-							 0,
-							 NULL,
-							 NULL,
-							 NULL
-	);
-
-	DefineCustomBoolVariable(
-							 "aqo.profile_enable",
-							 "Enable AQO profiling feature.",
-							 NULL,
-							 &aqo_profile_enable,
-							 false,
-							 PGC_USERSET,
-							 0,
-							 check_aqo_profile_enable, /* Check that a profiling buffer in shared memory has allocated on startup. */
-							 NULL,
-							 NULL
-	);
-
 	prev_planner_hook							= planner_hook;
 	planner_hook								= aqo_planner;
 	prev_ExecutorStart_hook						= ExecutorStart_hook;
@@ -275,18 +246,12 @@ _PG_init(void)
 	prev_create_upper_paths_hook				= create_upper_paths_hook;
 	create_upper_paths_hook						= aqo_store_upper_signature_hook;
 
-	prev_shmem_startup_hook						= shmem_startup_hook;
-	shmem_startup_hook							= profile_shmem_startup;
-
 	init_deactivated_queries_storage();
 	AQOMemoryContext = AllocSetContextCreate(TopMemoryContext,
 											 "AQOMemoryContext",
 											 ALLOCSET_DEFAULT_SIZES);
 	RegisterResourceReleaseCallback(aqo_free_callback, NULL);
 	RegisterAQOPlanNodeMethods();
-
-	/* Set shared memory hooks. */
-				profile_init();
 }
 
 PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);

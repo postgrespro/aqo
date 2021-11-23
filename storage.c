@@ -23,7 +23,6 @@
 
 #include "aqo.h"
 #include "preprocessing.h"
-#include "profile_mem.h"
 
 
 HTAB *deactivated_queries = NULL;
@@ -70,7 +69,6 @@ open_aqo_relation(char *heaprelnspname, char *heaprelname,
 		 * execution process.
 		 */
 		aqo_enabled = false;
-		(void) profile_clear_hash_table();
 		disable_aqo_for_query();
 
 		return false;
