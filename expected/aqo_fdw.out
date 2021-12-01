@@ -58,10 +58,11 @@ SELECT x FROM frgn WHERE x < 10;
    AQO not used
    Output: x
    Remote SQL: SELECT x FROM public.local WHERE ((x < 10))
+ Query Identifier: -8486632260196378360
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(7 rows)
+(8 rows)
 
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT x FROM frgn WHERE x < -10; -- AQO ignores constants
@@ -108,10 +109,11 @@ SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
    Output: a.x, b.x
    Relations: (public.frgn a) INNER JOIN (public.frgn b)
    Remote SQL: SELECT r1.x, r2.x FROM (public.local r1 INNER JOIN public.local r2 ON (((r1.x = r2.x))))
+ Query Identifier: -3803571735866573870
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(8 rows)
+(9 rows)
 
 -- TODO: Non-mergejoinable join condition.
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
@@ -135,10 +137,11 @@ SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
    Output: a.x, b.x
    Relations: (public.frgn a) INNER JOIN (public.frgn b)
    Remote SQL: SELECT r1.x, r2.x FROM (public.local r1 INNER JOIN public.local r2 ON (((r1.x < r2.x))))
+ Query Identifier: 8184143248279145177
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(8 rows)
+(9 rows)
 
 DROP EXTENSION aqo CASCADE;
 DROP EXTENSION postgres_fdw CASCADE;
