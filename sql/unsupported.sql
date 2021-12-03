@@ -94,12 +94,14 @@ SELECT count(*) FROM
 		JOIN
 	(SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x <> t.x)) AS q2
 		ON q1.x = q2.x+1;
+SELECT str FROM expln('
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT count(*) FROM
 	(SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x = t.x)) AS q1
 		JOIN
 	(SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x <> t.x)) AS q2
 		ON q1.x = q2.x+1;
+') AS str WHERE str NOT LIKE '%Memory Usage%';
 
 -- Two identical subplans in a clause
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
