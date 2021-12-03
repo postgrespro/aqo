@@ -11,7 +11,9 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 ') AS str WHERE str NOT LIKE '%Memory Usage%';
 
 -- Do not support having clauses for now.
+SELECT str FROM expln('
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 	SELECT * FROM t GROUP BY (x) HAVING x > 3;
+') AS str WHERE str NOT LIKE '%Memory Usage%';
 
 DROP EXTENSION aqo;
