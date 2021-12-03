@@ -8,7 +8,7 @@ CREATE TABLE t1 AS SELECT mod(gs,10) AS x, mod(gs+1,10) AS y
 	FROM generate_series(1,1000) AS gs;
 ANALYZE t, t1;
 --
--- Do not support HAVING clause for now.
+-- Do not support HAVING clauses for now.
 --
 SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
  count 
@@ -32,6 +32,24 @@ EXPLAIN (COSTS OFF)
  AQO mode: LEARN
  JOINS: 0
 (11 rows)
+
+SELECT str FROM expln('
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	SELECT * FROM t GROUP BY (x) HAVING x > 3;
+') AS str WHERE str NOT LIKE '%Memory Usage%';
+                      str                      
+-----------------------------------------------
+ HashAggregate (actual rows=17 loops=1)
+   AQO not used
+   Group Key: x
+   ->  Seq Scan on t (actual rows=801 loops=1)
+         AQO not used
+         Filter: (x > 3)
+         Rows Removed by Filter: 199
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(10 rows)
 
 --
 -- Doesn't estimates GROUP BY clause
