@@ -26,7 +26,16 @@ CREATE FOREIGN TABLE frgn(x int) SERVER loopback OPTIONS (table_name 'local');
 INSERT INTO frgn (x) VALUES (1);
 ANALYZE local;
 
--- Trivial foreign scan.s
+-- Utility tool. Allow to filter system-dependent strings from explain output.
+CREATE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
+BEGIN
+    RETURN QUERY
+        EXECUTE format('%s', query_string);
+    RETURN;
+END;
+$$ LANGUAGE PLPGSQL;
+
+-- Trivial foreign scan.
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT x FROM frgn;
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
@@ -41,9 +50,11 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT x FROM frgn WHERE x < -10; -- AQO ignores constants
 
 -- Trivial JOIN push-down.
-EXPLAIN (COSTS OFF)
-SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
-SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
+SELECT str FROM expln('
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
+') AS str WHERE str NOT LIKE '%Sort Method%';
+
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
 SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
 

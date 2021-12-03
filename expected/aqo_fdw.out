@@ -21,7 +21,15 @@ CREATE TABLE local (x int);
 CREATE FOREIGN TABLE frgn(x int) SERVER loopback OPTIONS (table_name 'local');
 INSERT INTO frgn (x) VALUES (1);
 ANALYZE local;
--- Trivial foreign scan.s
+-- Utility tool. Allow to filter system-dependent strings from explain output.
+CREATE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
+BEGIN
+    RETURN QUERY
+        EXECUTE format('%s', query_string);
+    RETURN;
+END;
+$$ LANGUAGE PLPGSQL;
+-- Trivial foreign scan.
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT x FROM frgn;
                   QUERY PLAN                  
@@ -75,28 +83,29 @@ SELECT x FROM frgn WHERE x < -10; -- AQO ignores constants
 (5 rows)
 
 -- Trivial JOIN push-down.
-EXPLAIN (COSTS OFF)
-SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
-             QUERY PLAN             
-------------------------------------
- Merge Join
+SELECT str FROM expln('
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
+') AS str WHERE str NOT LIKE '%Sort Method%';
+                            str                             
+------------------------------------------------------------
+ Merge Join (actual rows=1 loops=1)
+   AQO not used
    Merge Cond: (a.x = b.x)
-   ->  Sort
+   ->  Sort (actual rows=1 loops=1)
+         AQO not used
          Sort Key: a.x
-         ->  Foreign Scan on frgn a
-   ->  Sort
+         ->  Foreign Scan on frgn a (actual rows=1 loops=1)
+               AQO not used
+   ->  Sort (actual rows=1 loops=1)
+         AQO not used
          Sort Key: b.x
-         ->  Foreign Scan on frgn b
+         ->  Foreign Scan on frgn b (actual rows=1 loops=1)
+               AQO not used
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(11 rows)
-
-SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
- x | x 
----+---
- 1 | 1
-(1 row)
+(16 rows)
 
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
 SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
