@@ -18,6 +18,20 @@ DO $d$
             )$$;
     END;
 $d$;
+--
+-- Returns string-by-string explain of a query. Made for removing some strings
+-- from the explain output.
+--
+CREATE OR REPLACE FUNCTION expln(query_string text default 'select * from table', verbose_p boolean default TRUE) RETURNS SETOF text AS $$
+BEGIN
+    IF verbose_p=TRUE THEN
+        RETURN QUERY EXECUTE format('EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF) %s', query_string);
+    else
+        RETURN QUERY EXECUTE format('EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) %s', query_string);
+    END IF;
+    Return;
+END;
+$$ LANGUAGE PLPGSQL;
 
 CREATE USER MAPPING FOR PUBLIC SERVER loopback;
 
@@ -27,30 +41,39 @@ INSERT INTO frgn (x) VALUES (1);
 ANALYZE local;
 
 -- Trivial foreign scan.s
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
-SELECT x FROM frgn;
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
-SELECT x FROM frgn;
+SELECT str AS result
+FROM expln('SELECT x FROM frgn;', TRUE) AS str
+WHERE str NOT LIKE 'Query Identifier%';
+SELECT str AS result
+FROM expln('SELECT x FROM frgn;', TRUE) AS str
+WHERE str NOT LIKE 'Query Identifier%';
 
 -- Push down base filters. Use verbose mode to see filters.
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE))
-SELECT x FROM frgn WHERE x < 10;
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
-SELECT x FROM frgn WHERE x < 10;
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
-SELECT x FROM frgn WHERE x < -10; -- AQO ignores constants
+SELECT str AS result
+FROM expln('SELECT x FROM frgn WHERE x < 10;', TRUE) AS str
+WHERE str NOT LIKE 'Query Identifier%';
+SELECT str AS result
+FROM expln('SELECT x FROM frgn WHERE x < 10;', TRUE) AS str
+WHERE str NOT LIKE 'Query Identifier%';
+SELECT str AS result
+FROM expln('SELECT x FROM frgn WHERE x < -10;', TRUE) AS str
+WHERE str NOT LIKE 'Query Identifier%'; -- AQO ignores constants
 
 -- Trivial JOIN push-down.
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
-SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
-SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
+SELECT str AS result
+FROM expln('SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;', FALSE) AS str
+WHERE str NOT LIKE 'Query Identifier%';
+SELECT str AS result
+FROM expln('SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;', TRUE) AS str
+WHERE str NOT LIKE 'Query Identifier%';
 
 -- TODO: Non-mergejoinable join condition.
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
-SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
-SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
+SELECT str AS result
+FROM expln('SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;', FALSE) AS str
+WHERE str NOT LIKE 'Query Identifier%';
+SELECT str AS result
+FROM expln('SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;', TRUE) AS str
+WHERE str NOT LIKE 'Query Identifier%';
 
 DROP EXTENSION aqo CASCADE;
 DROP EXTENSION postgres_fdw CASCADE;
