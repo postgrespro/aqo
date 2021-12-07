@@ -40,13 +40,11 @@ CREATE FOREIGN TABLE frgn(x int) SERVER loopback OPTIONS (table_name 'local');
 INSERT INTO frgn (x) VALUES (1);
 ANALYZE local;
 
--- Trivial foreign scan.s
-SELECT str AS result
-FROM expln('SELECT x FROM frgn;', TRUE) AS str
-WHERE str NOT LIKE 'Query Identifier%';
-SELECT str AS result
-FROM expln('SELECT x FROM frgn;', TRUE) AS str
-WHERE str NOT LIKE 'Query Identifier%';
+-- Trivial foreign scan.
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+SELECT x FROM frgn;
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+SELECT x FROM frgn;
 
 -- Push down base filters. Use verbose mode to see filters.
 SELECT str AS result

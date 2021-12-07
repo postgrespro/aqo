@@ -35,13 +35,13 @@ CREATE TABLE local (x int);
 CREATE FOREIGN TABLE frgn(x int) SERVER loopback OPTIONS (table_name 'local');
 INSERT INTO frgn (x) VALUES (1);
 ANALYZE local;
--- Trivial foreign scan.s
-SELECT str AS result
-FROM expln('SELECT x FROM frgn;', TRUE) AS str
-WHERE str NOT LIKE 'Query Identifier%';
-                       result                        
------------------------------------------------------
- Foreign Scan on public.frgn (actual rows=1 loops=1)
+
+-- Trivial foreign scan.
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+SELECT x FROM frgn;
+                  QUERY PLAN                  
+----------------------------------------------
+ Foreign Scan on frgn (actual rows=1 loops=1)
    AQO not used
    Output: x
    Remote SQL: SELECT x FROM public.local
@@ -119,19 +119,17 @@ WHERE str NOT LIKE 'Query Identifier%';
    ->  Sort (actual rows=1 loops=1)
          AQO not used
          Sort Key: a.x
-         Sort Method: quicksort  Memory: 25kB
          ->  Foreign Scan on frgn a (actual rows=1 loops=1)
                AQO not used
    ->  Sort (actual rows=1 loops=1)
          AQO not used
          Sort Key: b.x
-         Sort Method: quicksort  Memory: 25kB
          ->  Foreign Scan on frgn b (actual rows=1 loops=1)
                AQO not used
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(18 rows)
+(16 rows)
 
 SELECT str AS result
 FROM expln('SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;', TRUE) AS str
