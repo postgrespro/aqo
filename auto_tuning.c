@@ -17,6 +17,7 @@
 
 #include "postgres.h"
 
+#include "common/pg_prng.h"
 #include "aqo.h"
 
 /*
@@ -199,10 +200,10 @@ automatical_query_tuning(uint64 query_hash, QueryStat * stat)
 		 * If our decision is using AQO for this query class, then learn on new
 		 * queries of this type. Otherwise, turn off.
 		 */
-		query_context.use_aqo = (random() / ((double) MAX_RANDOM_VALUE + 1)) < p_use;
+		query_context.use_aqo = pg_prng_double(&pg_global_prng_state) < p_use;
 		query_context.learn_aqo = query_context.use_aqo;
 	}
-	
+
 	if (num_iterations <= auto_tuning_max_iterations || p_use > 0.5)
 		update_query(query_hash,
 					 query_context.fspace_hash,
