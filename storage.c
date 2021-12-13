@@ -15,11 +15,15 @@
  *
  */
 
-#include "aqo.h"
+#include "postgres.h"
 
 #include "access/heapam.h"
 #include "access/table.h"
 #include "access/tableam.h"
+
+#include "aqo.h"
+#include "preprocessing.h"
+
 
 HTAB *deactivated_queries = NULL;
 
@@ -38,6 +42,41 @@ static bool my_simple_heap_update(Relation relation,
 								  HeapTuple tup,
 								  bool *update_indexes);
 
+/*
+ * Open an AQO-related relation.
+ * It should be done carefully because of a possible concurrent DROP EXTENSION
+ * command. In such case AQO must be disabled in this backend.
+ */
+static bool
+open_aqo_relation(char *heaprelnspname, char *heaprelname,
+				  char *indrelname, LOCKMODE lockmode,
+				  Relation *hrel, Relation *irel)
+{
+	Oid reloid;
+	RangeVar *rv;
+
+	reloid = RelnameGetRelid(indrelname);
+	rv = makeRangeVar(heaprelnspname, heaprelname, -1);
+	*hrel = table_openrv_extended(rv,  lockmode, true);
+	if (!OidIsValid(reloid) || *hrel == NULL)
+	{
+		/*
+		 * Absence of any AQO-related table tell us that someone executed
+		 * a 'DROP EXTENSION aqo' command. We disable AQO for all future queries
+		 * in this backend. For performance reasons we do it locally.
+		 * Clear profiling hash table.
+		 * Also, we gently disable AQO for the rest of the current query
+		 * execution process.
+		 */
+		aqo_enabled = false;
+		disable_aqo_for_query();
+
+		return false;
+	}
+
+	*irel = index_open(reloid,  lockmode);
+	return true;
+}
 
 /*
  * Returns whether the query with given hash is in aqo_queries.
@@ -47,40 +86,31 @@ static bool my_simple_heap_update(Relation relation,
  * wait in the XactLockTableWait routine.
  */
 bool
-find_query(int qhash, Datum *search_values, bool *search_nulls)
+find_query(uint64 qhash, Datum *search_values, bool *search_nulls)
 {
-	RangeVar   *rv;
 	Relation	hrel;
 	Relation	irel;
 	HeapTuple	tuple;
 	TupleTableSlot *slot;
 	bool shouldFree;
-	Oid			reloid;
 	IndexScanDesc scan;
 	ScanKeyData key;
 	SnapshotData snap;
 	bool		find_ok = false;
 
-	reloid = RelnameGetRelid("aqo_queries_query_hash_idx");
-	if (!OidIsValid(reloid))
-	{
-		disable_aqo_for_query();
+	if (!open_aqo_relation("public", "aqo_queries", "aqo_queries_query_hash_idx",
+		AccessShareLock, &hrel, &irel))
 		return false;
-	}
-
-	rv = makeRangeVar("public", "aqo_queries", -1);
-	hrel = table_openrv(rv,  AccessShareLock);
-	irel = index_open(reloid,  AccessShareLock);
 
 	InitDirtySnapshot(snap);
 	scan = index_beginscan(hrel, irel, &snap, 1, 0);
-	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(qhash));
+	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT4EQ, Int64GetDatum(qhash));
 
 	index_rescan(scan, &key, 1, NULL, 0);
 	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
 	find_ok = index_getnext_slot(scan, ForwardScanDirection, slot);
 
-	if (find_ok)
+	if (find_ok && search_values != NULL)
 	{
 		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
 		Assert(shouldFree != true);
@@ -105,10 +135,9 @@ find_query(int qhash, Datum *search_values, bool *search_nulls)
  * not break any learning logic besides possible additional learning iterations.
  */
 bool
-update_query(int qhash, int fhash,
+update_query(uint64 qhash, uint64 fhash,
 			 bool learn_aqo, bool use_aqo, bool auto_tuning)
 {
-	RangeVar   *rv;
 	Relation	hrel;
 	Relation	irel;
 	TupleTableSlot *slot;
@@ -120,7 +149,6 @@ update_query(int qhash, int fhash,
 	bool		shouldFree;
 	bool		result = true;
 	bool		update_indexes;
-	Oid			reloid;
 	IndexScanDesc scan;
 	ScanKeyData key;
 	SnapshotData snap;
@@ -129,16 +157,9 @@ update_query(int qhash, int fhash,
 	if (XactReadOnly)
 		return false;
 
-	reloid = RelnameGetRelid("aqo_queries_query_hash_idx");
-	if (!OidIsValid(reloid))
-	{
-		disable_aqo_for_query();
+	if (!open_aqo_relation("public", "aqo_queries", "aqo_queries_query_hash_idx",
+		RowExclusiveLock, &hrel, &irel))
 		return false;
-	}
-
-	rv = makeRangeVar("public", "aqo_queries", -1);
-	hrel = table_openrv(rv, RowExclusiveLock);
-	irel = index_open(reloid, RowExclusiveLock);
 
 	/*
 	 * Start an index scan. Use dirty snapshot to check concurrent updates that
@@ -151,10 +172,10 @@ update_query(int qhash, int fhash,
 	index_rescan(scan, &key, 1, NULL, 0);
 	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
 
-	values[0] = Int32GetDatum(qhash);
+	values[0] = Int64GetDatum(qhash);
 	values[1] = BoolGetDatum(learn_aqo);
 	values[2] = BoolGetDatum(use_aqo);
-	values[3] = Int32GetDatum(fhash);
+	values[3] = Int64GetDatum(fhash);
 	values[4] = BoolGetDatum(auto_tuning);
 
 	if (!index_getnext_slot(scan, ForwardScanDirection, slot))
@@ -191,7 +212,7 @@ update_query(int qhash, int fhash,
 			 * Ooops, somebody concurrently updated the tuple. It is possible
 			 * only in the case of changes made by third-party code.
 			 */
-			elog(ERROR, "AQO feature space data for signature (%d, %d) concurrently"
+			elog(ERROR, "AQO feature space data for signature (%ld, %ld) concurrently"
 						" updated by a stranger backend.",
 						qhash, fhash);
 			result = false;
@@ -219,39 +240,56 @@ update_query(int qhash, int fhash,
  * Returns false if the operation failed, true otherwise.
  */
 bool
-add_query_text(int qhash, const char *query_string)
+add_query_text(uint64 qhash, const char *query_string)
 {
-	RangeVar   *rv;
 	Relation	hrel;
 	Relation	irel;
 	HeapTuple	tuple;
 	Datum		values[2];
 	bool		isnull[2] = {false, false};
-	Oid			reloid;
 
-	values[0] = Int32GetDatum(qhash);
+	/* Variables for checking of concurrent writings. */
+	TupleTableSlot *slot;
+	IndexScanDesc scan;
+	ScanKeyData key;
+	SnapshotData snap;
+
+	values[0] = Int64GetDatum(qhash);
 	values[1] = CStringGetTextDatum(query_string);
 
 	/* Couldn't allow to write if xact must be read-only. */
 	if (XactReadOnly)
 		return false;
 
-	reloid = RelnameGetRelid("aqo_query_texts_query_hash_idx");
-	if (!OidIsValid(reloid))
-	{
-		disable_aqo_for_query();
+	if (!open_aqo_relation("public", "aqo_query_texts",
+						   "aqo_query_texts_query_hash_idx",
+						   RowExclusiveLock, &hrel, &irel))
 		return false;
-	}
 
-	rv = makeRangeVar("public", "aqo_query_texts", -1);
-	hrel = table_openrv(rv, RowExclusiveLock);
-	irel = index_open(reloid, RowExclusiveLock);
 	tuple = heap_form_tuple(RelationGetDescr(hrel), values, isnull);
 
-	simple_heap_insert(hrel, tuple);
-	my_index_insert(irel, values, isnull, &(tuple->t_self), hrel,
-															UNIQUE_CHECK_YES);
+	/*
+	 * Start an index scan. Use dirty snapshot to check concurrent updates that
+	 * can be made before, but still not visible.
+	 */
+	InitDirtySnapshot(snap);
+	scan = index_beginscan(hrel, irel, &snap, 1, 0);
+	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(qhash));
 
+	index_rescan(scan, &key, 1, NULL, 0);
+	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
+
+	if (!index_getnext_slot(scan, ForwardScanDirection, slot))
+	{
+		tuple = heap_form_tuple(RelationGetDescr(hrel), values, isnull);
+
+		simple_heap_insert(hrel, tuple);
+		my_index_insert(irel, values, isnull, &(tuple->t_self), hrel,
+															UNIQUE_CHECK_YES);
+	}
+
+	ExecDropSingleTupleTableSlot(slot);
+	index_endscan(scan);
 	index_close(irel, RowExclusiveLock);
 	table_close(hrel, RowExclusiveLock);
 
@@ -321,36 +359,28 @@ deform_oids_vector(Datum datum)
  *			objects in the given feature space
  */
 bool
-load_fss(int fhash, int fss_hash,
+load_fss(uint64 fhash, int fss_hash,
 		 int ncols, double **matrix, double *targets, int *rows,
 		 List **relids)
 {
-	RangeVar	*rv;
 	Relation	hrel;
 	Relation	irel;
 	HeapTuple	tuple;
 	TupleTableSlot *slot;
 	bool		shouldFree;
 	bool		find_ok = false;
-	Oid			reloid;
 	IndexScanDesc scan;
 	ScanKeyData	key[2];
 	Datum		values[6];
 	bool		isnull[6];
 	bool		success = true;
 
-	reloid = RelnameGetRelid("aqo_fss_access_idx");
-	if (!OidIsValid(reloid))
-	{
-		disable_aqo_for_query();
+	if (!open_aqo_relation("public", "aqo_data",
+						   "aqo_fss_access_idx",
+						   AccessShareLock, &hrel, &irel))
 		return false;
-	}
 
-	rv = makeRangeVar("public", "aqo_data", -1);
-	hrel = table_openrv(rv, AccessShareLock);
-	irel = index_open(reloid, AccessShareLock);
 	scan = index_beginscan(hrel, irel, SnapshotSelf, 2, 0);
-
 	ScanKeyInit(&key[0], 1, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fhash));
 	ScanKeyInit(&key[1], 2, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fss_hash));
 	index_rescan(scan, key, 2, NULL, 0);
@@ -383,7 +413,7 @@ load_fss(int fhash, int fss_hash,
 				*relids = deform_oids_vector(values[5]);
 		}
 		else
-			elog(ERROR, "unexpected number of features for hash (%d, %d):\
+			elog(ERROR, "unexpected number of features for hash (%ld, %d):\
 						   expected %d features, obtained %d",
 						   fhash, fss_hash, ncols, DatumGetInt32(values[2]));
 	}
@@ -411,10 +441,9 @@ load_fss(int fhash, int fss_hash,
  * Caller guaranteed that no one AQO process insert or update this data row.
  */
 bool
-update_fss(int fhash, int fsshash, int nrows, int ncols,
+update_fss(uint64 fhash, int fsshash, int nrows, int ncols,
 		   double **matrix, double *targets, List *relids)
 {
-	RangeVar   *rv;
 	Relation	hrel;
 	Relation	irel;
 	SnapshotData snap;
@@ -428,7 +457,6 @@ update_fss(int fhash, int fsshash, int nrows, int ncols,
 	bool		shouldFree;
 	bool		find_ok = false;
 	bool		update_indexes;
-	Oid			reloid;
 	IndexScanDesc scan;
 	ScanKeyData	key[2];
 	bool result = true;
@@ -437,18 +465,12 @@ update_fss(int fhash, int fsshash, int nrows, int ncols,
 	if (XactReadOnly)
 		return false;
 
-	reloid = RelnameGetRelid("aqo_fss_access_idx");
-	if (!OidIsValid(reloid))
-	{
-		disable_aqo_for_query();
+	if (!open_aqo_relation("public", "aqo_data",
+						   "aqo_fss_access_idx",
+						   RowExclusiveLock, &hrel, &irel))
 		return false;
-	}
 
-	rv = makeRangeVar("public", "aqo_data", -1);
-	hrel = table_openrv(rv, RowExclusiveLock);
-	irel = index_open(reloid, RowExclusiveLock);
 	tupDesc = RelationGetDescr(hrel);
-
 	InitDirtySnapshot(snap);
 	scan = index_beginscan(hrel, irel, &snap, 2, 0);
 
@@ -517,7 +539,7 @@ update_fss(int fhash, int fsshash, int nrows, int ncols,
 			 * Ooops, somebody concurrently updated the tuple. It is possible
 			 * only in the case of changes made by third-party code.
 			 */
-			elog(ERROR, "AQO data piece (%d %d) concurrently updated"
+			elog(ERROR, "AQO data piece (%ld %d) concurrently updated"
 				 " by a stranger backend.",
 				 fhash, fsshash);
 			result = false;
@@ -547,28 +569,21 @@ update_fss(int fhash, int fsshash, int nrows, int ncols,
  * is not found.
  */
 QueryStat *
-get_aqo_stat(int qhash)
+get_aqo_stat(uint64 qhash)
 {
-	RangeVar   *rv;
 	Relation	hrel;
 	Relation	irel;
 	TupleTableSlot *slot;
-	Oid			reloid;
 	IndexScanDesc scan;
 	ScanKeyData key;
 	QueryStat  *stat = palloc_query_stat();
 	bool		shouldFree;
 
-	reloid = RelnameGetRelid("aqo_query_stat_idx");
-	if (!OidIsValid(reloid))
-	{
-		disable_aqo_for_query();
-		return NULL;
-	}
 
-	rv = makeRangeVar("public", "aqo_query_stat", -1);
-	hrel = table_openrv(rv, AccessShareLock);
-	irel = index_open(reloid, AccessShareLock);
+	if (!open_aqo_relation("public", "aqo_query_stat",
+						   "aqo_query_stat_idx",
+						   AccessShareLock, &hrel, &irel))
+		return false;
 
 	scan = index_beginscan(hrel, irel, SnapshotSelf, 1, 0);
 	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(qhash));
@@ -608,9 +623,8 @@ get_aqo_stat(int qhash)
  * Executes disable_aqo_for_query if aqo_query_stat is not found.
  */
 void
-update_aqo_stat(int qhash, QueryStat *stat)
+update_aqo_stat(uint64 qhash, QueryStat *stat)
 {
-	RangeVar   *rv;
 	Relation	hrel;
 	Relation	irel;
 	SnapshotData snap;
@@ -627,7 +641,6 @@ update_aqo_stat(int qhash, QueryStat *stat)
 								true, true, true };
 	bool		shouldFree;
 	bool		update_indexes;
-	Oid			reloid;
 	IndexScanDesc scan;
 	ScanKeyData	key;
 
@@ -635,21 +648,16 @@ update_aqo_stat(int qhash, QueryStat *stat)
 	if (XactReadOnly)
 		return;
 
-	reloid = RelnameGetRelid("aqo_query_stat_idx");
-	if (!OidIsValid(reloid))
-	{
-		disable_aqo_for_query();
+	if (!open_aqo_relation("public", "aqo_query_stat",
+						   "aqo_query_stat_idx",
+						   RowExclusiveLock, &hrel, &irel))
 		return;
-	}
 
-	rv = makeRangeVar("public", "aqo_query_stat", -1);
-	hrel = table_openrv(rv, RowExclusiveLock);
-	irel = index_open(reloid, RowExclusiveLock);
 	tupDesc = RelationGetDescr(hrel);
 
 	InitDirtySnapshot(snap);
 	scan = index_beginscan(hrel, irel, &snap, 1, 0);
-	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(qhash));
+	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT4EQ, Int64GetDatum(qhash));
 	index_rescan(scan, &key, 1, NULL, 0);
 	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
 
@@ -667,7 +675,7 @@ update_aqo_stat(int qhash, QueryStat *stat)
 	if (!index_getnext_slot(scan, ForwardScanDirection, slot))
 	{
 		/* Such signature (hash) doesn't yet exist in the ML knowledge base. */
-		values[0] = Int32GetDatum(qhash);
+		values[0] = Int64GetDatum(qhash);
 		tuple = heap_form_tuple(tupDesc, values, isnull);
 		simple_heap_insert(hrel, tuple);
 		my_index_insert(irel, values, isnull, &(tuple->t_self),
@@ -695,7 +703,7 @@ update_aqo_stat(int qhash, QueryStat *stat)
 			 * Ooops, somebody concurrently updated the tuple. It is possible
 			 * only in the case of changes made by third-party code.
 			 */
-			elog(ERROR, "AQO statistic data for query signature %d concurrently"
+			elog(ERROR, "AQO statistic data for query signature %ld concurrently"
 						" updated by a stranger backend.",
 				 qhash);
 		}
@@ -914,7 +922,7 @@ fini_deactivated_queries_storage(void)
 
 /* Checks whether the query with given hash is deactivated */
 bool
-query_is_deactivated(int query_hash)
+query_is_deactivated(uint64 query_hash)
 {
 	bool		found;
 
@@ -924,7 +932,7 @@ query_is_deactivated(int query_hash)
 
 /* Adds given query hash into the set of hashes of deactivated queries*/
 void
-add_deactivated_query(int query_hash)
+add_deactivated_query(uint64 query_hash)
 {
 	hash_search(deactivated_queries, &query_hash, HASH_ENTER, NULL);
 }

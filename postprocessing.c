@@ -16,15 +16,18 @@
  *
  */
 
-#include "aqo.h"
-#include "hash.h"
-#include "ignorance.h"
-#include "path_utils.h"
+#include "postgres.h"
 
 #include "access/parallel.h"
 #include "optimizer/optimizer.h"
 #include "postgres_fdw.h"
 #include "utils/queryenvironment.h"
+
+#include "aqo.h"
+#include "hash.h"
+#include "ignorance.h"
+#include "path_utils.h"
+#include "preprocessing.h"
 
 
 typedef struct
@@ -38,7 +41,12 @@ typedef struct
 static double cardinality_sum_errors;
 static int	cardinality_num_objects;
 
-/* It is needed to recognize stored Query-related aqo data in the query
+/*
+ * Store an AQO-related query data into the Query Environment structure.
+ *
+ * It is very sad that we have to use such unsuitable field, but alternative is
+ * to introduce a private field in a PlannedStmt struct.
+ * It is needed to recognize stored Query-related aqo data in the query
  * environment field.
  */
 static char *AQOPrivateData = "AQOPrivateData";
@@ -46,7 +54,7 @@ static char *PlanStateInfo = "PlanStateInfo";
 
 
 /* Query execution statistics collecting utilities */
-static void atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
+static void atomic_fss_learn_step(uint64 fhash, int fss_hash, int ncols,
 								  double **matrix, double *targets,
 								  double *features, double target,
 								  List *relids);
@@ -71,7 +79,6 @@ static void update_query_stat_row(double *et, int *et_size,
 static void StoreToQueryEnv(QueryDesc *queryDesc);
 static void StorePlanInternals(QueryDesc *queryDesc);
 static bool ExtractFromQueryEnv(QueryDesc *queryDesc);
-static void RemoveFromQueryEnv(QueryDesc *queryDesc);
 
 
 /*
@@ -80,7 +87,7 @@ static void RemoveFromQueryEnv(QueryDesc *queryDesc);
  * matrix and targets are just preallocated memory for computations.
  */
 static void
-atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
+atomic_fss_learn_step(uint64 fhash, int fss_hash, int ncols,
 					 double **matrix, double *targets,
 					 double *features, double target,
 					 List *relids)
@@ -88,7 +95,7 @@ atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
 	LOCKTAG	tag;
 	int		nrows;
 
-	init_lock_tag(&tag, (uint32) fhash, (uint32) fss_hash);
+	init_lock_tag(&tag, (uint32) fhash, fss_hash);
 	LockAcquire(&tag, ExclusiveLock, false, false);
 
 	if (!load_fss(fhash, fss_hash, ncols, matrix, targets, &nrows, NULL))
@@ -104,7 +111,7 @@ static void
 learn_agg_sample(List *clauselist, List *selectivities, List *relidslist,
 			 double true_cardinality, Plan *plan, bool notExecuted)
 {
-	int fhash = query_context.fspace_hash;
+	uint64 fhash = query_context.fspace_hash;
 	int child_fss;
 	int fss;
 	double target;
@@ -141,7 +148,7 @@ static void
 learn_sample(List *clauselist, List *selectivities, List *relidslist,
 			 double true_cardinality, Plan *plan, bool notExecuted)
 {
-	int		fhash = query_context.fspace_hash;
+	uint64		fhash = query_context.fspace_hash;
 	int		fss_hash;
 	int		nfeatures;
 	double	*matrix[aqo_K];
@@ -172,6 +179,7 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 		 * If ignorance logging is enabled and the feature space was existed in
 		 * the ML knowledge base, log this issue.
 		 */
+		Assert(query_context.query_hash>=0);
 		update_ignorance(query_context.query_hash, fhash, fss_hash, plan);
 	}
 
@@ -525,7 +533,7 @@ update_query_stat_row(double *et, int *et_size,
 			pt[i - 1] = pt[i];
 
 	*pt_size = (*pt_size >= aqo_stat_size) ? aqo_stat_size : (*pt_size + 1);
-	pt[*pt_size - 1] = planning_time;
+	pt[*pt_size - 1] = planning_time; /* Just remember: planning time can be negative. */
 	(*n_exec)++;
 }
 
@@ -541,18 +549,44 @@ update_query_stat_row(double *et, int *et_size,
 void
 aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 {
-	instr_time	current_time;
+	instr_time now;
 	bool use_aqo;
 
-	use_aqo = !IsParallelWorker() && (query_context.use_aqo ||
-									  query_context.learn_aqo ||
-									  force_collect_stat);
+	/*
+	 * If the plan pulled from a plan cache, planning don't needed. Restore
+	 * query context from the query environment.
+	 */
+	if (ExtractFromQueryEnv(queryDesc))
+		Assert(INSTR_TIME_IS_ZERO(query_context.start_planning_time));
+
+	use_aqo = !IsQueryDisabled() && !IsParallelWorker() &&
+				(query_context.use_aqo || query_context.learn_aqo ||
+				force_collect_stat);
 
 	if (use_aqo)
 	{
-		INSTR_TIME_SET_CURRENT(current_time);
-		INSTR_TIME_SUBTRACT(current_time, query_context.query_starttime);
-		query_context.query_planning_time = INSTR_TIME_GET_DOUBLE(current_time);
+		if (!INSTR_TIME_IS_ZERO(query_context.start_planning_time))
+		{
+			INSTR_TIME_SET_CURRENT(now);
+			INSTR_TIME_SUBTRACT(now, query_context.start_planning_time);
+			query_context.planning_time = INSTR_TIME_GET_DOUBLE(now);
+		}
+		else
+			/*
+			 * Should set anyway. It will be stored in a query env. The query
+			 * can be reused later by extracting from a plan cache.
+			 */
+			query_context.planning_time = -1;
+
+		/*
+		 * To zero this timestamp preventing a false time calculation in the
+		 * case, when the plan was got from a plan cache.
+		 */
+		INSTR_TIME_SET_ZERO(query_context.start_planning_time);
+
+		/* Make a timestamp for execution stage. */
+		INSTR_TIME_SET_CURRENT(now);
+		query_context.start_execution_time = now;
 
 		query_context.explain_only = ((eflags & EXEC_FLAG_EXPLAIN_ONLY) != 0);
 
@@ -569,7 +603,6 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 	else
 		standard_ExecutorStart(queryDesc, eflags);
 
-	/* Plan state has initialized */
 	if (use_aqo)
 		StorePlanInternals(queryDesc);
 }
@@ -582,7 +615,7 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 void
 aqo_ExecutorEnd(QueryDesc *queryDesc)
 {
-	double totaltime;
+	double execution_time;
 	double cardinality_error;
 	QueryStat *stat = NULL;
 	instr_time endtime;
@@ -603,6 +636,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 
 	njoins = (enr != NULL) ? *(int *) enr->reldata : -1;
 
+	Assert(!IsQueryDisabled());
 	Assert(!IsParallelWorker());
 
 	if (query_context.explain_only)
@@ -625,22 +659,24 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		list_free(ctx.selectivities);
 	}
 
-	/* Prevent concurrent updates. */
-	init_lock_tag(&tag, (uint32) query_context.query_hash,
-				 (uint32) query_context.fspace_hash);
-	LockAcquire(&tag, ExclusiveLock, false, false);
-
 	if (query_context.collect_stat)
+		stat = get_aqo_stat(query_context.query_hash);
+
 	{
+		/* Calculate execution time. */
 		INSTR_TIME_SET_CURRENT(endtime);
-		INSTR_TIME_SUBTRACT(endtime, query_context.query_starttime);
-		totaltime = INSTR_TIME_GET_DOUBLE(endtime);
+		INSTR_TIME_SUBTRACT(endtime, query_context.start_execution_time);
+		execution_time = INSTR_TIME_GET_DOUBLE(endtime);
+
 		if (cardinality_num_objects > 0)
 			cardinality_error = cardinality_sum_errors / cardinality_num_objects;
 		else
 			cardinality_error = -1;
-
-		stat = get_aqo_stat(query_context.query_hash);
+		Assert(query_context.query_hash>=0);
+		/* Prevent concurrent updates. */
+		init_lock_tag(&tag, (uint32) query_context.query_hash,//my code
+					 (uint32) query_context.fspace_hash);//possible here
+		LockAcquire(&tag, ExclusiveLock, false, false);
 
 		if (stat != NULL)
 		{
@@ -653,8 +689,8 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 									 &stat->planning_time_with_aqo_size,
 									 stat->cardinality_error_with_aqo,
 									 &stat->cardinality_error_with_aqo_size,
-									 query_context.query_planning_time,
-									 totaltime - query_context.query_planning_time,
+									 query_context.planning_time,
+									 execution_time,
 									 cardinality_error,
 									 &stat->executions_with_aqo);
 			else
@@ -665,33 +701,27 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 									 &stat->planning_time_without_aqo_size,
 									 stat->cardinality_error_without_aqo,
 									 &stat->cardinality_error_without_aqo_size,
-									 query_context.query_planning_time,
-									 totaltime - query_context.query_planning_time,
+									 query_context.planning_time,
+									 execution_time,
 									 cardinality_error,
 									 &stat->executions_without_aqo);
+
+			/* Store all learn data into the AQO service relations. */
+			Assert(query_context.query_hash>=0);
+			if (!query_context.adding_query && query_context.auto_tuning)
+				automatical_query_tuning(query_context.query_hash, stat);
+
+			/* Write AQO statistics to the aqo_query_stat table */
+			update_aqo_stat(query_context.fspace_hash, stat);
+			pfree_query_stat(stat);
 		}
+
+		/* Allow concurrent queries to update this feature space. */
+		LockRelease(&tag, ExclusiveLock, false);
 	}
+
 	selectivity_cache_clear();
-
-	/*
-	 * Store all learn data into the AQO service relations.
-	 */
-	if ((query_context.collect_stat) && (stat != NULL))
-	{
-		if (!query_context.adding_query && query_context.auto_tuning)
-			automatical_query_tuning(query_context.query_hash, stat);
-
-		/* Write AQO statistics to the aqo_query_stat table */
-		update_aqo_stat(query_context.fspace_hash, stat);
-		pfree_query_stat(stat);
-	}
-
-	/* Allow concurrent queries to update this feature space. */
-	LockRelease(&tag, ExclusiveLock, false);
-
-	cur_classes = list_delete_int(cur_classes, query_context.query_hash);
-
-	RemoveFromQueryEnv(queryDesc);
+	cur_classes = ldelete_uint64(cur_classes, query_context.query_hash);
 
 end:
 	if (prev_ExecutorEnd_hook)
@@ -706,9 +736,11 @@ end:
 }
 
 /*
- * Store into query environment field AQO data related to the query.
+ * Store into a query environment field an AQO data related to the query.
  * We introduce this machinery to avoid problems with subqueries, induced by
  * top-level query.
+ * If such enr exists, routine will replace it with current value of the
+ * query context.
  */
 static void
 StoreToQueryEnv(QueryDesc *queryDesc)
@@ -716,22 +748,32 @@ StoreToQueryEnv(QueryDesc *queryDesc)
 	EphemeralNamedRelation	enr;
 	int	qcsize = sizeof(QueryContextData);
 	MemoryContext	oldCxt;
+	bool newentry = false;
 
-	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
-	enr = palloc0(sizeof(EphemeralNamedRelationData));
+	oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc->plannedstmt));
+
 	if (queryDesc->queryEnv == NULL)
-		queryDesc->queryEnv = create_queryEnv();
+			queryDesc->queryEnv = create_queryEnv();
+
+	enr = get_ENR(queryDesc->queryEnv, AQOPrivateData);
+	if (enr == NULL)
+	{
+		/* If such query environment don't exists, allocate new. */
+		enr = palloc0(sizeof(EphemeralNamedRelationData));
+		newentry = true;
+	}
 
 	enr->md.name = AQOPrivateData;
 	enr->md.enrtuples = 0;
 	enr->md.enrtype = 0;
 	enr->md.reliddesc = InvalidOid;
 	enr->md.tupdesc = NULL;
-
 	enr->reldata = palloc0(qcsize);
 	memcpy(enr->reldata, &query_context, qcsize);
 
-	register_ENR(queryDesc->queryEnv, enr);
+	if (newentry)
+		register_ENR(queryDesc->queryEnv, enr);
+
 	MemoryContextSwitchTo(oldCxt);
 }
 
@@ -755,14 +797,23 @@ StorePlanInternals(QueryDesc *queryDesc)
 {
 	EphemeralNamedRelation enr;
 	MemoryContext	oldCxt;
+	bool newentry = false;
 
 	njoins = 0;
 	planstate_tree_walker(queryDesc->planstate, calculateJoinNum, &njoins);
 
-	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
-	enr = palloc0(sizeof(EphemeralNamedRelationData));
+	oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc->plannedstmt));
+
 	if (queryDesc->queryEnv == NULL)
 			queryDesc->queryEnv = create_queryEnv();
+
+	enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
+	if (enr == NULL)
+	{
+		/* If such query environment field doesn't exist, allocate new. */
+		enr = palloc0(sizeof(EphemeralNamedRelationData));
+		newentry = true;
+	}
 
 	enr->md.name = PlanStateInfo;
 	enr->md.enrtuples = 0;
@@ -771,7 +822,10 @@ StorePlanInternals(QueryDesc *queryDesc)
 	enr->md.tupdesc = NULL;
 	enr->reldata = palloc0(sizeof(int));
 	memcpy(enr->reldata, &njoins, sizeof(int));
-	register_ENR(queryDesc->queryEnv, enr);
+
+	if (newentry)
+		register_ENR(queryDesc->queryEnv, enr);
+
 	MemoryContextSwitchTo(oldCxt);
 }
 
@@ -801,21 +855,6 @@ ExtractFromQueryEnv(QueryDesc *queryDesc)
 	return true;
 }
 
-static void
-RemoveFromQueryEnv(QueryDesc *queryDesc)
-{
-	EphemeralNamedRelation enr = get_ENR(queryDesc->queryEnv, AQOPrivateData);
-	unregister_ENR(queryDesc->queryEnv, AQOPrivateData);
-	pfree(enr->reldata);
-	pfree(enr);
-
-	/* Remove the plan state internals */
-	enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
-	unregister_ENR(queryDesc->queryEnv, PlanStateInfo);
-	pfree(enr->reldata);
-	pfree(enr);
-}
-
 void
 print_node_explain(ExplainState *es, PlanState *ps, Plan *plan)
 {
@@ -826,6 +865,9 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan)
 	/* Extension, which took a hook early can be executed early too. */
 	if (prev_ExplainOneNode_hook)
 		prev_ExplainOneNode_hook(es, ps, plan);
+
+	if (IsQueryDisabled())
+		return;
 
 	if (es->format != EXPLAIN_FORMAT_TEXT)
 		/* Only text format is supported. */
@@ -896,7 +938,7 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 		prev_ExplainOnePlan_hook(plannedstmt, into, es, queryString,
 								 params, planduration, queryEnv);
 
-	if (!aqo_show_details)
+	if (IsQueryDisabled() || !aqo_show_details)
 		return;
 
 	/* Report to user about aqo state only in verbose mode */
@@ -933,6 +975,7 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 	 */
 	if (aqo_mode != AQO_MODE_DISABLED || force_collect_stat)
 	{
+		Assert(query_context.query_hash>=0);
 		if (aqo_show_hash)
 			ExplainPropertyInteger("Query hash", NULL,
 									query_context.query_hash, es);

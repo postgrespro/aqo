@@ -15,6 +15,9 @@
  *
  */
 
+#include "postgres.h"
+
+#include "common/pg_prng.h"
 #include "aqo.h"
 
 /*
@@ -142,7 +145,7 @@ is_in_infinite_loop_cq(double *elems, int nelems)
  * this query to false.
  */
 void
-automatical_query_tuning(int query_hash, QueryStat * stat)
+automatical_query_tuning(uint64 query_hash, QueryStat * stat)
 {
 	double		unstability = auto_tuning_exploration;
 	double		t_aqo,
@@ -197,7 +200,7 @@ automatical_query_tuning(int query_hash, QueryStat * stat)
 		 * If our decision is using AQO for this query class, then learn on new
 		 * queries of this type. Otherwise, turn off.
 		 */
-		query_context.use_aqo = (random() / ((double) MAX_RANDOM_VALUE + 1)) < p_use;
+		query_context.use_aqo = pg_prng_double(&pg_global_prng_state) < p_use;
 		query_context.learn_aqo = query_context.use_aqo;
 	}
 

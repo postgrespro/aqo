@@ -56,11 +56,55 @@
  *
  */
 
-#include "aqo.h"
+#include "postgres.h"
 #include "file_storage.h"
 #include "access/parallel.h"
 #include "access/table.h"
 #include "commands/extension.h"
+#include "parser/scansup.h"
+#include "aqo.h"
+#include "hash.h"
+#include "preprocessing.h"
+
+
+const char *
+CleanQuerytext(const char *query, int *location, int *len)
+{
+	int			query_location = *location;
+	int			query_len = *len;
+
+	/* First apply starting offset, unless it's -1 (unknown). */
+	if (query_location >= 0)
+	{
+		Assert(query_location <= strlen(query));
+		query += query_location;
+		/* Length of 0 (or -1) means "rest of string" */
+		if (query_len <= 0)
+			query_len = strlen(query);
+		else
+			Assert(query_len <= strlen(query));
+	}
+	else
+	{
+		/* If query location is unknown, distrust query_len as well */
+		query_location = 0;
+		query_len = strlen(query);
+	}
+
+	/*
+	 * Discard leading and trailing whitespace, too.  Use scanner_isspace()
+	 * not libc's isspace(), because we want to match the lexer's behavior.
+	 */
+	while (query_len > 0 && scanner_isspace(query[0]))
+		query++, query_location++, query_len--;
+	while (query_len > 0 && scanner_isspace(query[query_len - 1]))
+		query_len--;
+
+	*location = query_location;
+	*len = query_len;
+
+	return query;
+}
 
 /* List of feature spaces, that are processing in this backend. */
 List *cur_classes = NIL;
@@ -71,7 +115,7 @@ static bool isQueryUsingSystemRelation_walker(Node *node, void *context);
 /*
  * Calls standard query planner or its previous hook.
  */
-PlannedStmt *
+static PlannedStmt *
 call_default_planner(Query *parse,
 					 const char *query_string,
 					 int cursorOptions,
@@ -90,6 +134,33 @@ call_default_planner(Query *parse,
 }
 
 /*
+ * Check, that a 'CREATE EXTENSION aqo' command has been executed.
+ * This function allows us to execute the get_extension_oid routine only once
+ * at each backend.
+ * If any AQO-related table is missed we will set aqo_enabled to false (see
+ * a storage implementation module).
+ */
+static bool
+aqoIsEnabled(void)
+{
+	if (creating_extension)
+		/* Nothing to tell in this mode. */
+		return false;
+
+	if (aqo_enabled)
+		/*
+		 * Fast path. Dropping should be detected by absence of any AQO-related
+		 * table.
+		 */
+		return true;
+
+	if (get_extension_oid("aqo", true) != InvalidOid)
+		aqo_enabled = true;
+
+	return aqo_enabled;
+}
+
+/*
  * Before query optimization we determine machine learning settings
  * for the query.
  * This hook computes query_hash, and sets values of learn_aqo,
@@ -103,43 +174,48 @@ aqo_planner(Query *parse,
 			int cursorOptions,
 			ParamListInfo boundParams)
 {
-	bool		query_is_stored;
+	bool		query_is_stored = false;
 	Datum		query_params[5];
 	bool		query_nulls[5] = {false, false, false, false, false};
 	LOCKTAG		tag;
 	MemoryContext oldCxt;
-
-	selectivity_cache_clear();
 
 	 /*
 	  * We do not work inside an parallel worker now by reason of insert into
 	  * the heap during planning. Transactions is synchronized between parallel
 	  * sections. See GetCurrentCommandId() comments also.
 	  */
-	if ((parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT &&
+	if (!aqoIsEnabled() ||
+		(parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT &&
 		parse->commandType != CMD_UPDATE && parse->commandType != CMD_DELETE) ||
-		strstr(application_name, "postgres_fdw") != NULL || /* Prevent distributed deadlocks */
-		strstr(application_name, "pgfdw:") != NULL || /* caused by fdw */
-		get_extension_oid("aqo", true) == InvalidOid ||
 		creating_extension ||
 		IsInParallelMode() || IsParallelWorker() ||
 		(aqo_mode == AQO_MODE_DISABLED && !force_collect_stat) ||
+		strstr(application_name, "postgres_fdw") != NULL || /* Prevent distributed deadlocks */
+		strstr(application_name, "pgfdw:") != NULL || /* caused by fdw */
 		isQueryUsingSystemRelation(parse) ||
 		RecoveryInProgress())
 	{
+		/*
+		 * We should disable AQO for this query to remember this decision along
+		 * all execution stages.
+		 */
 		disable_aqo_for_query();
+
 		return call_default_planner(parse,
 									query_string,
 									cursorOptions,
 									boundParams);
 	}
 
+	selectivity_cache_clear();
 	query_context.query_hash = get_query_hash(parse, query_string);
 
 	if (query_is_deactivated(query_context.query_hash) ||
-		list_member_int(cur_classes, query_context.query_hash))
+		list_member_uint64(cur_classes,query_context.query_hash))
 	{
-		/* Disable AQO for deactivated query or for query belonged to a
+		/*
+		 * Disable AQO for deactivated query or for query belonged to a
 		 * feature space, that is processing yet (disallow invalidation
 		 * recursion, as an example).
 		 */
@@ -150,18 +226,19 @@ aqo_planner(Query *parse,
 									boundParams);
 	}
 
+	elog(DEBUG1, "AQO will be used for query '%s', class %ld",
+		 query_string ? query_string : "null string", query_context.query_hash);
+
 	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
-	cur_classes = lappend_int(cur_classes, query_context.query_hash);
+	cur_classes = lappend_uint64(cur_classes, query_context.query_hash);
 	MemoryContextSwitchTo(oldCxt);
 
-	INSTR_TIME_SET_CURRENT(query_context.query_starttime);
-
-	/*
-	 * find-add query and query text must be atomic operation to prevent
-	 * concurrent insertions.
-	 */
-	init_lock_tag(&tag, (uint32) query_context.query_hash, (uint32) 0);
-	LockAcquire(&tag, ExclusiveLock, false, false);
+	if (aqo_mode == AQO_MODE_DISABLED)
+	{
+		/* Skip access to a database in this mode. */
+		disable_aqo_for_query();
+		goto ignore_query_settings;
+	}
 
 	query_is_stored = find_query(query_context.query_hash, &query_params[0],
 															&query_nulls[0]);
@@ -208,50 +285,28 @@ aqo_planner(Query *parse,
 				break;
 			case AQO_MODE_DISABLED:
 				/* Should never happen */
-				query_context.fspace_hash = query_context.query_hash;
+				Assert(0);
 				break;
 			default:
 				elog(ERROR, "unrecognized mode in AQO: %d", aqo_mode);
 				break;
 		}
-
-		if (query_context.adding_query || force_collect_stat)
-		{
-			/*
-			 * Add query into the AQO knowledge base. To process an error with
-			 * concurrent addition from another backend we will try to restart
-			 * preprocessing routine.
-			 */
-			update_query(query_context.query_hash,
-							  query_context.fspace_hash,
-							  query_context.learn_aqo,
-							  query_context.use_aqo,
-							  query_context.auto_tuning);
-
-			/*
-			 * Add query text into the ML-knowledge base. Just for further
-			 * analysis. In the case of cached plans we could have NULL query text.
-			 */
-			if (query_string != NULL)
-			{
-				if (!use_file_storage)
-					add_query_text(query_context.query_hash, query_string);
-				else
-					file_add_query_text(query_context.query_hash, query_string);
-			}
-		}
 	}
-	else
+	else /* Query class exists in a ML knowledge base. */
 	{
 		query_context.adding_query = false;
 		query_context.learn_aqo = DatumGetBool(query_params[1]);
 		query_context.use_aqo = DatumGetBool(query_params[2]);
-		query_context.fspace_hash = DatumGetInt32(query_params[3]);
+		query_context.fspace_hash = DatumGetInt64(query_params[3]);
 		query_context.auto_tuning = DatumGetBool(query_params[4]);
 		query_context.collect_stat = query_context.auto_tuning;
 
+		/*
+		 * Deactivate query if no one reason exists for usage of an AQO machinery.
+		 */
+		Assert(query_context.query_hash>=0);
 		if (!query_context.learn_aqo && !query_context.use_aqo &&
-			!query_context.auto_tuning)
+			!query_context.auto_tuning && !force_collect_stat)
 			add_deactivated_query(query_context.query_hash);
 
 		/*
@@ -275,6 +330,7 @@ aqo_planner(Query *parse,
 			 * In this mode we want to learn with incoming query (if it is not
 			 * suppressed manually) and collect stats.
 			 */
+			Assert(query_context.query_hash>=0);
 			query_context.collect_stat = true;
 			query_context.fspace_hash = query_context.query_hash;
 			break;
@@ -291,14 +347,36 @@ aqo_planner(Query *parse,
 		}
 	}
 
-	LockRelease(&tag, ExclusiveLock, false);
+ignore_query_settings:
+	if (!query_is_stored && (query_context.adding_query || force_collect_stat))
+	{
+		/*
+		 * find-add query and query text must be atomic operation to prevent
+		 * concurrent insertions.
+		 */
+		Assert(query_context.query_hash>=0);
+		init_lock_tag(&tag, (uint32) query_context.query_hash, (uint32) 0);//my code
+		LockAcquire(&tag, ExclusiveLock, false, false);
+		/*
+		 * Add query into the AQO knowledge base. To process an error with
+		 * concurrent addition from another backend we will try to restart
+		 * preprocessing routine.
+		 */
+		Assert(query_context.query_hash>=0);
+		update_query(query_context.query_hash, query_context.fspace_hash,
+					 query_context.learn_aqo, query_context.use_aqo,
+					 query_context.auto_tuning);
 
-	/*
-	 * This mode is possible here, because force collect statistics uses AQO
-	 * machinery.
-	 */
-	if (aqo_mode == AQO_MODE_DISABLED)
-		disable_aqo_for_query();
+		/*
+		 * Add query text into the ML-knowledge base. Just for further
+		 * analysis. In the case of cached plans we could have NULL query text.
+		 */
+		Assert(query_context.query_hash>=0);
+		if (query_string != NULL)
+			add_query_text(query_context.query_hash, query_string);
+
+		LockRelease(&tag, ExclusiveLock, false);
+	}
 
 	if (force_collect_stat)
 	{
@@ -307,8 +385,13 @@ aqo_planner(Query *parse,
 		 * query execution statistics in any mode.
 		 */
 		query_context.collect_stat = true;
+		Assert(query_context.query_hash>=0);
 		query_context.fspace_hash = query_context.query_hash;
 	}
+
+	if (!IsQueryDisabled())
+		/* It's good place to set timestamp of start of a planning process. */
+		INSTR_TIME_SET_CURRENT(query_context.start_planning_time);
 
 	return call_default_planner(parse,
 								query_string,
@@ -322,22 +405,28 @@ aqo_planner(Query *parse,
 void
 disable_aqo_for_query(void)
 {
-	query_context.adding_query = false;
+
 	query_context.learn_aqo = false;
 	query_context.use_aqo = false;
 	query_context.auto_tuning = false;
 	query_context.collect_stat = false;
+	query_context.adding_query = false;
+	query_context.explain_only = false;
+
+	INSTR_TIME_SET_ZERO(query_context.start_planning_time);
+	query_context.planning_time = -1.;
 }
 
 /*
  * Examine a fully-parsed query, and return TRUE iff any relation underlying
  * the query is a system relation.
  */
-bool
+static bool
 isQueryUsingSystemRelation(Query *query)
 {
 	return isQueryUsingSystemRelation_walker((Node *) query, NULL);
 }
+
 
 static bool
 IsAQORelation(Relation rel)
@@ -355,7 +444,7 @@ IsAQORelation(Relation rel)
 	return false;
 }
 
-bool
+static bool
 isQueryUsingSystemRelation_walker(Node *node, void *context)
 {
 	if (node == NULL)

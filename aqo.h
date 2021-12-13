@@ -116,10 +116,6 @@
 
 #include <math.h>
 
-#include "postgres.h"
-
-#include "fmgr.h"
-
 #include "access/hash.h"
 #include "access/htup_details.h"
 #include "access/xact.h"
@@ -172,6 +168,7 @@ typedef enum
 }	AQO_MODE;
 
 extern int	aqo_mode;
+extern bool	aqo_enabled;
 extern bool	force_collect_stat;
 extern bool aqo_show_hash;
 extern bool aqo_show_details;
@@ -205,18 +202,26 @@ typedef struct
 /* Parameters for current query */
 typedef struct QueryContextData
 {
-	int			query_hash;
+	uint64		query_hash;
+	uint64		fspace_hash;
 	bool		learn_aqo;
 	bool		use_aqo;
-	int			fspace_hash;
 	bool		auto_tuning;
 	bool		collect_stat;
 	bool		adding_query;
 	bool		explain_only;
 
-	/* Query execution time */
-	instr_time	query_starttime;
-	double		query_planning_time;
+	/*
+	 * Timestamp of start of query planning process. Must be zeroed on execution
+	 * start or in the case of ERROR. Query context is stored in an query env
+	 * field. So, if query has a cached plan, a planning step could be skipped
+	 * by an optimizer. We should realize it at an execution stage by zero value
+	 * of this field.
+	 */
+	instr_time	start_planning_time;
+
+	instr_time	start_execution_time;
+	double		planning_time;
 } QueryContextData;
 
 extern double predicted_ppi_rows;
@@ -269,70 +274,38 @@ extern ExplainOneNode_hook_type prev_ExplainOneNode_hook;
 extern void ppi_hook(ParamPathInfo *ppi);
 
 /* Hash functions */
-int get_query_hash(Query *parse, const char *query_text);
-extern int get_fss_for_object(List *relidslist, List *clauselist,
-							  List *selectivities, int *nfeatures,
-							  double **features);
 void get_eclasses(List *clauselist, int *nargs, int **args_hash,
 				  int **eclass_hash);
 int get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash);
 
 
 /* Storage interaction */
-extern bool find_query(int qhash, Datum *search_values, bool *search_nulls);
-extern bool update_query(int qhash, int fhash,
+extern bool find_query(uint64 qhash, Datum *search_values, bool *search_nulls);
+extern bool update_query(uint64 qhash, uint64 fhash,
 						 bool learn_aqo, bool use_aqo, bool auto_tuning);
-extern bool add_query_text(int query_hash, const char *query_string);
-extern bool load_fss(int fhash, int fss_hash,
+extern bool add_query_text(uint64 query_hash, const char *query_string);
+extern bool load_fss(uint64 fhash, int fss_hash,
 					 int ncols, double **matrix, double *targets, int *rows,
 					 List **relids);
-extern bool update_fss(int fhash, int fss_hash, int nrows, int ncols,
+extern bool update_fss(uint64 fhash, int fss_hash, int nrows, int ncols,
 					   double **matrix, double *targets, List *relids);
-QueryStat *get_aqo_stat(int query_hash);
-void update_aqo_stat(int query_hash, QueryStat * stat);
+QueryStat *get_aqo_stat(uint64 query_hash);
+void update_aqo_stat(uint64 query_hash, QueryStat * stat);
 extern bool my_index_insert(Relation indexRelation,	Datum *values, bool *isnull,
 							ItemPointer heap_t_ctid, Relation heapRelation,
 							IndexUniqueCheck checkUnique);
 void init_deactivated_queries_storage(void);
 void fini_deactivated_queries_storage(void);
-bool query_is_deactivated(int query_hash);
-void add_deactivated_query(int query_hash);
+extern bool query_is_deactivated(uint64 query_hash);
+extern void add_deactivated_query(uint64 query_hash);
 
 /* Query preprocessing hooks */
-extern void get_query_text(ParseState *pstate, Query *query,
-						   JumbleState *jstate);
-extern PlannedStmt *call_default_planner(Query *parse,
-										 const char *query_string,
-										 int cursorOptions,
-										 ParamListInfo boundParams);
-extern PlannedStmt *aqo_planner(Query *parse,
-								const char *query_string,
-								int cursorOptions,
-								ParamListInfo boundParams);
 extern void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 							   ExplainState *es, const char *queryString,
 							   ParamListInfo params,
 							   const instr_time *planduration,
 							   QueryEnvironment *queryEnv);
 extern void print_node_explain(ExplainState *es, PlanState *ps, Plan *plan);
-extern void disable_aqo_for_query(void);
-
-/* Cardinality estimation hooks */
-extern void aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel);
-double aqo_get_parameterized_baserel_size(PlannerInfo *root,
-								   RelOptInfo *rel,
-								   List *param_clauses);
-void aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
-							   RelOptInfo *outer_rel,
-							   RelOptInfo *inner_rel,
-							   SpecialJoinInfo *sjinfo,
-							   List *restrictlist);
-double aqo_get_parameterized_joinrel_size(PlannerInfo *root,
-								   RelOptInfo *rel,
-								   Path *outer_path,
-								   Path *inner_path,
-								   SpecialJoinInfo *sjinfo,
-								   List *restrict_clauses);
 
 /* Cardinality estimation */
 double predict_for_relation(List *restrict_clauses, List *selectivities,
@@ -351,7 +324,7 @@ extern int OkNNr_learn(int matrix_rows, int matrix_cols,
 			double *features, double target);
 
 /* Automatic query tuning */
-extern void automatical_query_tuning(int query_hash, QueryStat * stat);
+extern void automatical_query_tuning(uint64 query_hash, QueryStat * stat);
 
 /* Utilities */
 int			int_cmp(const void *a, const void *b);
@@ -371,6 +344,7 @@ extern void selectivity_cache_clear(void);
 
 extern Oid get_aqo_schema(void);
 extern void init_lock_tag(LOCKTAG *tag, uint32 key1, uint32 key2);
+extern bool IsQueryDisabled(void);
 
 extern List *cur_classes;
 #endif

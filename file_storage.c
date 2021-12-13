@@ -10,6 +10,7 @@
  *	  aqo/file_storage.c
 */
 
+#include "postgres.h"
 #include "aqo.h"
 #include "file_storage.h"
 #include "storage/fd.h"
@@ -33,7 +34,7 @@
 
 typedef struct aqoqtEntry
 {
-	int qhash;
+	uint64			qhash;
 	Size			query_offset;			/* query text offset in external file */
 	unsigned int	query_len;				/* number of valid bytes in query string */
 } aqoqtEntry;
@@ -43,10 +44,8 @@ static	Size extent = 0;
 static	HTAB *aqoqt_hash = NULL;
 
 static void createAqoFile(const char *name);
-void makeAqoDir(void);
-void file_add_query_text(int qhash, const char *query_string);
-static bool qtext_store(int qhash, const char *query, int query_len, Size *query_offset);
-static aqoqtEntry *entry_alloc(int *qhash, Size query_offset, int query_len);
+static bool qtext_store(uint64 qhash, const char *query, int query_len, Size *query_offset);
+static aqoqtEntry *entry_alloc(uint64 *qhash, Size query_offset, int query_len);
 void createAqoQT(void);
 void aqoqt_hash_recovery(void);
 
@@ -89,7 +88,7 @@ aqoqt_hash_recovery(void)
 {
 	int			fd;
 	char		path[MAXPGPATH];
-	int			qhash;
+	uint64		qhash;
 	int			qlen;
 	char		*qstring;
 	Size		query_offset;
@@ -161,7 +160,7 @@ makeAqoDir(void)
  * add entry in .bin file $PGDATA/pg_aqo/aqo_query_texts.bin and in hash table
  */
 void
-file_add_query_text(int qhash, const char *query_string)
+file_add_query_text(uint64 qhash, const char *query_string)
 {
 	int				query_len = strlen(query_string);
 	aqoqtEntry		*entry;
@@ -180,7 +179,7 @@ file_add_query_text(int qhash, const char *query_string)
 }
 
 static bool
-qtext_store(int qhash,
+qtext_store(uint64 qhash,
 			const char *query, 
 			int query_len,
 			Size *query_offset)
@@ -326,7 +325,7 @@ file_read_query_text(PG_FUNCTION_ARGS)
 }
 
 static aqoqtEntry *
-entry_alloc(int *qhash, Size query_offset, int query_len)
+entry_alloc(uint64 *qhash, Size query_offset, int query_len)
 {
 	aqoqtEntry  *entry;
 	bool		found;

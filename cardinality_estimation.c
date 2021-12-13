@@ -15,8 +15,13 @@
  *
  */
 
-#include "aqo.h"
+#include "postgres.h"
+
 #include "optimizer/optimizer.h"
+
+#include "aqo.h"
+#include "hash.h"
+
 
 /*
  * General method for prediction the cardinality of given relation.

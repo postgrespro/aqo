@@ -322,13 +322,15 @@ SELECT count(*) FROM
  42550
 (1 row)
 
+SELECT str FROM expln('
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT count(*) FROM
 	(SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x = t.x)) AS q1
 		JOIN
 	(SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x <> t.x)) AS q2
 		ON q1.x = q2.x+1;
-                                  QUERY PLAN                                  
+') AS str WHERE str NOT LIKE '%Memory Usage%';
+                                     str                                      
 ------------------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
@@ -347,7 +349,6 @@ SELECT count(*) FROM
                              Rows Removed by Filter: 50
          ->  Hash (actual rows=851 loops=1)
                AQO not used
-               Buckets: 1024  Batches: 1  Memory Usage: 38kB
                ->  Seq Scan on t (actual rows=851 loops=1)
                      AQO: rows=851, error=0%
                      Filter: (((x % 3))::numeric < (SubPlan 1))
@@ -362,7 +363,7 @@ SELECT count(*) FROM
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1
-(32 rows)
+(31 rows)
 
 -- Two identical subplans in a clause
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
