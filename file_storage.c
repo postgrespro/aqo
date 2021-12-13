@@ -169,9 +169,7 @@ file_add_query_text(uint64 qhash, const char *query_string)
 	if(!entry)
 	{
 		Size		query_offset;
-		//bool		stored;
 
-		// stored = qtext_store(query_string, query_len, &query_offset);
 		qtext_store(qhash, query_string, query_len, &query_offset);
 
 		entry = entry_alloc(&qhash, query_offset, query_len);
@@ -283,7 +281,7 @@ file_read_query_text(PG_FUNCTION_ARGS)
 		
 		int			i = 0;
 		int			qlen = entry->query_len;
-		int			qhash;
+		uint64		qhash;
 
 		MemSet(values, 0, sizeof(values));
 		MemSet(nulls, 0, sizeof(nulls));

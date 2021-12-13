@@ -373,7 +373,12 @@ ignore_query_settings:
 		 */
 		Assert(query_context.query_hash>=0);
 		if (query_string != NULL)
-			add_query_text(query_context.query_hash, query_string);
+		{
+			if (!use_file_storage)
+				add_query_text(query_context.query_hash, query_string);
+			else
+				file_add_query_text(query_context.query_hash, query_string);
+		}
 
 		LockRelease(&tag, ExclusiveLock, false);
 	}
