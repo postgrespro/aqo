@@ -1,10 +1,11 @@
 use strict;
 use warnings;
-use PostgreSQL::Test::Cluster;
-use PostgreSQL::Test::Utils;
+
+use PostgresNode;
+use TestLib;
 use Test::More tests => 3;
-print "start";
-my $node = PostgreSQL::Test::Cluster->new('profiling');
+
+my $node = get_new_node('profiling');
 $node->init;
 print "create conf";
 

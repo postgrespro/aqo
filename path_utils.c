@@ -589,8 +589,8 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 	clauses = get_path_clauses(input_rel->cheapest_total_path,
 													root, &selectivities);
 	relids = get_list_of_relids(root, input_rel->relids);
-	fss_node->val.ival.type = T_Integer;
+	fss_node->val.type = T_Integer;
 	fss_node->location = -1;
-	fss_node->val.ival.val = get_fss_for_object(relids, clauses, NIL, NULL, NULL);
+	fss_node->val.val.ival = get_fss_for_object(relids, clauses, NIL, NULL, NULL);
 	output_rel->private = lappend(output_rel->private, (void *) fss_node);
 }
