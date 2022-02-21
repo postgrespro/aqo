@@ -23,7 +23,7 @@ typedef struct AQOPlanNode
 	List		*grouping_exprs;
 
 	JoinType	jointype;
-	int			parallel_divisor;
+	double		parallel_divisor;
 	bool		was_parametrized;
 
 	/* For Adaptive optimization DEBUG purposes */

@@ -436,9 +436,20 @@ learnOnPlanState(PlanState *p, void *context)
 	 * Need learn.
 	 */
 
-	/* It is needed for correct exp(result) calculation. */
+	/*
+	 * It is needed for correct exp(result) calculation.
+	 * Do it before cardinality error estimation because we can predict no less
+	 * than 1 tuple, but get zero tuples.
+	 */
 	predicted = clamp_row_est(predicted);
 	learn_rows = clamp_row_est(learn_rows);
+
+	/* Exclude "not executed" nodes from error calculation to reduce fluctuations. */
+	if (!notExecuted)
+	{
+		cardinality_sum_errors += fabs(predicted - learn_rows);
+		cardinality_num_objects += 1;
+	}
 
 	/*
 	 * Some nodes inserts after planning step (See T_Hash node type).

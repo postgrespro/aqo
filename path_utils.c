@@ -40,7 +40,7 @@ static AQOPlanNode DefaultAQOPlanNode =
 	.selectivities = NIL,
 	.grouping_exprs = NIL,
 	.jointype = -1,
-	.parallel_divisor = -1,
+	.parallel_divisor = -1.,
 	.was_parametrized = false,
 	.fss = INT_MAX,
 	.prediction = -1
@@ -481,7 +481,7 @@ AQOnodeOut(struct StringInfoData *str, const struct ExtensibleNode *enode)
 	WRITE_NODE_FIELD(grouping_exprs);
 
 	WRITE_ENUM_FIELD(jointype, JoinType);
-	WRITE_INT_FIELD(parallel_divisor);
+	WRITE_FLOAT_FIELD(parallel_divisor, "%.5f");
 	WRITE_BOOL_FIELD(was_parametrized);
 
 	/* For Adaptive optimization DEBUG purposes */
@@ -534,7 +534,7 @@ AQOnodeRead(struct ExtensibleNode *enode)
 	READ_NODE_FIELD(grouping_exprs);
 
 	READ_ENUM_FIELD(jointype, JoinType);
-	READ_INT_FIELD(parallel_divisor);
+	READ_FLOAT_FIELD(parallel_divisor);
 	READ_BOOL_FIELD(was_parametrized);
 
 	/* For Adaptive optimization DEBUG purposes */
