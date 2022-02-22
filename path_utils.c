@@ -258,13 +258,28 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 			return get_path_clauses(((MaterialPath *) path)->subpath, root,
 									selectivities);
 			break;
+		case T_MemoizePath:
+			return get_path_clauses(((MemoizePath *) path)->subpath, root,
+									selectivities);
+			break;
 		case T_ProjectionPath:
 			return get_path_clauses(((ProjectionPath *) path)->subpath, root,
+									selectivities);
+			break;
+		case T_ProjectSetPath:
+			return get_path_clauses(((ProjectSetPath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_SortPath:
 			return get_path_clauses(((SortPath *) path)->subpath, root,
 									selectivities);
+			break;
+		case T_IncrementalSortPath:
+			{
+				IncrementalSortPath *p = (IncrementalSortPath *) path;
+				return get_path_clauses(p->spath.subpath, root,
+									selectivities);
+			}
 			break;
 		case T_GroupPath:
 			return get_path_clauses(((GroupPath *) path)->subpath, root,
@@ -302,10 +317,20 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 			return get_path_clauses(((SubqueryScanPath *) path)->subpath, root,
 									selectivities);
 			break;
+		case T_ModifyTablePath:
+			return get_path_clauses(((ModifyTablePath *) path)->subpath, root,
+									selectivities);
+			break;
+		/* TODO: RecursiveUnionPath */
 		case T_AppendPath:
+		case T_MergeAppendPath:
 		{
 			ListCell *lc;
 
+			 /*
+			  * It isn't a safe style, but we use the only subpaths field that is
+			  * the first at both Append and MergeAppend nodes.
+			  */
 			foreach (lc, ((AppendPath *) path)->subpaths)
 			{
 				Path *subpath = lfirst(lc);
@@ -341,6 +366,33 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 			return cur;
 			break;
 	}
+}
+
+/*
+ * Some of paths are kind of utility path. I mean, It isn't corresponding to
+ * specific RelOptInfo node. So, it should be omitted in process of clauses
+ * gathering to avoid duplication of the same clauses.
+ * XXX: only a dump plug implemented for now.
+ */
+static bool
+is_appropriate_path(Path *path)
+{
+	bool appropriate = true;
+
+	switch (path->type)
+	{
+		case T_SortPath:
+		case T_IncrementalSortPath:
+		case T_MemoizePath:
+		case T_GatherPath:
+		case T_GatherMergePath:
+			appropriate = false;
+			break;
+		default:
+			break;
+	}
+
+	return appropriate;
 }
 
 /*
@@ -392,7 +444,7 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 		node->relids = get_list_of_relids(root, ap->subpath->parent->relids);
 		node->jointype = JOIN_INNER;
 	}
-	else
+	else if (is_appropriate_path(src))
 	{
 		node->clauses = list_concat(
 			aqo_get_clauses(root, src->parent->baserestrictinfo),
