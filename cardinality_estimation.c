@@ -22,6 +22,37 @@
 #include "aqo.h"
 #include "hash.h"
 
+#ifdef AQO_DEBUG_PRINT
+static void
+predict_debug_output(List *clauses, List *selectivities,
+					 List *relids, int fss_hash, double result)
+{
+	StringInfoData debug_str;
+	ListCell *lc;
+
+	initStringInfo(&debug_str);
+	appendStringInfo(&debug_str, "fss: %d, clausesNum: %d, ",
+					 fss_hash, list_length(clauses));
+
+	appendStringInfoString(&debug_str, ", selectivities: { ");
+	foreach(lc, selectivities)
+	{
+		Selectivity *s = (Selectivity *) lfirst(lc);
+		appendStringInfo(&debug_str, "%lf ", *s);
+	}
+
+	appendStringInfoString(&debug_str, "}, relids: { ");
+	foreach(lc, relids)
+	{
+		int relid = lfirst_int(lc);
+		appendStringInfo(&debug_str, "%d ", relid);
+	}
+
+	appendStringInfo(&debug_str, "}, result: %lf", result);
+	elog(DEBUG1, "Prediction: %s", debug_str.data);
+	pfree(debug_str.data);
+}
+#endif
 
 /*
  * General method for prediction the cardinality of given relation.
@@ -65,7 +96,9 @@ predict_for_relation(List *clauses, List *selectivities,
 		 */
 		result = -1;
 	}
-
+#ifdef AQO_DEBUG_PRINT
+	predict_debug_output(clauses, selectivities, relids, *fss_hash, result);
+#endif
 	pfree(features);
 	if (nfeatures > 0)
 	{
