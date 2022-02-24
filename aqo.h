@@ -105,7 +105,7 @@
  * Module storage.c is responsible for storage query settings and models
  * (i. e. all information which is used in extension).
  *
- * Copyright (c) 2016-2021, Postgres Professional
+ * Copyright (c) 2016-2022, Postgres Professional
  *
  * IDENTIFICATION
  *	  aqo/aqo.h
@@ -257,6 +257,7 @@ extern MemoryContext AQOMemoryContext;
 extern post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 extern planner_hook_type prev_planner_hook;
 extern ExecutorStart_hook_type prev_ExecutorStart_hook;
+extern ExecutorRun_hook_type prev_ExecutorRun;
 extern ExecutorEnd_hook_type prev_ExecutorEnd_hook;
 extern set_baserel_rows_estimate_hook_type
 										prev_set_foreign_rows_estimate_hook;
@@ -284,9 +285,15 @@ extern bool find_query(uint64 qhash, Datum *search_values, bool *search_nulls);
 extern bool update_query(uint64 qhash, uint64 fhash,
 						 bool learn_aqo, bool use_aqo, bool auto_tuning);
 extern bool add_query_text(uint64 query_hash, const char *query_string);
+extern bool load_fss_ext(uint64 fs, int fss,
+						 int ncols, double **matrix, double *targets, int *rows,
+						 List **relids, bool isSafe);
 extern bool load_fss(uint64 fhash, int fss_hash,
 					 int ncols, double **matrix, double *targets, int *rows,
 					 List **relids);
+extern bool update_fss_ext(uint64 fhash, int fsshash, int nrows, int ncols,
+						   double **matrix, double *targets, List *relids,
+						   bool isTimedOut);
 extern bool update_fss(uint64 fhash, int fss_hash, int nrows, int ncols,
 					   double **matrix, double *targets, List *relids);
 QueryStat *get_aqo_stat(uint64 query_hash);
@@ -312,8 +319,10 @@ double predict_for_relation(List *restrict_clauses, List *selectivities,
 					 List *relids, int *fss_hash);
 
 /* Query execution statistics collecting hooks */
-void		aqo_ExecutorStart(QueryDesc *queryDesc, int eflags);
-void		aqo_ExecutorEnd(QueryDesc *queryDesc);
+void aqo_ExecutorStart(QueryDesc *queryDesc, int eflags);
+void aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction,
+					 uint64 count, bool execute_once);
+void aqo_ExecutorEnd(QueryDesc *queryDesc);
 
 /* Machine learning techniques */
 extern double OkNNr_predict(int nrows, int ncols,

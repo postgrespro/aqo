@@ -84,7 +84,7 @@ $node->safe_psql('postgres', "
 ");
 $node->command_ok([ 'pgbench', '-t',
 					"$TRANSACTIONS", '-c', "$CLIENTS", '-j', "$THREADS" ],
-					'pgbench in disabled mode');
+					'pgbench in disabled mode - 2');
 
 # Check: no any tuples added into the aqo_data table in this mode.
 $fss_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_data;");
