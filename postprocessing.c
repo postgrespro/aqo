@@ -9,7 +9,7 @@
  *
  *******************************************************************************
  *
- * Copyright (c) 2016-2021, Postgres Professional
+ * Copyright (c) 2016-2022, Postgres Professional
  *
  * IDENTIFICATION
  *	  aqo/postprocessing.c
@@ -29,6 +29,7 @@
 #include "hash.h"
 #include "path_utils.h"
 #include "preprocessing.h"
+#include "learn_cache.h"
 
 
 typedef struct
@@ -37,6 +38,7 @@ typedef struct
 	List *selectivities;
 	List *relidslist;
 	bool learn;
+	bool isTimedOut; /* Is execution was interrupted by timeout? */
 } aqo_obj_stat;
 
 static double cardinality_sum_errors;
@@ -58,14 +60,13 @@ static char *PlanStateInfo = "PlanStateInfo";
 static void atomic_fss_learn_step(uint64 fhash, int fss_hash, int ncols,
 								  double **matrix, double *targets,
 								  double *features, double target,
-								  List *relids);
+								  List *relids, bool isTimedOut);
 static bool learnOnPlanState(PlanState *p, void *context);
-static void learn_sample(List *clauselist,
-						 List *selectivities,
-						 List *relidslist,
-						 double true_cardinality,
-						 Plan *plan,
-						 bool notExecuted);
+static void learn_agg_sample(aqo_obj_stat *ctx, List *relidslist,
+							 double true_cardinality, Plan *plan,
+							 bool notExecuted);
+static void learn_sample(aqo_obj_stat *ctx, List *relidslist,
+						 double true_cardinality, Plan *plan, bool notExecuted);
 static List *restore_selectivities(List *clauselist,
 								   List *relidslist,
 								   JoinType join_type,
@@ -91,7 +92,7 @@ static void
 atomic_fss_learn_step(uint64 fhash, int fss_hash, int ncols,
 					 double **matrix, double *targets,
 					 double *features, double target,
-					 List *relids)
+					 List *relids, bool isTimedOut)
 {
 	LOCKTAG	tag;
 	int		nrows;
@@ -99,17 +100,18 @@ atomic_fss_learn_step(uint64 fhash, int fss_hash, int ncols,
 	init_lock_tag(&tag, fhash, fss_hash);
 	LockAcquire(&tag, ExclusiveLock, false, false);
 
-	if (!load_fss(fhash, fss_hash, ncols, matrix, targets, &nrows, NULL))
+	if (!load_fss_ext(fhash, fss_hash, ncols, matrix, targets, &nrows, NULL, !isTimedOut))
 		nrows = 0;
 
 	nrows = OkNNr_learn(nrows, ncols, matrix, targets, features, target);
-	update_fss(fhash, fss_hash, nrows, ncols, matrix, targets, relids);
+	update_fss_ext(fhash, fss_hash, nrows, ncols, matrix, targets, relids,
+				   isTimedOut);
 
 	LockRelease(&tag, ExclusiveLock, false);
 }
 
 static void
-learn_agg_sample(List *clauselist, List *selectivities, List *relidslist,
+learn_agg_sample(aqo_obj_stat *ctx, List *relidslist,
 			 double true_cardinality, Plan *plan, bool notExecuted)
 {
 	uint64 fhash = query_context.fspace_hash;
@@ -125,11 +127,11 @@ learn_agg_sample(List *clauselist, List *selectivities, List *relidslist,
 	 * Learn 'not executed' nodes only once, if no one another knowledge exists
 	 * for current feature subspace.
 	 */
-	if (notExecuted && aqo_node->prediction > 0)
+	if (notExecuted && aqo_node->prediction > 0.)
 		return;
 
 	target = log(true_cardinality);
-	child_fss = get_fss_for_object(relidslist, clauselist, NIL, NULL, NULL);
+	child_fss = get_fss_for_object(relidslist, ctx->clauselist, NIL, NULL, NULL);
 	fss = get_grouped_exprs_hash(child_fss, aqo_node->grouping_exprs);
 
 	for (i = 0; i < aqo_K; i++)
@@ -137,7 +139,7 @@ learn_agg_sample(List *clauselist, List *selectivities, List *relidslist,
 	/* Critical section */
 	atomic_fss_learn_step(fhash, fss,
 						  0, matrix, targets, NULL, target,
-						  relidslist);
+						  relidslist, ctx->isTimedOut);
 	/* End of critical section */
 }
 
@@ -146,7 +148,7 @@ learn_agg_sample(List *clauselist, List *selectivities, List *relidslist,
  * true cardinalities) performs learning procedure.
  */
 static void
-learn_sample(List *clauselist, List *selectivities, List *relidslist,
+learn_sample(aqo_obj_stat *ctx, List *relidslist,
 			 double true_cardinality, Plan *plan, bool notExecuted)
 {
 	uint64		fhash = query_context.fspace_hash;
@@ -160,8 +162,8 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 	AQOPlanNode *aqo_node = get_aqo_plan_node(plan, false);
 
 	target = log(true_cardinality);
-	fss_hash = get_fss_for_object(relidslist, clauselist,
-								  selectivities, &nfeatures, &features);
+	fss_hash = get_fss_for_object(relidslist, ctx->clauselist,
+								  ctx->selectivities, &nfeatures, &features);
 
 	/* Only Agg nodes can have non-empty a grouping expressions list. */
 	Assert(!IsA(plan, Agg) || aqo_node->grouping_exprs != NIL);
@@ -180,7 +182,7 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 	/* Critical section */
 	atomic_fss_learn_step(fhash, fss_hash,
 						  nfeatures, matrix, targets, features, target,
-						  relidslist);
+						  relidslist, ctx->isTimedOut);
 	/* End of critical section */
 
 	if (nfeatures > 0)
@@ -266,7 +268,7 @@ IsParallelTuplesProcessing(const Plan *plan, bool IsParallel)
 /*
  * learn_subplan_recurse
  *
- * Emphasise recursion operation into separate function because of increasing
+ * Emphasize recursion operation into separate function because of increasing
  * complexity of this logic.
  */
 static bool
@@ -278,6 +280,13 @@ learn_subplan_recurse(PlanState *p, aqo_obj_stat *ctx)
 
 	if (!p->instrument)
 		return true;
+
+	if (!INSTR_TIME_IS_ZERO(p->instrument->starttime))
+	{
+		Assert(ctx->isTimedOut);
+		InstrStopNode(p->instrument, 0);
+	}
+
 	InstrEndLoop(p->instrument);
 
 	saved_subplan_list = p->subPlan;
@@ -288,19 +297,22 @@ learn_subplan_recurse(PlanState *p, aqo_obj_stat *ctx)
 	if (planstate_tree_walker(p, learnOnPlanState, (void *) ctx))
 		return true;
 
+	/*
+	 * Learn on subplans and initplans separately. Discard learn context of these
+	 * subplans because we will use their fss'es directly.
+	 */
 	foreach(lc, saved_subplan_list)
 	{
 		SubPlanState *sps = lfirst_node(SubPlanState, lc);
-		aqo_obj_stat SPCtx = {NIL, NIL, NIL, ctx->learn};
+		aqo_obj_stat SPCtx = {NIL, NIL, NIL, ctx->learn, ctx->isTimedOut};
 
 		if (learnOnPlanState(sps->planstate, (void *) &SPCtx))
 			return true;
 	}
-
 	foreach(lc, saved_initplan_list)
 	{
 		SubPlanState *sps = lfirst_node(SubPlanState, lc);
-		aqo_obj_stat SPCtx = {NIL, NIL, NIL, ctx->learn};
+		aqo_obj_stat SPCtx = {NIL, NIL, NIL, ctx->learn, ctx->isTimedOut};
 
 		if (learnOnPlanState(sps->planstate, (void *) &SPCtx))
 			return true;
@@ -308,6 +320,23 @@ learn_subplan_recurse(PlanState *p, aqo_obj_stat *ctx)
 
 	p->subPlan = saved_subplan_list;
 	p->initPlan = saved_initplan_list;
+	return false;
+}
+
+static bool
+should_learn(aqo_obj_stat *ctx, double predicted, double *nrows)
+{
+	if (ctx->isTimedOut)
+	{
+		if (ctx->learn && *nrows > predicted * 1.2)
+		{
+			*nrows += (*nrows - predicted) * 3.;
+			return true;
+		}
+	}
+	else if (ctx->learn)
+		return true;
+
 	return false;
 }
 
@@ -326,7 +355,7 @@ static bool
 learnOnPlanState(PlanState *p, void *context)
 {
 	aqo_obj_stat *ctx = (aqo_obj_stat *) context;
-	aqo_obj_stat SubplanCtx = {NIL, NIL, NIL, ctx->learn};
+	aqo_obj_stat SubplanCtx = {NIL, NIL, NIL, ctx->learn, ctx->isTimedOut};
 	double predicted = 0.;
 	double learn_rows = 0.;
 	AQOPlanNode *aqo_node;
@@ -334,7 +363,7 @@ learnOnPlanState(PlanState *p, void *context)
 
 	/* Recurse into subtree and collect clauses. */
 	if (learn_subplan_recurse(p, &SubplanCtx))
-		/* If something goes wrong, return quckly. */
+		/* If something goes wrong, return quickly. */
 		return true;
 
 	aqo_node = get_aqo_plan_node(p->plan, false);
@@ -471,18 +500,24 @@ learnOnPlanState(PlanState *p, void *context)
 			{
 				Assert(predicted >= 1. && learn_rows >= 1.);
 
-				if (ctx->learn)
+				if (should_learn(ctx, predicted, &learn_rows))
 				{
+					if (ctx->isTimedOut)
+						elog(DEBUG1, "[AQO] Learn on partially executed plan node. fs: %lu, fss: %d, predicted rows: %.0lf, updated prediction: %.0lf",
+							 query_context.query_hash, aqo_node->fss, predicted, learn_rows);
+
 					if (IsA(p, AggState))
-						learn_agg_sample(SubplanCtx.clauselist, NULL,
+						learn_agg_sample(&SubplanCtx,
 										 aqo_node->relids, learn_rows,
 										 p->plan, notExecuted);
 
 					else
-						learn_sample(SubplanCtx.clauselist,
-									 SubplanCtx.selectivities,
+						learn_sample(&SubplanCtx,
 									 aqo_node->relids, learn_rows,
 									 p->plan, notExecuted);
+
+					if (!ctx->isTimedOut)
+						lc_remove_fss(query_context.query_hash, aqo_node->fss);
 				}
 			}
 		}
@@ -608,6 +643,102 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 		StorePlanInternals(queryDesc);
 }
 
+#include "utils/timeout.h"
+
+static struct
+{
+	TimeoutId id;
+	QueryDesc *queryDesc;
+} timeoutCtl = {0, NULL};
+
+static int exec_nested_level = 0;
+
+static void
+aqo_timeout_handler(void)
+{
+	aqo_obj_stat ctx = {NIL, NIL, NIL, false, false};
+
+	if (!timeoutCtl.queryDesc || !ExtractFromQueryEnv(timeoutCtl.queryDesc))
+		return;
+
+	/* Now we can analyze execution state of the query. */
+
+	ctx.learn = query_context.learn_aqo;
+	ctx.isTimedOut = true;
+
+	elog(DEBUG1, "AQO timeout was expired. Try to learn on partial data.");
+	learnOnPlanState(timeoutCtl.queryDesc->planstate, (void *) &ctx);
+}
+
+static bool
+set_timeout_if_need(QueryDesc *queryDesc)
+{
+	TimestampTz	fin_time;
+
+	if (!get_timeout_active(STATEMENT_TIMEOUT))
+		return false;
+
+	if (!ExtractFromQueryEnv(queryDesc))
+		return false;
+
+	if (IsQueryDisabled() || IsParallelWorker() ||
+		!(query_context.use_aqo || query_context.learn_aqo))
+		return false;
+
+	/*
+	 * Statement timeout exists. AQO should create user timeout right before the
+	 * statement timeout.
+	 */
+
+	if (timeoutCtl.id < USER_TIMEOUT)
+		/* Register once per backend, because of timeouts implementation. */
+		timeoutCtl.id = RegisterTimeout(USER_TIMEOUT, aqo_timeout_handler);
+	else
+		Assert(!get_timeout_active(timeoutCtl.id));
+
+	fin_time = get_timeout_finish_time(STATEMENT_TIMEOUT);
+	enable_timeout_at(timeoutCtl.id, fin_time - 1);
+
+	/* Save pointer to queryDesc to use at learning after a timeout interruption. */
+	timeoutCtl.queryDesc = queryDesc;
+	return true;
+}
+
+/*
+ * ExecutorRun hook.
+ */
+void
+aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count,
+				 bool execute_once)
+{
+	bool		timeout_enabled = false;
+
+	if (exec_nested_level <= 0)
+		timeout_enabled = set_timeout_if_need(queryDesc);
+
+	Assert(!timeout_enabled ||
+		   (timeoutCtl.queryDesc && timeoutCtl.id >= USER_TIMEOUT));
+
+	exec_nested_level++;
+
+	PG_TRY();
+	{
+		if (prev_ExecutorRun)
+			prev_ExecutorRun(queryDesc, direction, count, execute_once);
+		else
+			standard_ExecutorRun(queryDesc, direction, count, execute_once);
+	}
+	PG_FINALLY();
+	{
+		exec_nested_level--;
+		timeoutCtl.queryDesc = NULL;
+
+		if (timeout_enabled)
+			disable_timeout(timeoutCtl.id, false);
+	}
+	PG_END_TRY();
+}
+
 /*
  * General hook which runs before ExecutorEnd and collects query execution
  * cardinality statistics.
@@ -649,7 +780,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	if (query_context.learn_aqo ||
 		(!query_context.learn_aqo && query_context.collect_stat))
 	{
-		aqo_obj_stat ctx = {NIL, NIL, NIL, query_context.learn_aqo};
+		aqo_obj_stat ctx = {NIL, NIL, NIL, query_context.learn_aqo, false};
 
 		/*
 		 * Analyze plan if AQO need to learn or need to collect statistics only.
@@ -732,6 +863,8 @@ end:
 	 * standard_ExecutorEnd clears the queryDesc->planstate. After this point no
 	 * one operation with the plan can be made.
 	 */
+
+	timeoutCtl.queryDesc = NULL;
 }
 
 /*

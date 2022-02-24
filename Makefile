@@ -6,7 +6,7 @@ PGFILEDESC = "AQO - Adaptive Query Optimization"
 MODULE_big = aqo
 OBJS = aqo.o auto_tuning.o cardinality_estimation.o cardinality_hooks.o \
 hash.o machine_learning.o path_utils.o postprocessing.o preprocessing.o \
-selectivity_cache.o storage.o utils.o $(WIN32RES)
+selectivity_cache.o storage.o utils.o learn_cache.o $(WIN32RES)
 
 TAP_TESTS = 1
 
