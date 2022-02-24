@@ -436,8 +436,7 @@ IsAQORelation(Relation rel)
 	if (strcmp(relname, "aqo_data") == 0 ||
 		strcmp(relname, "aqo_query_texts") == 0 ||
 		strcmp(relname, "aqo_query_stat") == 0 ||
-		strcmp(relname, "aqo_queries") == 0 ||
-		strcmp(relname, "aqo_ignorance") == 0
+		strcmp(relname, "aqo_queries") == 0
 	   )
 	   return true;
 

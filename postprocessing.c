@@ -25,7 +25,6 @@
 
 #include "aqo.h"
 #include "hash.h"
-#include "ignorance.h"
 #include "path_utils.h"
 #include "preprocessing.h"
 
@@ -171,17 +170,6 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 	 */
 	if (notExecuted && aqo_node->prediction > 0)
 		return;
-
-	if (aqo_log_ignorance && aqo_node->prediction <= 0 &&
-		load_fss(fhash, fss_hash, 0, NULL, NULL, NULL, NULL) )
-	{
-		/*
-		 * If ignorance logging is enabled and the feature space was existed in
-		 * the ML knowledge base, log this issue.
-		 */
-		Assert(query_context.query_hash>=0);
-		update_ignorance(query_context.query_hash, fhash, fss_hash, plan);
-	}
 
 	if (nfeatures > 0)
 		for (i = 0; i < aqo_K; ++i)

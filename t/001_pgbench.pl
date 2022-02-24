@@ -12,7 +12,6 @@ $node->init;
 $node->append_conf('postgresql.conf', qq{
 						shared_preload_libraries = 'aqo'
 						aqo.mode = 'intelligent'
-						aqo.log_ignorance = 'off' # TODO: solve problems with deadlock on the table creation or remove this table at all.
 						log_statement = 'ddl'
 					});
 
