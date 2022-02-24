@@ -1,15 +1,3 @@
-diff --git a/contrib/Makefile b/contrib/Makefile
-index f27e458482..0c62191904 100644
---- a/contrib/Makefile
-+++ b/contrib/Makefile
-@@ -7,6 +7,7 @@ include $(top_builddir)/src/Makefile.global
- SUBDIRS = \
- 		adminpack	\
- 		amcheck		\
-+		aqo		\
- 		auth_delay	\
- 		auto_explain	\
- 		bloom		\
 diff --git a/src/backend/commands/explain.c b/src/backend/commands/explain.c
 index 10644dfac4..16d9e1e915 100644
 --- a/src/backend/commands/explain.c
