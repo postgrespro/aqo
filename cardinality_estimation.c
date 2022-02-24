@@ -8,7 +8,7 @@
  *
  *******************************************************************************
  *
- * Copyright (c) 2016-2021, Postgres Professional
+ * Copyright (c) 2016-2022, Postgres Professional
  *
  * IDENTIFICATION
  *	  aqo/cardinality_estimation.c
@@ -83,8 +83,8 @@ predict_for_relation(List *clauses, List *selectivities,
 		for (i = 0; i < aqo_K; ++i)
 			matrix[i] = palloc0(sizeof(**matrix) * nfeatures);
 
-	if (load_fss(query_context.fspace_hash, *fss_hash, nfeatures, matrix,
-				 targets, &rows, NULL))
+	if (load_fss_ext(query_context.fspace_hash, *fss_hash, nfeatures, matrix,
+					 targets, &rows, NULL, true))
 		result = OkNNr_predict(rows, nfeatures, matrix, targets, features);
 	else
 	{
