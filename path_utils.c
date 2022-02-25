@@ -266,10 +266,6 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 			return get_path_clauses(((ProjectionPath *) path)->subpath, root,
 									selectivities);
 			break;
-		case T_ProjectSetPath:
-			return get_path_clauses(((ProjectSetPath *) path)->subpath, root,
-									selectivities);
-			break;
 		case T_SortPath:
 			return get_path_clauses(((SortPath *) path)->subpath, root,
 									selectivities);

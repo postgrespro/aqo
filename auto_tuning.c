@@ -202,7 +202,6 @@ automatical_query_tuning(uint64 query_hash, QueryStat * stat)
 		query_context.use_aqo = (random() / ((double) MAX_RANDOM_VALUE + 1)) < p_use;
 		query_context.learn_aqo = query_context.use_aqo;
 	}
-
 	if (num_iterations <= auto_tuning_max_iterations || p_use > 0.5)
 		update_query(query_hash,
 					 query_context.fspace_hash,
