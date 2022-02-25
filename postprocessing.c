@@ -686,7 +686,7 @@ set_timeout_if_need(QueryDesc *queryDesc)
 {
 	TimestampTz	fin_time;
 
-	if (!get_timeout_active(STATEMENT_TIMEOUT))
+	if (!get_timeout_active(STATEMENT_TIMEOUT) || !aqo_learn_statement_timeout)
 		return false;
 
 	if (!ExtractFromQueryEnv(queryDesc))
@@ -698,7 +698,7 @@ set_timeout_if_need(QueryDesc *queryDesc)
 
 	/*
 	 * Statement timeout exists. AQO should create user timeout right before the
-	 * statement timeout.
+	 * timeout.
 	 */
 
 	if (timeoutCtl.id < USER_TIMEOUT)

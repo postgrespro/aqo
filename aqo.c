@@ -203,6 +203,19 @@ _PG_init(void)
 							 NULL
 	);
 
+	DefineCustomBoolVariable(
+							 "aqo.learn_statement_timeout",
+							 "Learn on a plan interrupted by statement timeout.",
+							 "ML data stored in a backend cache, so it works only locally.",
+							 &aqo_learn_statement_timeout,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 lc_assign_hook,
+							 NULL
+	);
+
 	prev_planner_hook							= planner_hook;
 	planner_hook								= aqo_planner;
 	prev_ExecutorStart_hook						= ExecutorStart_hook;

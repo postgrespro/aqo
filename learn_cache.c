@@ -13,6 +13,7 @@
  */
 
 #include "postgres.h"
+#include "miscadmin.h"
 
 #include "aqo.h"
 #include "learn_cache.h"
@@ -38,6 +39,8 @@ typedef struct
 
 static HTAB *fss_htab = NULL;
 MemoryContext LearnCacheMemoryContext = NULL;
+
+bool aqo_learn_statement_timeout = false;
 
 void
 lc_init(void)
@@ -66,7 +69,7 @@ lc_update_fss(uint64 fs, int fss, int nrows, int ncols,
 	int				i;
 	MemoryContext	memctx = MemoryContextSwitchTo(LearnCacheMemoryContext);
 
-	Assert(fss_htab);
+	Assert(fss_htab && aqo_learn_statement_timeout);
 
 	entry = (htab_entry *) hash_search(fss_htab, &key, HASH_ENTER, &found);
 	if (found)
@@ -99,6 +102,9 @@ lc_has_fss(uint64 fs, int fss)
 	htab_key	key = {fs, fss};
 	bool		found;
 
+	if (!aqo_learn_statement_timeout)
+		return false;
+
 	Assert(fss_htab);
 
 	(void) hash_search(fss_htab, &key, HASH_FIND, &found);
@@ -118,7 +124,7 @@ lc_load_fss(uint64 fs, int fss, int ncols, double **matrix,
 	bool		found;
 	int			i;
 
-	Assert(fss_htab);
+	Assert(fss_htab && aqo_learn_statement_timeout);
 
 	entry = (htab_entry *) hash_search(fss_htab, &key, HASH_FIND, &found);
 	if (!found)
@@ -150,6 +156,9 @@ lc_remove_fss(uint64 fs, int fss)
 	bool		found;
 	int			i;
 
+	if (!aqo_learn_statement_timeout)
+		return;
+
 	Assert(fss_htab);
 
 	entry = (htab_entry *) hash_search(fss_htab, &key, HASH_FIND, &found);
@@ -160,4 +169,32 @@ lc_remove_fss(uint64 fs, int fss)
 		pfree(entry->matrix[i]);
 	pfree(entry->targets);
 	hash_search(fss_htab, &key, HASH_REMOVE, NULL);
+}
+
+/*
+ * Main purpose of this hook is to cleanup a backend cache in some way to prevent
+ * memory leaks - in large queries we could have many unused fss nodes.
+ */
+void
+lc_assign_hook(bool newval, void *extra)
+{
+	HASH_SEQ_STATUS		status;
+	htab_entry		   *entry;
+
+	if (!fss_htab || !IsUnderPostmaster)
+		return;
+
+	/* Remove all entries, reset memory context. */
+
+	elog(DEBUG5, "[AQO] Cleanup local cache of ML data.");
+
+	/* Remove all frozen plans from a plancache. */
+	hash_seq_init(&status, fss_htab);
+	while ((entry = (htab_entry *) hash_seq_search(&status)) != NULL)
+	{
+		if (!hash_search(fss_htab, (void *) &entry->key, HASH_REMOVE, NULL))
+			elog(ERROR, "[AQO] The local ML cache is corrupted.");
+	}
+
+	MemoryContextReset(LearnCacheMemoryContext);
 }
