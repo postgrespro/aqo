@@ -281,13 +281,24 @@ learn_subplan_recurse(PlanState *p, aqo_obj_stat *ctx)
 	if (!p->instrument)
 		return true;
 
-	if (!INSTR_TIME_IS_ZERO(p->instrument->starttime))
+	if (!ctx->isTimedOut)
+		InstrEndLoop(p->instrument);
+	else if (p->instrument->running)
 	{
-		Assert(ctx->isTimedOut);
-		InstrStopNode(p->instrument, 0);
-	}
+		/*
+		 * We can't use node instrumentation functions because after the end
+		 * of this timeout handler query can work for some time.
+		 * We change ntuples and nloops to unify walking logic and because we
+		 * know that the query execution results meaningless.
+		 */
+		p->instrument->ntuples += p->instrument->tuplecount;
+		p->instrument->nloops += 1;
 
-	InstrEndLoop(p->instrument);
+		/*
+		 * TODO: can we simply use ExecParallelCleanup to implement gathering of
+		 * instrument data in the case of parallel workers?
+		 */
+	}
 
 	saved_subplan_list = p->subPlan;
 	saved_initplan_list = p->initPlan;
@@ -330,7 +341,7 @@ should_learn(aqo_obj_stat *ctx, double predicted, double *nrows)
 	{
 		if (ctx->learn && *nrows > predicted * 1.2)
 		{
-			*nrows += (*nrows - predicted) * 3.;
+			*nrows += (*nrows - predicted) * 10.;
 			return true;
 		}
 	}
@@ -502,8 +513,8 @@ learnOnPlanState(PlanState *p, void *context)
 
 				if (should_learn(ctx, predicted, &learn_rows))
 				{
-					if (ctx->isTimedOut)
-						elog(DEBUG1, "[AQO] Learn on partially executed plan node. fs: %lu, fss: %d, predicted rows: %.0lf, updated prediction: %.0lf",
+					if (ctx->isTimedOut && aqo_show_details)
+						elog(NOTICE, "[AQO] Learn on partially executed plan node. fs: %lu, fss: %d, predicted rows: %.0lf, updated prediction: %.0lf",
 							 query_context.query_hash, aqo_node->fss, predicted, learn_rows);
 
 					if (IsA(p, AggState))
@@ -666,7 +677,7 @@ aqo_timeout_handler(void)
 	ctx.learn = query_context.learn_aqo;
 	ctx.isTimedOut = true;
 
-	elog(DEBUG1, "AQO timeout was expired. Try to learn on partial data.");
+	elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. Try to learn on partial data.");
 	learnOnPlanState(timeoutCtl.queryDesc->planstate, (void *) &ctx);
 }
 
