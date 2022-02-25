@@ -350,10 +350,12 @@ load_fss_ext(uint64 fs, int fss,
 			 int ncols, double **matrix, double *targets, int *rows,
 			 List **relids, bool isSafe)
 {
-	if (isSafe && !lc_has_fss(fs, fss))
+	if (isSafe && (!aqo_learn_statement_timeout || !lc_has_fss(fs, fss)))
 		return load_fss(fs, fss, ncols, matrix, targets, rows, relids);
 	else
 	{
+		Assert(aqo_learn_statement_timeout);
+
 		if (matrix == NULL && targets == NULL && rows == NULL)
 			return true;
 
