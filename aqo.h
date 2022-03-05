@@ -144,6 +144,7 @@
 #include "utils/fmgroids.h"
 #include "utils/snapmgr.h"
 
+#include "machine_learning.h"
 
 /* Check PostgreSQL version (9.6.0 contains important changes in planner) */
 #if PG_VERSION_NUM < 90600
@@ -237,12 +238,6 @@ extern double auto_tuning_convergence_error;
 
 /* Machine learning parameters */
 
-/* Max number of matrix rows - max number of possible neighbors. */
-#define	aqo_K	(30)
-
-extern const double object_selection_prediction_threshold;
-extern const double object_selection_threshold;
-extern const double learning_rate;
 extern int	aqo_k;
 extern double log_selectivity_lower_bound;
 
@@ -285,17 +280,13 @@ extern bool find_query(uint64 qhash, Datum *search_values, bool *search_nulls);
 extern bool update_query(uint64 qhash, uint64 fhash,
 						 bool learn_aqo, bool use_aqo, bool auto_tuning);
 extern bool add_query_text(uint64 query_hash, const char *query_string);
-extern bool load_fss_ext(uint64 fs, int fss,
-						 int ncols, double **matrix, double *targets, int *rows,
+extern bool load_fss_ext(uint64 fs, int fss, OkNNrdata *data,
 						 List **relids, bool isSafe);
-extern bool load_fss(uint64 fhash, int fss_hash,
-					 int ncols, double **matrix, double *targets, int *rows,
-					 List **relids);
-extern bool update_fss_ext(uint64 fhash, int fsshash, int nrows, int ncols,
-						   double **matrix, double *targets, List *relids,
-						   bool isTimedOut);
-extern bool update_fss(uint64 fhash, int fss_hash, int nrows, int ncols,
-					   double **matrix, double *targets, List *relids);
+extern bool load_fss(uint64 fhash, int fss_hash, OkNNrdata *data, List **relids);
+extern bool update_fss_ext(uint64 fhash, int fsshash, OkNNrdata *data,
+						   List *relids, bool isTimedOut);
+extern bool update_fss(uint64 fhash, int fss_hash, OkNNrdata *data,
+					   List *relids);
 QueryStat *get_aqo_stat(uint64 query_hash);
 void update_aqo_stat(uint64 query_hash, QueryStat * stat);
 extern bool my_index_insert(Relation indexRelation,	Datum *values, bool *isnull,
@@ -323,14 +314,6 @@ void aqo_ExecutorStart(QueryDesc *queryDesc, int eflags);
 void aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction,
 					 uint64 count, bool execute_once);
 void aqo_ExecutorEnd(QueryDesc *queryDesc);
-
-/* Machine learning techniques */
-extern double OkNNr_predict(int nrows, int ncols,
-							double **matrix, const double *targets,
-							double *features);
-extern int OkNNr_learn(int matrix_rows, int matrix_cols,
-			double **matrix, double *targets,
-			double *features, double target);
 
 /* Automatic query tuning */
 extern void automatical_query_tuning(uint64 query_hash, QueryStat * stat);

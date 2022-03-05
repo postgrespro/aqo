@@ -60,8 +60,7 @@ lc_init(void)
 }
 
 bool
-lc_update_fss(uint64 fs, int fss, int nrows, int ncols,
-			  double **matrix, double *targets, List *relids)
+lc_update_fss(uint64 fs, int fss, OkNNrdata *data, List *relids)
 {
 	htab_key		key = {fs, fss};
 	htab_entry	   *entry;
@@ -81,15 +80,15 @@ lc_update_fss(uint64 fs, int fss, int nrows, int ncols,
 		list_free(entry->relids);
 	}
 
-	entry->nrows = nrows;
-	entry->ncols = ncols;
+	entry->nrows = data->rows;
+	entry->ncols = data->cols;
 	for (i = 0; i < entry->nrows; ++i)
 	{
-		entry->matrix[i] = palloc(sizeof(double) * ncols);
-		memcpy(entry->matrix[i], matrix[i], sizeof(double) * ncols);
+		entry->matrix[i] = palloc(sizeof(double) * data->cols);
+		memcpy(entry->matrix[i], data->matrix[i], sizeof(double) * data->cols);
 	}
-	entry->targets = palloc(sizeof(double) * nrows);
-	memcpy(entry->targets, targets, sizeof(double) * nrows);
+	entry->targets = palloc(sizeof(double) * data->rows);
+	memcpy(entry->targets, data->targets, sizeof(double) * data->rows);
 	entry->relids = list_copy(relids);
 
 	MemoryContextSwitchTo(memctx);
@@ -116,8 +115,7 @@ lc_has_fss(uint64 fs, int fss)
  * XXX That to do with learning tails, living in the cache?
  */
 bool
-lc_load_fss(uint64 fs, int fss, int ncols, double **matrix,
-			double *targets, int *nrows, List **relids)
+lc_load_fss(uint64 fs, int fss, OkNNrdata *data, List **relids)
 {
 	htab_key	key = {fs, fss};
 	htab_entry	*entry;
@@ -134,11 +132,11 @@ lc_load_fss(uint64 fs, int fss, int ncols, double **matrix,
 		elog(NOTICE, "[AQO] Load ML data for fs %lu, fss %d from the cache",
 			 fs, fss);
 
-	*nrows = entry->nrows;
-	Assert(entry->ncols == ncols);
+	data->rows = entry->nrows;
+	Assert(entry->ncols == data->cols);
 	for (i = 0; i < entry->nrows; ++i)
-		memcpy(matrix[i], entry->matrix[i], sizeof(double) * ncols);
-	memcpy(targets, entry->targets, sizeof(double) * entry->nrows);
+		memcpy(data->matrix[i], entry->matrix[i], sizeof(double) * data->cols);
+	memcpy(data->targets, entry->targets, sizeof(double) * entry->nrows);
 	if (relids)
 		*relids = list_copy(entry->relids);
 	return true;

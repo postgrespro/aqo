@@ -26,6 +26,7 @@
 #include "aqo.h"
 #include "hash.h"
 #include "path_utils.h"
+#include "machine_learning.h"
 #include "preprocessing.h"
 #include "learn_cache.h"
 
@@ -55,16 +56,17 @@ static char *PlanStateInfo = "PlanStateInfo";
 
 
 /* Query execution statistics collecting utilities */
-static void atomic_fss_learn_step(uint64 fhash, int fss_hash, int ncols,
-								  double **matrix, double *targets,
-								  double *features, double target,
+static void atomic_fss_learn_step(uint64 fhash, int fss_hash, OkNNrdata *data,
+								  double *features,
+								  double target, double rfactor,
 								  List *relids, bool isTimedOut);
 static bool learnOnPlanState(PlanState *p, void *context);
 static void learn_agg_sample(aqo_obj_stat *ctx, List *relidslist,
-							 double true_cardinality, Plan *plan,
+							 double learned, double rfactor, Plan *plan,
 							 bool notExecuted);
 static void learn_sample(aqo_obj_stat *ctx, List *relidslist,
-						 double true_cardinality, Plan *plan, bool notExecuted);
+						 double learned, double rfactor,
+						 Plan *plan, bool notExecuted);
 static List *restore_selectivities(List *clauselist,
 								   List *relidslist,
 								   JoinType join_type,
@@ -87,39 +89,35 @@ static bool ExtractFromQueryEnv(QueryDesc *queryDesc);
  * matrix and targets are just preallocated memory for computations.
  */
 static void
-atomic_fss_learn_step(uint64 fhash, int fss_hash, int ncols,
-					 double **matrix, double *targets,
-					 double *features, double target,
+atomic_fss_learn_step(uint64 fs, int fss, OkNNrdata *data,
+					 double *features, double target, double rfactor,
 					 List *relids, bool isTimedOut)
 {
-	LOCKTAG	tag;
-	int		nrows;
+	LOCKTAG		tag;
 
-	init_lock_tag(&tag, (uint32) fhash, fss_hash);
+	init_lock_tag(&tag, (uint32) fs, fss);
 	LockAcquire(&tag, ExclusiveLock, false, false);
 
-	if (!load_fss_ext(fhash, fss_hash, ncols, matrix, targets, &nrows, NULL, !isTimedOut))
-		nrows = 0;
+	if (!load_fss_ext(fs, fss, data, NULL, !isTimedOut))
+		data->rows = 0;
 
-	nrows = OkNNr_learn(nrows, ncols, matrix, targets, features, target);
-	update_fss_ext(fhash, fss_hash, nrows, ncols, matrix, targets, relids,
-				   isTimedOut);
+	data->rows = OkNNr_learn(data, features, target, rfactor);
+	update_fss_ext(fs, fss, data, relids, isTimedOut);
 
 	LockRelease(&tag, ExclusiveLock, false);
 }
 
 static void
 learn_agg_sample(aqo_obj_stat *ctx, List *relidslist,
-			 double true_cardinality, Plan *plan, bool notExecuted)
+			 double learned, double rfactor, Plan *plan, bool notExecuted)
 {
-	uint64 fhash = query_context.fspace_hash;
-	int child_fss;
-	int fss;
-	double target;
-	double	*matrix[aqo_K];
-	double	targets[aqo_K];
-	AQOPlanNode *aqo_node = get_aqo_plan_node(plan, false);
-	int i;
+	AQOPlanNode	   *aqo_node = get_aqo_plan_node(plan, false);
+	uint64			fhash = query_context.fspace_hash;
+	int				child_fss;
+	double			target;
+	OkNNrdata		data;
+	int				fss;
+	int				i;
 
 	/*
 	 * Learn 'not executed' nodes only once, if no one another knowledge exists
@@ -128,16 +126,17 @@ learn_agg_sample(aqo_obj_stat *ctx, List *relidslist,
 	if (notExecuted && aqo_node->prediction > 0.)
 		return;
 
-	target = log(true_cardinality);
+	target = log(learned);
 	child_fss = get_fss_for_object(relidslist, ctx->clauselist, NIL, NULL, NULL);
 	fss = get_grouped_exprs_hash(child_fss, aqo_node->grouping_exprs);
 
+	memset(&data, 0, sizeof(OkNNrdata));
 	for (i = 0; i < aqo_K; i++)
-		matrix[i] = NULL;
+		data.matrix[i] = NULL;
+
 	/* Critical section */
-	atomic_fss_learn_step(fhash, fss,
-						  0, matrix, targets, NULL, target,
-						  relidslist, ctx->isTimedOut);
+	atomic_fss_learn_step(fhash, fss, &data, NULL,
+						  target, rfactor, relidslist, ctx->isTimedOut);
 	/* End of critical section */
 }
 
@@ -147,21 +146,20 @@ learn_agg_sample(aqo_obj_stat *ctx, List *relidslist,
  */
 static void
 learn_sample(aqo_obj_stat *ctx, List *relidslist,
-			 double true_cardinality, Plan *plan, bool notExecuted)
+			 double learned, double rfactor, Plan *plan, bool notExecuted)
 {
-	uint64		fhash = query_context.fspace_hash;
-	int		fss_hash;
-	int		nfeatures;
-	double	*matrix[aqo_K];
-	double	targets[aqo_K];
-	double	*features;
-	double	target;
-	int		i;
-	AQOPlanNode *aqo_node = get_aqo_plan_node(plan, false);
+	AQOPlanNode	   *aqo_node = get_aqo_plan_node(plan, false);
+	uint64			fs = query_context.fspace_hash;
+	double		   *features;
+	double			target;
+	OkNNrdata		data;
+	int				fss;
+	int				i;
 
-	target = log(true_cardinality);
-	fss_hash = get_fss_for_object(relidslist, ctx->clauselist,
-								  ctx->selectivities, &nfeatures, &features);
+	memset(&data, 0, sizeof(OkNNrdata));
+	target = log(learned);
+	fss = get_fss_for_object(relidslist, ctx->clauselist,
+								  ctx->selectivities, &data.cols, &features);
 
 	/* Only Agg nodes can have non-empty a grouping expressions list. */
 	Assert(!IsA(plan, Agg) || aqo_node->grouping_exprs != NIL);
@@ -173,19 +171,18 @@ learn_sample(aqo_obj_stat *ctx, List *relidslist,
 	if (notExecuted && aqo_node->prediction > 0)
 		return;
 
-	if (nfeatures > 0)
+	if (data.cols > 0)
 		for (i = 0; i < aqo_K; ++i)
-			matrix[i] = palloc(sizeof(double) * nfeatures);
+			data.matrix[i] = palloc(sizeof(double) * data.cols);
 
 	/* Critical section */
-	atomic_fss_learn_step(fhash, fss_hash,
-						  nfeatures, matrix, targets, features, target,
+	atomic_fss_learn_step(fs, fss, &data, features, target, rfactor,
 						  relidslist, ctx->isTimedOut);
 	/* End of critical section */
 
-	if (nfeatures > 0)
+	if (data.cols > 0)
 		for (i = 0; i < aqo_K; ++i)
-			pfree(matrix[i]);
+			pfree(data.matrix[i]);
 
 	pfree(features);
 }
@@ -334,7 +331,7 @@ learn_subplan_recurse(PlanState *p, aqo_obj_stat *ctx)
 
 static bool
 should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
-			 double predicted, double *nrows)
+			 double predicted, double *nrows, double *rfactor)
 {
 	if (ctx->isTimedOut)
 	{
@@ -347,6 +344,7 @@ should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
 					"predicted rows: %.0lf, updated prediction: %.0lf",
 					 query_context.query_hash, node->fss, predicted, *nrows);
 
+			*rfactor = RELIABILITY_MIN;
 			return true;
 		}
 
@@ -361,11 +359,15 @@ should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
 					 "predicted rows: %.0lf, updated prediction: %.0lf",
 					 query_context.query_hash, node->fss, predicted, *nrows);
 
+			*rfactor = 0.9 * (RELIABILITY_MAX - RELIABILITY_MIN);
 			return true;
 		}
 	}
 	else if (ctx->learn)
+	{
+		*rfactor = RELIABILITY_MAX;
 		return true;
+	}
 
 	return false;
 }
@@ -528,18 +530,20 @@ learnOnPlanState(PlanState *p, void *context)
 
 			if (p->instrument)
 			{
+				double rfactor = 1.;
+
 				Assert(predicted >= 1. && learn_rows >= 1.);
 
-				if (should_learn(p, aqo_node, ctx, predicted, &learn_rows))
+				if (should_learn(p, aqo_node, ctx, predicted, &learn_rows, &rfactor))
 				{
 					if (IsA(p, AggState))
 						learn_agg_sample(&SubplanCtx,
-										 aqo_node->relids, learn_rows,
+										 aqo_node->relids, learn_rows, rfactor,
 										 p->plan, notExecuted);
 
 					else
 						learn_sample(&SubplanCtx,
-									 aqo_node->relids, learn_rows,
+									 aqo_node->relids, learn_rows, rfactor,
 									 p->plan, notExecuted);
 
 					if (!ctx->isTimedOut)
