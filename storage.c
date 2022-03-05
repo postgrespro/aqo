@@ -27,6 +27,7 @@
 #include "learn_cache.h"
 
 
+#define AQO_DATA_COLUMNS	(7)
 HTAB *deactivated_queries = NULL;
 
 static ArrayType *form_matrix(double **matrix, int nrows, int ncols);
@@ -403,8 +404,8 @@ load_fss(uint64 fs, int fss, OkNNrdata *data, List **relids)
 	bool		find_ok = false;
 	IndexScanDesc scan;
 	ScanKeyData	key[2];
-	Datum		values[6];
-	bool		isnull[6];
+	Datum		values[AQO_DATA_COLUMNS];
+	bool		isnull[AQO_DATA_COLUMNS];
 	bool		success = true;
 
 	if (!open_aqo_relation("public", "aqo_data",
@@ -435,6 +436,7 @@ load_fss(uint64 fs, int fss, OkNNrdata *data, List **relids)
 				deform_matrix(values[3], data->matrix);
 
 			deform_vector(values[4], data->targets, &(data->rows));
+			deform_vector(values[6], data->rfactors, &(data->rows));
 
 			if (relids != NULL)
 				*relids = deform_oids_vector(values[5]);
@@ -488,9 +490,9 @@ update_fss(uint64 fhash, int fsshash, OkNNrdata *data, List *relids)
 	TupleDesc	tupDesc;
 	HeapTuple	tuple,
 				nw_tuple;
-	Datum		values[6];
-	bool		isnull[6] = { false, false, false, false, false, false };
-	bool		replace[6] = { false, false, false, true, true, false };
+	Datum		values[AQO_DATA_COLUMNS];
+	bool		isnull[AQO_DATA_COLUMNS];
+	bool		replace[AQO_DATA_COLUMNS] = { false, false, false, true, true, false, true };
 	bool		shouldFree;
 	bool		find_ok = false;
 	bool		update_indexes;
@@ -507,6 +509,7 @@ update_fss(uint64 fhash, int fsshash, OkNNrdata *data, List *relids)
 						   RowExclusiveLock, &hrel, &irel))
 		return false;
 
+	memset(isnull, 0, sizeof(bool) * AQO_DATA_COLUMNS);
 	tupDesc = RelationGetDescr(hrel);
 	InitDirtySnapshot(snap);
 	scan = index_beginscan(hrel, irel, &snap, 2, 0);
@@ -536,6 +539,7 @@ update_fss(uint64 fhash, int fsshash, OkNNrdata *data, List *relids)
 		values[5] = PointerGetDatum(form_oids_vector(relids));
 		if ((void *) values[5] == NULL)
 			isnull[5] = true;
+		values[6] = PointerGetDatum(form_vector(data->rfactors, data->rows));
 		tuple = heap_form_tuple(tupDesc, values, isnull);
 
 		/*
@@ -559,8 +563,8 @@ update_fss(uint64 fhash, int fsshash, OkNNrdata *data, List *relids)
 			isnull[3] = true;
 
 		values[4] = PointerGetDatum(form_vector(data->targets, data->rows));
-		nw_tuple = heap_modify_tuple(tuple, tupDesc,
-									 values, isnull, replace);
+		values[6] = PointerGetDatum(form_vector(data->rfactors, data->rows));
+		nw_tuple = heap_modify_tuple(tuple, tupDesc, values, isnull, replace);
 		if (my_simple_heap_update(hrel, &(nw_tuple->t_self), nw_tuple,
 															&update_indexes))
 		{
