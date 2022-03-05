@@ -1,7 +1,7 @@
 # contrib/aqo/Makefile
 
 EXTENSION = aqo
-EXTVERSION = 1.2
+EXTVERSION = 1.4
 PGFILEDESC = "AQO - Adaptive Query Optimization"
 MODULE_big = aqo
 OBJS = aqo.o auto_tuning.o cardinality_estimation.o cardinality_hooks.o \
@@ -32,7 +32,7 @@ EXTRA_REGRESS_OPTS=--temp-config=$(top_srcdir)/$(subdir)/conf.add
 EXTRA_INSTALL = contrib/postgres_fdw contrib/pg_stat_statements
 
 DATA = aqo--1.0.sql aqo--1.0--1.1.sql aqo--1.1--1.2.sql aqo--1.2.sql \
-		aqo--1.2--1.3.sql
+		aqo--1.2--1.3.sql aqo--1.3--1.4.sql
 
 ifdef USE_PGXS
 PG_CONFIG ?= pg_config
