@@ -33,7 +33,8 @@ typedef struct
 	int			nrows;
 	int			ncols;
 	double	   *matrix[aqo_K];
-	double	   *targets;
+	double		targets[aqo_K];
+	double		rfactors[aqo_K];
 	List	   *relids;
 } htab_entry;
 
@@ -76,7 +77,6 @@ lc_update_fss(uint64 fs, int fss, OkNNrdata *data, List *relids)
 		/* Clear previous version of the cached data. */
 		for (i = 0; i < entry->nrows; ++i)
 			pfree(entry->matrix[i]);
-		pfree(entry->targets);
 		list_free(entry->relids);
 	}
 
@@ -87,8 +87,9 @@ lc_update_fss(uint64 fs, int fss, OkNNrdata *data, List *relids)
 		entry->matrix[i] = palloc(sizeof(double) * data->cols);
 		memcpy(entry->matrix[i], data->matrix[i], sizeof(double) * data->cols);
 	}
-	entry->targets = palloc(sizeof(double) * data->rows);
+
 	memcpy(entry->targets, data->targets, sizeof(double) * data->rows);
+	memcpy(entry->rfactors, data->rfactors, sizeof(double) * data->rows);
 	entry->relids = list_copy(relids);
 
 	MemoryContextSwitchTo(memctx);
@@ -137,6 +138,7 @@ lc_load_fss(uint64 fs, int fss, OkNNrdata *data, List **relids)
 	for (i = 0; i < entry->nrows; ++i)
 		memcpy(data->matrix[i], entry->matrix[i], sizeof(double) * data->cols);
 	memcpy(data->targets, entry->targets, sizeof(double) * entry->nrows);
+	memcpy(data->rfactors, entry->rfactors, sizeof(double) * entry->nrows);
 	if (relids)
 		*relids = list_copy(entry->relids);
 	return true;
@@ -165,7 +167,7 @@ lc_remove_fss(uint64 fs, int fss)
 
 	for (i = 0; i < entry->nrows; ++i)
 		pfree(entry->matrix[i]);
-	pfree(entry->targets);
+
 	hash_search(fss_htab, &key, HASH_REMOVE, NULL);
 }
 
