@@ -73,21 +73,6 @@ int			auto_tuning_infinite_loop = 8;
 
 /* Machine learning parameters */
 
-/*
- * Defines where we do not perform learning procedure
- */
-const double	object_selection_prediction_threshold = 0.3;
-
-/*
- * This parameter tell us that the new learning sample object has very small
- * distance from one whose features stored in matrix already.
- * In this case we will not to add new line in matrix, but will modify this
- * nearest neighbor features and cardinality with linear smoothing by
- * learning_rate coefficient.
- */
-const double	object_selection_threshold = 0.1;
-const double	learning_rate = 1e-1;
-
 /* The number of nearest neighbors which will be chosen for ML-operations */
 int			aqo_k = 3;
 double		log_selectivity_lower_bound = -30;

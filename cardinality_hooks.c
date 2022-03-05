@@ -30,6 +30,7 @@
 #include "aqo.h"
 #include "cardinality_hooks.h"
 #include "hash.h"
+#include "machine_learning.h"
 #include "path_utils.h"
 
 estimate_num_groups_hook_type prev_estimate_num_groups_hook = NULL;
@@ -137,12 +138,12 @@ default_estimate_num_groups(PlannerInfo *root, List *groupExprs,
 void
 aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 {
-	double		predicted;
-	Oid			relid;
-	List	   *relids = NIL;
-	List	   *selectivities = NULL;
-	List	*clauses;
-	int fss = 0;
+	double	predicted;
+	Oid		relid;
+	List   *relids = NIL;
+	List   *selectivities = NULL;
+	List   *clauses;
+	int		fss = 0;
 
 	if (IsQueryDisabled())
 		/* Fast path. */
@@ -412,10 +413,9 @@ static double
 predict_num_groups(PlannerInfo *root, Path *subpath, List *group_exprs,
 				   int *fss)
 {
-	int child_fss = 0;
-	double prediction;
-	int rows;
-	double target;
+	int			child_fss = 0;
+	double		prediction;
+	OkNNrdata	data;
 
 	if (subpath->parent->predicted_cardinality > 0.)
 		/* A fast path. Here we can use a fss hash of a leaf. */
@@ -432,13 +432,13 @@ predict_num_groups(PlannerInfo *root, Path *subpath, List *group_exprs,
 	}
 
 	*fss = get_grouped_exprs_hash(child_fss, group_exprs);
+	memset(&data, 0, sizeof(OkNNrdata));
 
-	if (!load_fss_ext(query_context.fspace_hash, *fss, 0, NULL,
-					  &target, &rows, NULL, true))
+	if (!load_fss_ext(query_context.fspace_hash, *fss, &data, NULL, true))
 		return -1;
 
-	Assert(rows == 1);
-	prediction = exp(target);
+	Assert(data.rows == 1);
+	prediction = exp(data.targets[0]);
 	return (prediction <= 0) ? -1 : prediction;
 }
 
