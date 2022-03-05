@@ -335,13 +335,34 @@ learn_subplan_recurse(PlanState *p, aqo_obj_stat *ctx)
 }
 
 static bool
-should_learn(aqo_obj_stat *ctx, double predicted, double *nrows)
+should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
+			 double predicted, double *nrows)
 {
 	if (ctx->isTimedOut)
 	{
 		if (ctx->learn && *nrows > predicted * 1.2)
 		{
-			*nrows += (*nrows - predicted) * 10.;
+			/* This node s*/
+			if (aqo_show_details)
+				elog(NOTICE,
+					 "[AQO] Learn on a plan node (%lu, %d), "
+					"predicted rows: %.0lf, updated prediction: %.0lf",
+					 query_context.query_hash, node->fss, predicted, *nrows);
+
+			return true;
+		}
+
+		/* Has the executor finished its work? */
+		if (TupIsNull(ps->ps_ResultTupleSlot) &&
+			ps->instrument->nloops > 0.) /* Node was visited by executor at least once. */
+		{
+			/* This is much more reliable data. So we can correct our prediction. */
+			if (ctx->learn && aqo_show_details && fabs(*nrows - predicted) / predicted > 0.2)
+				elog(NOTICE,
+					 "[AQO] Learn on a finished plan node (%lu, %d), "
+					 "predicted rows: %.0lf, updated prediction: %.0lf",
+					 query_context.query_hash, node->fss, predicted, *nrows);
+
 			return true;
 		}
 	}
@@ -511,12 +532,8 @@ learnOnPlanState(PlanState *p, void *context)
 			{
 				Assert(predicted >= 1. && learn_rows >= 1.);
 
-				if (should_learn(ctx, predicted, &learn_rows))
+				if (should_learn(p, aqo_node, ctx, predicted, &learn_rows))
 				{
-					if (ctx->isTimedOut && aqo_show_details)
-						elog(NOTICE, "[AQO] Learn on partially executed plan node. fs: %lu, fss: %d, predicted rows: %.0lf, updated prediction: %.0lf",
-							 query_context.query_hash, aqo_node->fss, predicted, learn_rows);
-
 					if (IsA(p, AggState))
 						learn_agg_sample(&SubplanCtx,
 										 aqo_node->relids, learn_rows,
