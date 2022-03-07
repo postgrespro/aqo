@@ -181,9 +181,21 @@ OkNNr_learn(OkNNrdata *data, double *features, double target, double rfactor)
 	 */
 	if (data->rows > 0 && distances[mid] < object_selection_threshold)
 	{
+		double lr = learning_rate * rfactor / data->rfactors[mid];
+
+		if (lr > 1.)
+		{
+			elog(WARNING, "[AQO] Something goes wrong in the ML core: learning rate = %lf", lr);
+			lr = 1.;
+		}
+
+		Assert(lr > 0.);
+		Assert(data->rfactors[mid] > 0. && data->rfactors[mid] <= 1.);
+
 		for (j = 0; j < data->cols; ++j)
-			data->matrix[mid][j] += learning_rate * (features[j] - data->matrix[mid][j]);
-		data->targets[mid] += learning_rate * (target - data->targets[mid]);
+			data->matrix[mid][j] += lr * (features[j] - data->matrix[mid][j]);
+		data->targets[mid] += lr * (target - data->targets[mid]);
+		data->rfactors[mid] += lr * (rfactor - data->rfactors[mid]);
 
 		return data->rows;
 	}
@@ -229,7 +241,7 @@ OkNNr_learn(OkNNrdata *data, double *features, double target, double rfactor)
 		 * Compute average value for target by nearest neighbors. We need to
 		 * check idx[i] != -1 because we may have smaller value of nearest
 		 * neighbors than aqo_k.
-		 * Semantics of coef1: it is defined distance between new object and
+		 * Semantics of tc_coef: it is defined distance between new object and
 		 * this superposition value (with linear smoothing).
 		 * fc_coef - feature changing rate.
 		 * */
@@ -240,10 +252,21 @@ OkNNr_learn(OkNNrdata *data, double *features, double target, double rfactor)
 		/* Modify targets and features of each nearest neighbor row. */
 		for (i = 0; i < aqo_k && idx[i] != -1; ++i)
 		{
-			fc_coef = tc_coef * (data->targets[idx[i]] - avg_target) * w[i] * w[i] /
-				sqrt(data->cols) / w_sum;
+			double lr = learning_rate * rfactor / data->rfactors[mid];
 
-			data->targets[idx[i]] -= tc_coef * w[i] / w_sum;
+			if (lr > 1.)
+			{
+				elog(WARNING, "[AQO] Something goes wrong in the ML core: learning rate = %lf", lr);
+				lr = 1.;
+			}
+
+			Assert(lr > 0.);
+			Assert(data->rfactors[mid] > 0. && data->rfactors[mid] <= 1.);
+
+			fc_coef = tc_coef * lr * (data->targets[idx[i]] - avg_target) *
+										w[i] * w[i] / sqrt(data->cols) / w_sum;
+
+			data->targets[idx[i]] -= tc_coef * lr * w[i] / w_sum;
 			for (j = 0; j < data->cols; ++j)
 			{
 				feature = data->matrix[idx[i]];
