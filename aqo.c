@@ -20,6 +20,7 @@
 #include "utils/selfuncs.h"
 
 #include "aqo.h"
+#include "aqo_shared.h"
 #include "cardinality_hooks.h"
 #include "path_utils.h"
 #include "preprocessing.h"
@@ -128,7 +129,7 @@ _PG_init(void)
 {
 	/*
 	 * In order to create our shared memory area, we have to be loaded via
-	 * shared_preload_libraries.  If not, report an ERROR.
+	 * shared_preload_libraries. If not, report an ERROR.
 	 */
 	if (!process_shared_preload_libraries_in_progress)
 		ereport(ERROR,
@@ -201,6 +202,8 @@ _PG_init(void)
 							 NULL
 	);
 
+	prev_shmem_startup_hook						= shmem_startup_hook;
+	shmem_startup_hook							= aqo_init_shmem;
 	prev_planner_hook							= planner_hook;
 	planner_hook								= aqo_planner;
 	prev_ExecutorStart_hook						= ExecutorStart_hook;
@@ -245,6 +248,10 @@ _PG_init(void)
 											 ALLOCSET_DEFAULT_SIZES);
 	RegisterResourceReleaseCallback(aqo_free_callback, NULL);
 	RegisterAQOPlanNodeMethods();
+
+	MarkGUCPrefixReserved("aqo");
+	RequestAddinShmemSpace(MAXALIGN(sizeof(AQOSharedState)));
+
 	lc_init();
 }
 
