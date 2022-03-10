@@ -29,7 +29,7 @@ BEGIN
       END LOOP;
     END IF;
 
-    FOR aqo_queries_row IN (SELECT * FROM aqo_queries)
+    FOR aqo_queries_row IN (SELECT * FROM public.aqo_queries)
     LOOP
       IF (delete_row = true AND fspace_hash_var <> 0 AND
           fspace_hash_var = aqo_queries_row.fspace_hash AND
@@ -103,7 +103,7 @@ BEGIN
            aqo_queries.query_hash,
            to_char(array_avg(execution_time_without_aqo), '9.99EEEE')::float,
            to_char(array_mse(execution_time_without_aqo), '9.99EEEE')::float
-    FROM aqo_queries INNER JOIN aqo_query_stat
+    FROM public.aqo_queries INNER JOIN aqo_query_stat
     ON aqo_queries.query_hash = aqo_query_stat.query_hash
     GROUP BY (execution_time_without_aqo, aqo_queries.fspace_hash, aqo_queries.query_hash)
     ORDER BY execution_time DESC LIMIT n;
@@ -129,7 +129,7 @@ BEGIN
            aqo_queries.query_hash,
            to_char(array_avg(cardinality_error_without_aqo), '9.99EEEE')::float,
            to_char(array_mse(cardinality_error_without_aqo), '9.99EEEE')::float
-    FROM aqo_queries INNER JOIN aqo_query_stat
+    FROM public.aqo_queries INNER JOIN aqo_query_stat
     ON aqo_queries.query_hash = aqo_query_stat.query_hash
     GROUP BY (cardinality_error_without_aqo, aqo_queries.fspace_hash, aqo_queries.query_hash)
     ORDER BY error DESC LIMIT n;

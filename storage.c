@@ -59,26 +59,30 @@ open_aqo_relation(char *heaprelnspname, char *heaprelname,
 	RangeVar *rv;
 
 	reloid = RelnameGetRelid(indrelname);
+	if (!OidIsValid(reloid))
+		goto cleanup;
+
 	rv = makeRangeVar(heaprelnspname, heaprelname, -1);
 	*hrel = table_openrv_extended(rv,  lockmode, true);
-	if (!OidIsValid(reloid) || *hrel == NULL)
-	{
-		/*
-		 * Absence of any AQO-related table tell us that someone executed
-		 * a 'DROP EXTENSION aqo' command. We disable AQO for all future queries
-		 * in this backend. For performance reasons we do it locally.
-		 * Clear profiling hash table.
-		 * Also, we gently disable AQO for the rest of the current query
-		 * execution process.
-		 */
-		aqo_enabled = false;
-		disable_aqo_for_query();
-
-		return false;
-	}
+	if (*hrel == NULL)
+		goto cleanup;
 
 	*irel = index_open(reloid,  lockmode);
 	return true;
+
+cleanup:
+	/*
+	 * Absence of any AQO-related table tell us that someone executed
+	 * a 'DROP EXTENSION aqo' command. We disable AQO for all future queries
+	 * in this backend. For performance reasons we do it locally.
+	 * Clear profiling hash table.
+	 * Also, we gently disable AQO for the rest of the current query
+	 * execution process.
+	 */
+	aqo_enabled = false;
+	disable_aqo_for_query();
+	return false;
+
 }
 
 /*

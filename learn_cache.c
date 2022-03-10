@@ -16,48 +16,43 @@
 #include "miscadmin.h"
 
 #include "aqo.h"
+#include "aqo_shared.h"
 #include "learn_cache.h"
 
-typedef struct
-{
-	/* XXX we assume this struct contains no padding bytes */
-	uint64 fs;
-	int64 fss;
-} htab_key;
 
 typedef struct
 {
+	int			magic;
 	htab_key	key;
+	int			rows;
+	int			cols;
+	int			nrelids;
 
-	/* Store ML data "AS IS". */
-	int			nrows;
-	int			ncols;
-	double	   *matrix[aqo_K];
-	double		targets[aqo_K];
-	double		rfactors[aqo_K];
-	List	   *relids;
-} htab_entry;
+	/*
+	 * Links to variable data:
+	 * double	   *matrix[aqo_K];
+	 * double	   *targets;
+	 * double	   *rfactors;
+	 * int		   *relids;
+	 */
+} dsm_block_hdr;
 
-static HTAB *fss_htab = NULL;
-MemoryContext LearnCacheMemoryContext = NULL;
 
 bool aqo_learn_statement_timeout = false;
 
-void
-lc_init(void)
+static uint32 init_with_dsm(OkNNrdata *data, dsm_block_hdr *hdr, List **relids);
+
+
+/* Calculate, how many data we need to store an ML record. */
+static uint32
+calculate_size(int cols, int nrelids)
 {
-	HASHCTL ctl;
+	uint32 size = sizeof(dsm_block_hdr); /* header's size */
 
-	Assert(!LearnCacheMemoryContext);
-	LearnCacheMemoryContext = AllocSetContextCreate(TopMemoryContext,
-													"lcache context",
-													ALLOCSET_DEFAULT_SIZES);
-
-	ctl.keysize = sizeof(htab_key);
-	ctl.entrysize = sizeof(htab_entry);
-	ctl.hcxt = LearnCacheMemoryContext;
-
-	fss_htab = hash_create("ML AQO cache", 256, &ctl, HASH_ELEM | HASH_BLOBS);
+	size += sizeof(double) * cols * aqo_K; /* matrix */
+	size += 2 * sizeof(double) * aqo_K; /* targets, rfactors */
+	size += sizeof(int) * nrelids; /* relids */
+	return size;
 }
 
 bool
@@ -65,34 +60,81 @@ lc_update_fss(uint64 fs, int fss, OkNNrdata *data, List *relids)
 {
 	htab_key		key = {fs, fss};
 	htab_entry	   *entry;
+	dsm_block_hdr  *hdr;
+	char		   *ptr;
 	bool			found;
 	int				i;
-	MemoryContext	memctx = MemoryContextSwitchTo(LearnCacheMemoryContext);
+	ListCell	   *lc;
+	uint32			size;
 
 	Assert(fss_htab && aqo_learn_statement_timeout);
+
+	size = calculate_size(data->cols, list_length(relids));
+	LWLockAcquire(&aqo_state->lock, LW_EXCLUSIVE);
 
 	entry = (htab_entry *) hash_search(fss_htab, &key, HASH_ENTER, &found);
 	if (found)
 	{
-		/* Clear previous version of the cached data. */
-		for (i = 0; i < entry->nrows; ++i)
-			pfree(entry->matrix[i]);
-		list_free(entry->relids);
-	}
+		hdr = (dsm_block_hdr *) (get_cache_address() + entry->hdr_off);
 
-	entry->nrows = data->rows;
-	entry->ncols = data->cols;
-	for (i = 0; i < entry->nrows; ++i)
+		Assert(hdr->magic == AQO_SHARED_MAGIC);
+		Assert(hdr->key.fs == fs && hdr->key.fss == fss);
+
+		if (data->cols != hdr->cols || list_length(relids) != hdr->nrelids)
+		{
+			/*
+			 * Collision found: the same {fs,fss}, but something different.
+			 * For simplicity - just don't update.
+			 */
+			LWLockRelease(&aqo_state->lock);
+			return false;
+		}
+	}
+	else
 	{
-		entry->matrix[i] = palloc(sizeof(double) * data->cols);
-		memcpy(entry->matrix[i], data->matrix[i], sizeof(double) * data->cols);
+		/* Get new block of DSM */
+		entry->hdr_off = get_dsm_cache_pos(size);
+		hdr = (dsm_block_hdr *) (get_cache_address() + entry->hdr_off);
+
+		/* These fields shouldn't change */
+		hdr->magic = AQO_SHARED_MAGIC;
+		hdr->key.fs = fs;
+		hdr->key.fss = fss;
+		hdr->cols = data->cols;
+		hdr->nrelids = list_length(relids);
 	}
 
-	memcpy(entry->targets, data->targets, sizeof(double) * data->rows);
-	memcpy(entry->rfactors, data->rfactors, sizeof(double) * data->rows);
-	entry->relids = list_copy(relids);
+	hdr->rows = data->rows;
+	ptr = (char *) hdr + sizeof(dsm_block_hdr); /* start point of variable data */
 
-	MemoryContextSwitchTo(memctx);
+	/* copy the matrix into DSM storage */
+	for (i = 0; i < aqo_K; ++i)
+	{
+		if (i < hdr->rows)
+			memcpy(ptr, data->matrix[i], sizeof(double) * hdr->cols);
+		ptr += sizeof(double) * data->cols;
+	}
+
+	/* copy targets into DSM storage */
+	memcpy(ptr, data->targets, sizeof(double) * hdr->rows);
+	ptr += sizeof(double) * aqo_K;
+
+	/* copy rfactors into DSM storage */
+	memcpy(ptr, data->rfactors, sizeof(double) * hdr->rows);
+	ptr += sizeof(double) * aqo_K;
+
+	/* store relids */
+	i = 0;
+	foreach(lc, relids)
+	{
+		memcpy(ptr, &lfirst_int(lc), sizeof(int));
+		ptr += sizeof(int);
+	}
+
+	/* Check the invariant */
+	Assert((uint32)(ptr - (char *) hdr) == size);
+
+	LWLockRelease(&aqo_state->lock);
 	return true;
 }
 
@@ -107,68 +149,129 @@ lc_has_fss(uint64 fs, int fss)
 
 	Assert(fss_htab);
 
+	LWLockAcquire(&aqo_state->lock, LW_SHARED);
 	(void) hash_search(fss_htab, &key, HASH_FIND, &found);
+	LWLockRelease(&aqo_state->lock);
+
 	return found;
 }
 
 /*
  * Load ML data from a memory cache, not from a table.
- * XXX That to do with learning tails, living in the cache?
  */
 bool
 lc_load_fss(uint64 fs, int fss, OkNNrdata *data, List **relids)
 {
-	htab_key	key = {fs, fss};
-	htab_entry	*entry;
-	bool		found;
-	int			i;
+	htab_key		key = {fs, fss};
+	htab_entry	   *entry;
+	bool			found;
+	dsm_block_hdr  *hdr;
 
 	Assert(fss_htab && aqo_learn_statement_timeout);
-
-	entry = (htab_entry *) hash_search(fss_htab, &key, HASH_FIND, &found);
-	if (!found)
-		return false;
 
 	if (aqo_show_details)
 		elog(NOTICE, "[AQO] Load ML data for fs %lu, fss %d from the cache",
 			 fs, fss);
 
-	data->rows = entry->nrows;
-	Assert(entry->ncols == data->cols);
-	for (i = 0; i < entry->nrows; ++i)
-		memcpy(data->matrix[i], entry->matrix[i], sizeof(double) * data->cols);
-	memcpy(data->targets, entry->targets, sizeof(double) * entry->nrows);
-	memcpy(data->rfactors, entry->rfactors, sizeof(double) * entry->nrows);
-	if (relids)
-		*relids = list_copy(entry->relids);
+	LWLockAcquire(&aqo_state->lock, LW_SHARED);
+	entry = (htab_entry *) hash_search(fss_htab, &key, HASH_FIND, &found);
+	if (!found)
+	{
+		LWLockRelease(&aqo_state->lock);
+		return false;
+	}
+
+	hdr = (dsm_block_hdr *) (get_cache_address() + entry->hdr_off);
+	Assert(hdr->magic == AQO_SHARED_MAGIC);
+	Assert(hdr->key.fs == fs && hdr->key.fss == fss);
+
+	/* XXX */
+	if (hdr->cols != data->cols)
+	{
+		LWLockRelease(&aqo_state->lock);
+		return false;
+	}
+
+	init_with_dsm(data, hdr, relids);
+	LWLockRelease(&aqo_state->lock);
 	return true;
 }
 
-/*
- * Remove record from fss cache. Should be done at learning stage of successfully
- * finished query execution.
-*/
-void
-lc_remove_fss(uint64 fs, int fss)
+static uint32
+init_with_dsm(OkNNrdata *data, dsm_block_hdr *hdr, List **relids)
 {
-	htab_key	key = {fs, fss};
-	htab_entry *entry;
-	bool		found;
-	int			i;
+	int		i;
+	char   *ptr = (char *) hdr + sizeof(dsm_block_hdr);
 
-	if (!aqo_learn_statement_timeout)
+	Assert(LWLockHeldByMeInMode(&aqo_state->lock, LW_EXCLUSIVE) ||
+		   LWLockHeldByMeInMode(&aqo_state->lock, LW_SHARED));
+	Assert(hdr->magic == AQO_SHARED_MAGIC);
+
+	data->rows = hdr->rows;
+	data->cols = hdr->cols;
+
+	if (data->cols > 0)
+	{
+		for (i = 0; i < aqo_K; ++i)
+		{
+			if (i < data->rows)
+			{
+				data->matrix[i] = palloc(sizeof(double) * data->cols);
+				memcpy(data->matrix[i], ptr, sizeof(double) * data->cols);
+			}
+			ptr += sizeof(double) * data->cols;
+		}
+	}
+	memcpy(data->targets, ptr, sizeof(double) * hdr->rows);
+	ptr += sizeof(double) * aqo_K;
+	memcpy(data->rfactors, ptr, sizeof(double) * hdr->rows);
+	ptr += sizeof(double) * aqo_K;
+
+	if (relids)
+	{
+		*relids = NIL;
+		for (i = 0; i < hdr->nrelids; i++)
+		{
+			*relids = lappend_int(*relids, *((int *)ptr));
+			ptr += sizeof(int);
+		}
+	}
+
+	return calculate_size(hdr->cols, hdr->nrelids);
+}
+
+void
+lc_flush_data(void)
+{
+	char   *ptr;
+	uint32	size;
+
+	if (aqo_state->dsm_handler == DSM_HANDLE_INVALID)
+		/* Fast path. No any cached data exists. */
 		return;
 
-	Assert(fss_htab);
+	LWLockAcquire(&aqo_state->lock, LW_EXCLUSIVE);
+	ptr = get_dsm_all(&size);
 
-	entry = (htab_entry *) hash_search(fss_htab, &key, HASH_FIND, &found);
-	if (!found)
-		return;
+	/* Iterate through records and store them into the aqo_data table */
+	while(size > 0)
+	{
+		dsm_block_hdr  *hdr = (dsm_block_hdr *) ptr;
+		OkNNrdata		data;
+		List		   *relids;
+		uint32			delta = 0;
 
-	for (i = 0; i < entry->nrows; ++i)
-		pfree(entry->matrix[i]);
+		delta = init_with_dsm(&data, hdr, &relids);
+		ptr += delta;
+		size -= delta;
+		update_fss(hdr->key.fs, hdr->key.fss, &data, relids);
 
-	hash_search(fss_htab, &key, HASH_REMOVE, NULL);
+		if (!hash_search(fss_htab, (void *) &hdr->key, HASH_REMOVE, NULL))
+			elog(ERROR, "[AQO] Flush: local ML cache is corrupted.");
+	}
+
+	reset_dsm_cache();
+	LWLockRelease(&aqo_state->lock);
 }
 
 /*
@@ -189,12 +292,12 @@ lc_assign_hook(bool newval, void *extra)
 	elog(DEBUG5, "[AQO] Cleanup local cache of ML data.");
 
 	/* Remove all frozen plans from a plancache. */
+	LWLockAcquire(&aqo_state->lock, LW_EXCLUSIVE);
 	hash_seq_init(&status, fss_htab);
 	while ((entry = (htab_entry *) hash_seq_search(&status)) != NULL)
 	{
 		if (!hash_search(fss_htab, (void *) &entry->key, HASH_REMOVE, NULL))
 			elog(ERROR, "[AQO] The local ML cache is corrupted.");
 	}
-
-	MemoryContextReset(LearnCacheMemoryContext);
+	LWLockRelease(&aqo_state->lock);
 }
