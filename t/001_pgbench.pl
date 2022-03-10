@@ -139,6 +139,11 @@ $res = $node->safe_psql('postgres',
 						WHERE v.error > 0. AND t.query_text LIKE '%pgbench_accounts%'");
 is($res, 3);
 $res = $node->safe_psql('postgres',
+						"SELECT * FROM top_error_queries(10) v
+						JOIN aqo_query_texts t ON (t.query_hash = v.fspace_hash)
+						WHERE v.error > 0. AND t.query_text LIKE '%pgbench_accounts%'");
+note("\n TopN: \n $res \n");
+$res = $node->safe_psql('postgres',
 						"SELECT v.error, t.query_text FROM top_error_queries(10) v
 						JOIN aqo_query_texts t ON (t.query_hash = v.fspace_hash)
 						WHERE v.error > 0.");

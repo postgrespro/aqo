@@ -547,9 +547,6 @@ learnOnPlanState(PlanState *p, void *context)
 						learn_sample(&SubplanCtx,
 									 aqo_node->relids, learn_rows, rfactor,
 									 p->plan, notExecuted);
-
-					if (!ctx->isTimedOut)
-						lc_remove_fss(query_context.query_hash, aqo_node->fss);
 				}
 			}
 		}
@@ -813,6 +810,11 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		(!query_context.learn_aqo && query_context.collect_stat))
 	{
 		aqo_obj_stat ctx = {NIL, NIL, NIL, query_context.learn_aqo, false};
+
+		/*
+		 * Before learn phase, flush all cached data down to ML base.
+		 */
+		lc_flush_data();
 
 		/*
 		 * Analyze plan if AQO need to learn or need to collect statistics only.

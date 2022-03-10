@@ -74,6 +74,7 @@ open_aqo_relation(char *heaprelnspname, char *heaprelname,
 		relation_close(*hrel, lockmode);
 		goto cleanup;
 	}
+
 	return true;
 
 cleanup:

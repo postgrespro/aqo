@@ -250,9 +250,7 @@ _PG_init(void)
 	RegisterAQOPlanNodeMethods();
 
 	MarkGUCPrefixReserved("aqo");
-	RequestAddinShmemSpace(MAXALIGN(sizeof(AQOSharedState)));
-
-	lc_init();
+	RequestAddinShmemSpace(aqo_memsize());
 }
 
 PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
