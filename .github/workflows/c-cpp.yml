@@ -1,10 +1,10 @@
-name: C/C++ CI for the master
+name: C/C++ CI for the stable15
 
 on:
   push:
-    branches: [ master ]
+    branches: [ stable15 ]
   pull_request:
-    branches: [ master ]
+    branches: [ stable15 ]
 
 jobs:
   build:
@@ -22,6 +22,6 @@ jobs:
         git checkout master
         ./configure --prefix=`pwd`/tmp_install
         git subtree add --prefix=contrib/aqo https://github.com/postgrespro/aqo.git $GITHUB_REF
-        patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_master.patch
+        patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg15.patch
         make -j4 > /dev/null && make -j4 -C contrib > /dev/null
         make -C contrib/aqo check
