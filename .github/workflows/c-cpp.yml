@@ -2,9 +2,9 @@ name: C/C++ CI for the master
 
 on:
   push:
-    branches: [ stable14, master ]
+    branches: [ master ]
   pull_request:
-    branches: [ stable14, master ]
+    branches: [ master ]
 
 jobs:
   build:
