@@ -13,7 +13,9 @@ To avoid compatibility issues, the following branches in the git-repository are 
 * `stable9_6`.
 * `stable11` - for PG v10 and v11.
 * `stable12` - for PG v12.
-* the `master` branch of the AQO repository correctly works with PGv13 and the PostgreSQL `master` branch.
+* `stable13` - for PG v13.
+* `stable14` - for PG v14.
+* the `master` branch of the AQO repository correctly works with PGv15 and the PostgreSQL `master` branch.
 
 The module contains a patch and an extension. Patch has to be applied to the
 sources of PostgresSQL. Patch affects header files, that is why PostgreSQL
