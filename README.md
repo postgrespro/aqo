@@ -15,6 +15,7 @@ To avoid compatibility issues, the following branches in the git-repository are 
 * `stable12` - for PG v12.
 * `stable13` - for PG v13.
 * `stable14` - for PG v14.
+* `stable15` - for PG v15.
 * the `master` branch of the AQO repository correctly works with PGv15 and the PostgreSQL `master` branch.
 
 The module contains a patch and an extension. Patch has to be applied to the
