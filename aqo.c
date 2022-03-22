@@ -10,6 +10,8 @@
 
 #include "postgres.h"
 
+#include "aqo.h"
+
 #include "access/relation.h"
 #include "access/table.h"
 #include "catalog/pg_extension.h"
