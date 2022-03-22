@@ -19,11 +19,15 @@
  *
  */
 
+#include "postgres.h"
+
+#include "math.h"
+
 #include "aqo.h"
+#include "hash.h"
 
 static int	get_str_hash(const char *str);
 static int	get_node_hash(Node *node);
-static int	get_int_array_hash(int *arr, int len);
 static int	get_unsorted_unsafe_int_array_hash(int *arr, int len);
 static int	get_unordered_int_list_hash(List *lst);
 
@@ -51,23 +55,97 @@ static List **get_clause_args_ptr(Expr *clause);
 static bool clause_is_eq_clause(Expr *clause);
 
 /*
- * Computes hash for given query.
+ * Computes hash for given query.Query Identifier: =
  * Hash is supposed to be constant-insensitive.
  * XXX: Hashing depend on Oids of database objects. It is restrict usability of
  * the AQO knowledge base by current database at current Postgres instance.
  */
-int
+uint64
 get_query_hash(Query *parse, const char *query_text)
 {
 	char	   *str_repr;
-	int			hash;
+	uint64			hash;
 
+	/* XXX: remove_locations and remove_consts are heavy routines. */
 	str_repr = remove_locations(remove_consts(nodeToString(parse)));
-	hash = DatumGetInt32(hash_any((const unsigned char *) str_repr,
-								  strlen(str_repr) * sizeof(*str_repr)));
+	hash = DatumGetUInt64(hash_any_extended((void *) str_repr, strlen(str_repr),0));
 	pfree(str_repr);
 
 	return hash;
+}
+
+/*********************************************************************************
+ *
+ * Because List natively works with OID, integer and a postgres node types,
+ * implement separate set of functions which manages list of uint64 values
+ * (need for the query hash type).
+ *
+ ********************************************************************************/
+
+bool
+list_member_uint64(const List *list, uint64 datum)
+{
+	const ListCell *cell;
+
+	foreach(cell, list)
+	{
+		if (*((uint64 *)lfirst(cell)) == datum)
+			return true;
+	}
+
+	return false;
+}
+
+List *
+lappend_uint64(List *list, uint64 datum)
+{
+	uint64 *val = palloc(sizeof(uint64));
+
+	*val = datum;
+	list = lappend(list, (void *) val);
+	return list;
+}
+
+List *
+ldelete_uint64(List *list, uint64 datum)
+{
+	ListCell *cell;
+
+	foreach(cell, list)
+	{
+		if (*((uint64 *)lfirst(cell)) == datum)
+		{
+			list = list_delete_ptr(list, lfirst(cell));
+			return list;
+		}
+	}
+	return list;
+}
+
+/********************************************************************************/
+
+int
+get_grouped_exprs_hash(int child_fss, List *group_exprs)
+{
+	ListCell	*lc;
+	int			*hashes = palloc(list_length(group_exprs) * sizeof(int));
+	int			i = 0;
+	int			final_hashes[2];
+
+	/* Calculate hash of each grouping expression. */
+	foreach(lc, group_exprs)
+	{
+		Node *clause = (Node *) lfirst(lc);
+
+		hashes[i++] = get_node_hash(clause);
+	}
+
+	/* Sort to get rid of expressions permutation. */
+	qsort(hashes, i, sizeof(int), int_cmp);
+
+	final_hashes[0] = child_fss;
+	final_hashes[1] = get_int_array_hash(hashes, i);
+	return get_int_array_hash(final_hashes, 2);
 }
 
 /*
@@ -76,10 +154,12 @@ get_query_hash(Query *parse, const char *query_text)
  *		sets nfeatures
  *		creates and computes fss_hash
  *		transforms selectivities to features
+ *
+ * Special case for nfeatures == NULL: don't calculate features.
  */
 int
-get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
-				   int *nfeatures, double **features)
+get_fss_for_object(List *relidslist, List *clauselist,
+				   List *selectivities, int *nfeatures, double **features)
 {
 	int			n;
 	int		   *clause_hashes;
@@ -94,7 +174,7 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 	int			eclasses_hash;
 	int			relidslist_hash;
 	List	  **args;
-	ListCell   *l;
+	ListCell   *lc;
 	int			i,
 				j,
 				k,
@@ -105,20 +185,27 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 
 	n = list_length(clauselist);
 
+	/* Check parameters state invariant. */
+	Assert(n == list_length(selectivities) ||
+		   (nfeatures == NULL && features == NULL));
+
 	get_eclasses(clauselist, &nargs, &args_hash, &eclass_hash);
 
 	clause_hashes = palloc(sizeof(*clause_hashes) * n);
 	clause_has_consts = palloc(sizeof(*clause_has_consts) * n);
 	sorted_clauses = palloc(sizeof(*sorted_clauses) * n);
-	*features = palloc0(sizeof(**features) * n);
+
+	if (nfeatures != NULL)
+		*features = palloc0(sizeof(**features) * n);
 
 	i = 0;
-	foreach(l, clauselist)
+	foreach(lc, clauselist)
 	{
-		clause_hashes[i] = get_clause_hash(
-										((RestrictInfo *) lfirst(l))->clause,
+		RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+
+		clause_hashes[i] = get_clause_hash(rinfo->clause,
 										   nargs, args_hash, eclass_hash);
-		args = get_clause_args_ptr(((RestrictInfo *) lfirst(l))->clause);
+		args = get_clause_args_ptr(rinfo->clause);
 		clause_has_consts[i] = (args != NULL && has_consts(*args));
 		i++;
 	}
@@ -127,12 +214,23 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 	inverse_idx = inverse_permutation(idx, n);
 
 	i = 0;
-	foreach(l, selectivities)
+	foreach(lc, clauselist)
 	{
-		(*features)[inverse_idx[i]] = log(*((double *) (lfirst(l))));
-		if ((*features)[inverse_idx[i]] < log_selectivity_lower_bound)
-			(*features)[inverse_idx[i]] = log_selectivity_lower_bound;
 		sorted_clauses[inverse_idx[i]] = clause_hashes[i];
+		i++;
+	}
+
+	i = 0;
+	foreach(lc, selectivities)
+	{
+		Selectivity *s = (Selectivity *) lfirst(lc);
+
+		if (nfeatures != NULL)
+		{
+			(*features)[inverse_idx[i]] = log(*s);
+			if ((*features)[inverse_idx[i]] < log_selectivity_lower_bound)
+				(*features)[inverse_idx[i]] = log_selectivity_lower_bound;
+		}
 		i++;
 	}
 
@@ -146,25 +244,25 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 		for (j = i; j < n && sorted_clauses[j] == sorted_clauses[i]; ++j)
 			if (clause_has_consts[idx[j]] || k + 1 == m - i)
 			{
-				(*features)[j - sh] = (*features)[j];
+				if (nfeatures != NULL)
+					(*features)[j - sh] = (*features)[j];
 				sorted_clauses[j - sh] = sorted_clauses[j];
 			}
 			else
 				sh++;
-		qsort(&((*features)[i - old_sh]), j - sh - (i - old_sh),
-			  sizeof(**features), double_cmp);
+
+		if (nfeatures != NULL)
+			qsort(&((*features)[i - old_sh]), j - sh - (i - old_sh),
+				  sizeof(**features), double_cmp);
 		i = j;
 	}
-
-	*nfeatures = n - sh;
-	(*features) = repalloc(*features, (*nfeatures) * sizeof(**features));
 
 	/*
 	 * Generate feature subspace hash.
 	 * XXX: Remember! that relidslist_hash isn't portable between postgres
 	 * instances.
 	 */
-	clauses_hash = get_int_array_hash(sorted_clauses, *nfeatures);
+	clauses_hash = get_int_array_hash(sorted_clauses, n - sh);
 	eclasses_hash = get_int_array_hash(eclass_hash, nargs);
 	relidslist_hash = get_relidslist_hash(relidslist);
 	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relidslist_hash);
@@ -176,6 +274,12 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 	pfree(clause_has_consts);
 	pfree(args_hash);
 	pfree(eclass_hash);
+
+	if (nfeatures != NULL)
+	{
+		*nfeatures = n - sh;
+		(*features) = repalloc(*features, (*nfeatures) * sizeof(**features));
+	}
 	return fss_hash;
 }
 
@@ -225,7 +329,7 @@ get_str_hash(const char *str)
 /*
  * Computes hash for given node.
  */
-int
+static int
 get_node_hash(Node *node)
 {
 	char	   *str;
@@ -290,7 +394,7 @@ get_unordered_int_list_hash(List *lst)
  * "<start_pattern>[^<end_pattern>]*" are replaced with substring
  * "<start_pattern>".
  */
-char *
+static char *
 replace_patterns(const char *str, const char *start_pattern,
 				 bool (*end_pattern) (char ch))
 {
@@ -345,7 +449,7 @@ get_relidslist_hash(List *relidslist)
  * Returns the C-string in which the substrings of kind "{CONST.*}" are
  * replaced with substring "{CONST}".
  */
-char *
+static char *
 remove_consts(const char *str)
 {
 	char *res;
@@ -359,7 +463,7 @@ remove_consts(const char *str)
  * Returns the C-string in which the substrings of kind " :location.*}" are
  * replaced with substring " :location}".
  */
-char *
+static char *
 remove_locations(const char *str)
 {
 	return replace_patterns(str, " :location", is_brace);

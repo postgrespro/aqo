@@ -12,8 +12,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Install additional packages
-      run: sudo apt-get install -y libperl-dev libipc-run-perl
     - name: pg
       run: |
         echo "Deploying to production server on branch $GITHUB_REF"

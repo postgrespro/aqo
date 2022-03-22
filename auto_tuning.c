@@ -15,6 +15,8 @@
  *
  */
 
+#include "postgres.h"
+
 #include "aqo.h"
 
 /*
@@ -142,7 +144,7 @@ is_in_infinite_loop_cq(double *elems, int nelems)
  * this query to false.
  */
 void
-automatical_query_tuning(int query_hash, QueryStat * stat)
+automatical_query_tuning(uint64 query_hash, QueryStat * stat)
 {
 	double		unstability = auto_tuning_exploration;
 	double		t_aqo,
