@@ -19,6 +19,8 @@
  *
  */
 
+#include "postgres.h"
+
 #include "aqo.h"
 
 static double fs_distance(double *a, double *b, int len);

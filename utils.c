@@ -12,6 +12,8 @@
  *
  */
 
+#include "postgres.h"
+
 #include "aqo.h"
 
 /* TODO: get rid of those static vars */

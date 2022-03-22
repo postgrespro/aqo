@@ -28,12 +28,12 @@ DROP FUNCTION aqo_migrate_to_1_2_get_pk(regclass);
 --
 
 -- Show query state at the AQO knowledge base
-CREATE OR REPLACE FUNCTION public.aqo_status(hash int)
+CREATE OR REPLACE FUNCTION public.aqo_status(hash bigint)
 RETURNS TABLE (
 	"learn"			BOOL,
 	"use aqo"		BOOL,
 	"auto tune"		BOOL,
-	"fspace hash"	INT,
+	"fspace hash"	bigINT,
 	"t_naqo"		TEXT,
 	"err_naqo"		TEXT,
 	"iters"			BIGINT,
@@ -63,7 +63,7 @@ WHERE (aqs.query_hash = aq.query_hash) AND
 	aqs.query_hash = $1;
 $func$ LANGUAGE SQL;
 
-CREATE OR REPLACE FUNCTION public.aqo_enable_query(hash int)
+CREATE OR REPLACE FUNCTION public.aqo_enable_query(hash bigint)
 RETURNS VOID
 AS $func$
 UPDATE public.aqo_queries SET
@@ -72,7 +72,7 @@ UPDATE public.aqo_queries SET
 	WHERE query_hash = $1;
 $func$ LANGUAGE SQL;
 
-CREATE OR REPLACE FUNCTION public.aqo_disable_query(hash int)
+CREATE OR REPLACE FUNCTION public.aqo_disable_query(hash bigint)
 RETURNS VOID
 AS $func$
 UPDATE public.aqo_queries SET
@@ -82,7 +82,7 @@ UPDATE public.aqo_queries SET
 	WHERE query_hash = $1;
 $func$ LANGUAGE SQL;
 
-CREATE OR REPLACE FUNCTION public.aqo_clear_hist(hash int)
+CREATE OR REPLACE FUNCTION public.aqo_clear_hist(hash bigint)
 RETURNS VOID
 AS $func$
 DELETE FROM public.aqo_data WHERE fspace_hash=$1;
@@ -96,7 +96,7 @@ SELECT query_hash FROM public.aqo_query_stat aqs
 	WHERE -1 = ANY (cardinality_error_with_aqo::double precision[]);
 $func$ LANGUAGE SQL;
 
-CREATE OR REPLACE FUNCTION public.aqo_drop(hash int)
+CREATE OR REPLACE FUNCTION public.aqo_drop(hash bigint)
 RETURNS VOID
 AS $func$
 DELETE FROM public.aqo_queries aq WHERE (aq.query_hash = $1);

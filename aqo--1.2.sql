@@ -2,20 +2,20 @@
 \echo Use "CREATE EXTENSION aqo" to load this file. \quit
 
 CREATE TABLE public.aqo_queries (
-	query_hash		int CONSTRAINT aqo_queries_query_hash_idx PRIMARY KEY,
+	query_hash		bigint CONSTRAINT aqo_queries_query_hash_idx PRIMARY KEY,
 	learn_aqo		boolean NOT NULL,
 	use_aqo			boolean NOT NULL,
-	fspace_hash		int NOT NULL,
+	fspace_hash		bigint NOT NULL,
 	auto_tuning		boolean NOT NULL
 );
 
 CREATE TABLE public.aqo_query_texts (
-	query_hash		int CONSTRAINT aqo_query_texts_query_hash_idx PRIMARY KEY REFERENCES public.aqo_queries ON DELETE CASCADE,
+	query_hash		bigint CONSTRAINT aqo_query_texts_query_hash_idx PRIMARY KEY REFERENCES public.aqo_queries ON DELETE CASCADE,
 	query_text		text NOT NULL
 );
 
 CREATE TABLE public.aqo_query_stat (
-	query_hash		int CONSTRAINT aqo_query_stat_idx PRIMARY KEY REFERENCES public.aqo_queries ON DELETE CASCADE,
+	query_hash		bigint CONSTRAINT aqo_query_stat_idx PRIMARY KEY REFERENCES public.aqo_queries ON DELETE CASCADE,
 	execution_time_with_aqo					double precision[],
 	execution_time_without_aqo				double precision[],
 	planning_time_with_aqo					double precision[],
@@ -27,7 +27,7 @@ CREATE TABLE public.aqo_query_stat (
 );
 
 CREATE TABLE public.aqo_data (
-	fspace_hash		int NOT NULL REFERENCES public.aqo_queries ON DELETE CASCADE,
+	fspace_hash		bigint NOT NULL REFERENCES public.aqo_queries ON DELETE CASCADE,
 	fsspace_hash	int NOT NULL,
 	nfeatures		int NOT NULL,
 	features		double precision[][],
@@ -52,12 +52,12 @@ CREATE TRIGGER aqo_queries_invalidate AFTER UPDATE OR DELETE OR TRUNCATE
 --
 
 -- Show query state at the AQO knowledge base
-CREATE FUNCTION public.aqo_status(hash int)
+CREATE FUNCTION public.aqo_status(hash bigint)
 RETURNS TABLE (
 	"learn"			BOOL,
 	"use aqo"		BOOL,
 	"auto tune"		BOOL,
-	"fspace hash"	INT,
+	"fspace hash"	bigINT,
 	"t_naqo"		TEXT,
 	"err_naqo"		TEXT,
 	"iters"			BIGINT,
@@ -87,7 +87,7 @@ WHERE (aqs.query_hash = aq.query_hash) AND
 	aqs.query_hash = $1;
 $func$ LANGUAGE SQL;
 
-CREATE FUNCTION public.aqo_enable_query(hash int)
+CREATE FUNCTION public.aqo_enable_query(hash bigint)
 RETURNS VOID
 AS $func$
 UPDATE public.aqo_queries SET
@@ -96,7 +96,7 @@ UPDATE public.aqo_queries SET
 	WHERE query_hash = $1;
 $func$ LANGUAGE SQL;
 
-CREATE FUNCTION public.aqo_disable_query(hash int)
+CREATE FUNCTION public.aqo_disable_query(hash bigint)
 RETURNS VOID
 AS $func$
 UPDATE public.aqo_queries SET
@@ -106,7 +106,7 @@ UPDATE public.aqo_queries SET
 	WHERE query_hash = $1;
 $func$ LANGUAGE SQL;
 
-CREATE FUNCTION public.aqo_clear_hist(hash int)
+CREATE FUNCTION public.aqo_clear_hist(hash bigint)
 RETURNS VOID
 AS $func$
 DELETE FROM public.aqo_data WHERE fspace_hash=$1;
@@ -120,7 +120,7 @@ SELECT query_hash FROM public.aqo_query_stat aqs
 	WHERE -1 = ANY (cardinality_error_with_aqo::double precision[]);
 $func$ LANGUAGE SQL;
 
-CREATE FUNCTION public.aqo_drop(hash int)
+CREATE FUNCTION public.aqo_drop(hash bigint)
 RETURNS VOID
 AS $func$
 DELETE FROM public.aqo_queries aq WHERE (aq.query_hash = $1);

@@ -8,12 +8,20 @@
  *	  aqo/aqo.c
  */
 
-#include "aqo.h"
+#include "postgres.h"
 
 #include "access/relation.h"
 #include "access/table.h"
 #include "catalog/pg_extension.h"
 #include "commands/extension.h"
+#include "miscadmin.h"
+#include "utils/selfuncs.h"
+
+#include "aqo.h"
+#include "cardinality_hooks.h"
+#include "path_utils.h"
+#include "preprocessing.h"
+
 
 PG_MODULE_MAGIC;
 
@@ -23,6 +31,8 @@ void _PG_init(void);
 
 /* Strategy of determining feature space for new queries. */
 int		aqo_mode;
+bool	aqo_enabled = false; /* Signals that CREATE EXTENSION have executed and
+								all extension tables is ready for use. */
 bool	force_collect_stat;
 
 /*
@@ -88,8 +98,6 @@ QueryContextData	query_context;
 /* Additional plan info */
 int njoins;
 
-char				*query_text = NULL;
-
 /* Saved hook values */
 post_parse_analyze_hook_type				prev_post_parse_analyze_hook;
 planner_hook_type							prev_planner_hook;
@@ -100,7 +108,7 @@ set_baserel_rows_estimate_hook_type			prev_set_baserel_rows_estimate_hook;
 get_parameterized_baserel_size_hook_type	prev_get_parameterized_baserel_size_hook;
 set_joinrel_size_estimates_hook_type		prev_set_joinrel_size_estimates_hook;
 get_parameterized_joinrel_size_hook_type	prev_get_parameterized_joinrel_size_hook;
-copy_generic_path_info_hook_type			prev_copy_generic_path_info_hook;
+create_plan_hook_type						prev_create_plan_hook;
 ExplainOnePlan_hook_type					prev_ExplainOnePlan_hook;
 ExplainOneNode_hook_type					prev_ExplainOneNode_hook;
 
@@ -119,15 +127,9 @@ aqo_free_callback(ResourceReleasePhase phase,
 	if (phase != RESOURCE_RELEASE_AFTER_LOCKS)
 		return;
 
-	if (query_text != NULL)
-	{
-		pfree(query_text);
-		query_text = NULL;
-	}
-
 	if (isTopLevel)
 	{
-		list_free(cur_classes);
+		list_free_deep(cur_classes);
 		cur_classes = NIL;
 	}
 }
@@ -135,6 +137,16 @@ aqo_free_callback(ResourceReleasePhase phase,
 void
 _PG_init(void)
 {
+	/*
+	 * In order to create our shared memory area, we have to be loaded via
+	 * shared_preload_libraries.  If not, report an ERROR.
+	 */
+	if (!process_shared_preload_libraries_in_progress)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("AQO module could be loaded only on startup."),
+				 errdetail("Add 'aqo' into the shared_preload_libraries list.")));
+
 	DefineCustomEnumVariable("aqo.mode",
 							 "Mode of aqo usage.",
 							 NULL,
@@ -189,12 +201,12 @@ _PG_init(void)
 
 	prev_planner_hook							= planner_hook;
 	planner_hook								= aqo_planner;
-	prev_post_parse_analyze_hook				= post_parse_analyze_hook;
-	post_parse_analyze_hook						= get_query_text;
 	prev_ExecutorStart_hook						= ExecutorStart_hook;
 	ExecutorStart_hook							= aqo_ExecutorStart;
 	prev_ExecutorEnd_hook						= ExecutorEnd_hook;
 	ExecutorEnd_hook							= aqo_ExecutorEnd;
+
+	/* Cardinality prediction hooks. */
 	prev_set_baserel_rows_estimate_hook			= set_baserel_rows_estimate_hook;
 	set_foreign_rows_estimate_hook				= aqo_set_baserel_rows_estimate;
 	set_baserel_rows_estimate_hook				= aqo_set_baserel_rows_estimate;
@@ -204,19 +216,28 @@ _PG_init(void)
 	set_joinrel_size_estimates_hook				= aqo_set_joinrel_size_estimates;
 	prev_get_parameterized_joinrel_size_hook	= get_parameterized_joinrel_size_hook;
 	get_parameterized_joinrel_size_hook			= aqo_get_parameterized_joinrel_size;
-	prev_copy_generic_path_info_hook			= copy_generic_path_info_hook;
-	copy_generic_path_info_hook					= aqo_copy_generic_path_info;
+	prev_estimate_num_groups_hook				= estimate_num_groups_hook;
+	estimate_num_groups_hook					= aqo_estimate_num_groups_hook;
+	parampathinfo_postinit_hook					= ppi_hook;
+
+	prev_create_plan_hook						= create_plan_hook;
+	create_plan_hook							= aqo_create_plan_hook;
+
+	/* Service hooks. */
 	prev_ExplainOnePlan_hook					= ExplainOnePlan_hook;
 	ExplainOnePlan_hook							= print_into_explain;
 	prev_ExplainOneNode_hook					= ExplainOneNode_hook;
 	ExplainOneNode_hook							= print_node_explain;
-	parampathinfo_postinit_hook					= ppi_hook;
+
+	prev_create_upper_paths_hook				= create_upper_paths_hook;
+	create_upper_paths_hook						= aqo_store_upper_signature_hook;
 
 	init_deactivated_queries_storage();
 	AQOMemoryContext = AllocSetContextCreate(TopMemoryContext,
 											 "AQOMemoryContext",
 											 ALLOCSET_DEFAULT_SIZES);
 	RegisterResourceReleaseCallback(aqo_free_callback, NULL);
+	RegisterAQOPlanNodeMethods();
 }
 
 PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
@@ -291,4 +312,20 @@ init_lock_tag(LOCKTAG *tag, uint32 key1, uint32 key2)
 	tag->locktag_field4 = 0;
 	tag->locktag_type = LOCKTAG_USERLOCK;
 	tag->locktag_lockmethodid = USER_LOCKMETHOD;
+}
+
+/*
+ * AQO is really needed for any activity?
+ */
+bool
+IsQueryDisabled(void)
+{
+	if (!query_context.learn_aqo && !query_context.use_aqo &&
+		!query_context.auto_tuning && !query_context.collect_stat &&
+		!query_context.adding_query && !query_context.explain_only &&
+		INSTR_TIME_IS_ZERO(query_context.start_planning_time) &&
+		query_context.planning_time < 0.)
+		return true;
+
+	return false;
 }

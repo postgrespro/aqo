@@ -25,35 +25,24 @@
  *
  */
 
+#include "postgres.h"
+
 #include "aqo.h"
+#include "cardinality_hooks.h"
+#include "hash.h"
+#include "path_utils.h"
+
+estimate_num_groups_hook_type prev_estimate_num_groups_hook = NULL;
 
 double predicted_ppi_rows;
 double fss_ppi_hash;
-
-static void call_default_set_baserel_rows_estimate(PlannerInfo *root,
-									   RelOptInfo *rel);
-static double call_default_get_parameterized_baserel_size(PlannerInfo *root,
-											RelOptInfo *rel,
-											List *param_clauses);
-static void call_default_set_joinrel_size_estimates(PlannerInfo *root,
-										RelOptInfo *rel,
-										RelOptInfo *outer_rel,
-										RelOptInfo *inner_rel,
-										SpecialJoinInfo *sjinfo,
-										List *restrictlist);
-static double call_default_get_parameterized_joinrel_size(PlannerInfo *root,
-											RelOptInfo *rel,
-											Path *outer_path,
-											Path *inner_path,
-											SpecialJoinInfo *sjinfo,
-											List *restrict_clauses);
 
 
 /*
  * Calls standard set_baserel_rows_estimate or its previous hook.
  */
-void
-call_default_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
+static void
+default_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 {
 	if (prev_set_baserel_rows_estimate_hook)
 		prev_set_baserel_rows_estimate_hook(root, rel);
@@ -64,8 +53,8 @@ call_default_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 /*
  * Calls standard get_parameterized_baserel_size or its previous hook.
  */
-double
-call_default_get_parameterized_baserel_size(PlannerInfo *root,
+static double
+default_get_parameterized_baserel_size(PlannerInfo *root,
 											RelOptInfo *rel,
 											List *param_clauses)
 {
@@ -78,8 +67,8 @@ call_default_get_parameterized_baserel_size(PlannerInfo *root,
 /*
  * Calls standard get_parameterized_joinrel_size or its previous hook.
  */
-double
-call_default_get_parameterized_joinrel_size(PlannerInfo *root,
+static double
+default_get_parameterized_joinrel_size(PlannerInfo *root,
 											RelOptInfo *rel,
 											Path *outer_path,
 											Path *inner_path,
@@ -103,8 +92,8 @@ call_default_get_parameterized_joinrel_size(PlannerInfo *root,
 /*
  * Calls standard set_joinrel_size_estimates or its previous hook.
  */
-void
-call_default_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
+static void
+default_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 										RelOptInfo *outer_rel,
 										RelOptInfo *inner_rel,
 										SpecialJoinInfo *sjinfo,
@@ -124,6 +113,22 @@ call_default_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 											restrictlist);
 }
 
+static double
+default_estimate_num_groups(PlannerInfo *root, List *groupExprs,
+							Path *subpath, RelOptInfo *grouped_rel,
+							List **pgset)
+{
+	double input_rows = subpath->rows;
+
+	if (prev_estimate_num_groups_hook != NULL)
+			return (*prev_estimate_num_groups_hook)(root, groupExprs,
+													subpath,
+													grouped_rel,
+													pgset);
+	else
+		return estimate_num_groups(root, groupExprs, input_rows, pgset);
+}
+
 /*
  * Our hook for setting baserel rows estimate.
  * Extracts clauses, their selectivities and list of relation relids and
@@ -134,49 +139,60 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 {
 	double		predicted;
 	Oid			relid;
-	List	   *relids;
+	List	   *relids = NIL;
 	List	   *selectivities = NULL;
-	List	*restrict_clauses;
+	List	*clauses;
 	int fss = 0;
 
-	if (query_context.use_aqo)
+	if (IsQueryDisabled())
+		/* Fast path. */
+		goto default_estimator;
+
+	if (query_context.use_aqo || query_context.learn_aqo)
 		selectivities = get_selectivities(root, rel->baserestrictinfo, 0,
 										  JOIN_INNER, NULL);
-	else
+
+	if (!query_context.use_aqo)
 	{
-		rel->predicted_cardinality = -2.;
-		call_default_set_baserel_rows_estimate(root, rel);
-		return;
+		if (query_context.learn_aqo)
+			list_free_deep(selectivities);
+
+		goto default_estimator;
 	}
 
 	relid = planner_rt_fetch(rel->relid, root)->relid;
-	relids = list_make1_int(relid);
+	if (OidIsValid(relid))
+		/* Predict for a plane table only. */
+		relids = list_make1_int(relid);
 
-	restrict_clauses = list_copy(rel->baserestrictinfo);
-	predicted = predict_for_relation(restrict_clauses, selectivities,
+	clauses = aqo_get_clauses(root, rel->baserestrictinfo);
+	predicted = predict_for_relation(clauses, selectivities,
 									 relids, &fss);
 	rel->fss_hash = fss;
+
+	list_free_deep(selectivities);
+	list_free(clauses);
+	list_free(relids);
 
 	if (predicted >= 0)
 	{
 		rel->rows = predicted;
 		rel->predicted_cardinality = predicted;
-	}
-	else
-	{
-		call_default_set_baserel_rows_estimate(root, rel);
-		rel->predicted_cardinality = -1.;
+		return;
 	}
 
-	list_free_deep(selectivities);
-	list_free(restrict_clauses);
-	list_free(relids);
+default_estimator:
+	rel->predicted_cardinality = -1.;
+	default_set_baserel_rows_estimate(root, rel);
 }
 
 
 void
 ppi_hook(ParamPathInfo *ppi)
 {
+	if (IsQueryDisabled())
+		return;
+
 	ppi->predicted_ppi_rows = predicted_ppi_rows;
 	ppi->fss_ppi_hash = fss_ppi_hash;
 }
@@ -193,7 +209,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 {
 	double		predicted;
 	Oid			relid = InvalidOid;
-	List	   *relids = NULL;
+	List	   *relids = NIL;
 	List	   *allclauses = NULL;
 	List	   *selectivities = NULL;
 	ListCell   *l;
@@ -204,12 +220,16 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	int			current_hash;
 	int fss = 0;
 
-	if (query_context.use_aqo)
+	if (IsQueryDisabled())
+		/* Fast path */
+		goto default_estimator;
+
+	if (query_context.use_aqo || query_context.learn_aqo)
 	{
 		MemoryContext mcxt;
 
-		allclauses = list_concat(list_copy(param_clauses),
-								 list_copy(rel->baserestrictinfo));
+		allclauses = list_concat(aqo_get_clauses(root, param_clauses),
+								 aqo_get_clauses(root, rel->baserestrictinfo));
 		selectivities = get_selectivities(root, allclauses, rel->relid,
 										  JOIN_INNER, NULL);
 		relid = planner_rt_fetch(rel->relid, root)->relid;
@@ -229,14 +249,21 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 		pfree(args_hash);
 		pfree(eclass_hash);
 	}
-	else
+
+	if (!query_context.use_aqo)
 	{
-		predicted_ppi_rows = -3.;
-		return call_default_get_parameterized_baserel_size(root, rel,
-														   param_clauses);
+		if (query_context.learn_aqo)
+		{
+			list_free_deep(selectivities);
+			list_free(allclauses);
+		}
+
+		goto default_estimator;
 	}
 
-	relids = list_make1_int(relid);
+	if (OidIsValid(relid))
+		/* Predict for a plane table only. */
+		relids = list_make1_int(relid);
 
 	predicted = predict_for_relation(allclauses, selectivities, relids, &fss);
 
@@ -245,9 +272,9 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 
 	if (predicted >= 0)
 		return predicted;
-	else
-		return call_default_get_parameterized_baserel_size(root, rel,
-														   param_clauses);
+
+default_estimator:
+	return default_get_parameterized_baserel_size(root, rel, param_clauses);
 }
 
 /*
@@ -271,20 +298,22 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	List	   *inner_selectivities;
 	List	   *outer_selectivities;
 	List	   *current_selectivities = NULL;
-	int fss = 0;
+	int				fss = 0;
 
-	if (query_context.use_aqo)
+	if (IsQueryDisabled())
+		/* Fast path */
+		goto default_estimator;
+
+	if (query_context.use_aqo || query_context.learn_aqo)
 		current_selectivities = get_selectivities(root, restrictlist, 0,
 												  sjinfo->jointype, sjinfo);
-	else
+
+	if (!query_context.use_aqo)
 	{
-		rel->predicted_cardinality = -2.;
-		call_default_set_joinrel_size_estimates(root, rel,
-												outer_rel,
-												inner_rel,
-												sjinfo,
-												restrictlist);
-		return;
+		if (query_context.learn_aqo)
+			list_free_deep(current_selectivities);
+
+		goto default_estimator;
 	}
 
 	relids = get_list_of_relids(root, rel->relids);
@@ -292,7 +321,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 									 &outer_selectivities);
 	inner_clauses = get_path_clauses(inner_rel->cheapest_total_path, root,
 									 &inner_selectivities);
-	allclauses = list_concat(list_copy(restrictlist),
+	allclauses = list_concat(aqo_get_clauses(root, restrictlist),
 							 list_concat(outer_clauses, inner_clauses));
 	selectivities = list_concat(current_selectivities,
 								list_concat(outer_selectivities,
@@ -305,16 +334,14 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	{
 		rel->predicted_cardinality = predicted;
 		rel->rows = predicted;
+		return;
 	}
-	else
-	{
-		rel->predicted_cardinality = -1;
-		call_default_set_joinrel_size_estimates(root, rel,
-												outer_rel,
-												inner_rel,
-												sjinfo,
-												restrictlist);
-	}
+
+default_estimator:
+	rel->predicted_cardinality = -1;
+	default_set_joinrel_size_estimates(root, rel,
+									   outer_rel, inner_rel,
+									   sjinfo, restrictlist);
 }
 
 /*
@@ -328,7 +355,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 								   Path *outer_path,
 								   Path *inner_path,
 								   SpecialJoinInfo *sjinfo,
-								   List *restrict_clauses)
+								   List *clauses)
 {
 	double		predicted;
 	List	   *relids;
@@ -341,23 +368,26 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	List	   *current_selectivities = NULL;
 	int			fss = 0;
 
-	if (query_context.use_aqo)
-		current_selectivities = get_selectivities(root, restrict_clauses, 0,
+	if (IsQueryDisabled())
+		/* Fast path */
+		goto default_estimator;
+
+	if (query_context.use_aqo || query_context.learn_aqo)
+		current_selectivities = get_selectivities(root, clauses, 0,
 												  sjinfo->jointype, sjinfo);
-	else
+
+	if (!query_context.use_aqo)
 	{
-		predicted_ppi_rows = -3.;
-		return call_default_get_parameterized_joinrel_size(root, rel,
-														   outer_path,
-														   inner_path,
-														   sjinfo,
-														   restrict_clauses);
+		if (query_context.learn_aqo)
+			list_free_deep(current_selectivities);
+
+		goto default_estimator;
 	}
 
 	relids = get_list_of_relids(root, rel->relids);
 	outer_clauses = get_path_clauses(outer_path, root, &outer_selectivities);
 	inner_clauses = get_path_clauses(inner_path, root, &inner_selectivities);
-	allclauses = list_concat(list_copy(restrict_clauses),
+	allclauses = list_concat(aqo_get_clauses(root, clauses),
 							 list_concat(outer_clauses, inner_clauses));
 	selectivities = list_concat(current_selectivities,
 								list_concat(outer_selectivities,
@@ -370,10 +400,83 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 
 	if (predicted >= 0)
 		return predicted;
+
+default_estimator:
+	return default_get_parameterized_joinrel_size(root, rel,
+												  outer_path, inner_path,
+												  sjinfo, clauses);
+}
+
+static double
+predict_num_groups(PlannerInfo *root, Path *subpath, List *group_exprs,
+				   int *fss)
+{
+	int child_fss = 0;
+	double prediction;
+	int rows;
+	double target;
+
+	if (subpath->parent->predicted_cardinality > 0.)
+		/* A fast path. Here we can use a fss hash of a leaf. */
+		child_fss = subpath->parent->fss_hash;
 	else
-		return call_default_get_parameterized_joinrel_size(root, rel,
-														   outer_path,
-														   inner_path,
-														   sjinfo,
-														   restrict_clauses);
+	{
+		List *relids;
+		List *clauses;
+		List *selectivities = NIL;
+
+		relids = get_list_of_relids(root, subpath->parent->relids);
+		clauses = get_path_clauses(subpath, root, &selectivities);
+		(void) predict_for_relation(clauses, selectivities, relids, &child_fss);
+	}
+
+	*fss = get_grouped_exprs_hash(child_fss, group_exprs);
+
+	if (!load_fss(query_context.fspace_hash, *fss, 0, NULL, &target, &rows, NULL))
+		return -1;
+
+	Assert(rows == 1);
+	prediction = exp(target);
+	return (prediction <= 0) ? -1 : prediction;
+}
+
+double
+aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
+							 Path *subpath, RelOptInfo *grouped_rel,
+							 List **pgset)
+{
+	int fss;
+	double predicted;
+
+	if (!query_context.use_aqo)
+		goto default_estimator;
+
+	if (pgset || groupExprs == NIL)
+		/* XXX: Don't support some GROUPING options */
+		goto default_estimator;
+
+	if (prev_estimate_num_groups_hook != NULL)
+		elog(WARNING, "AQO replaced another estimator of a groups number");
+
+	if (groupExprs == NIL)
+		return 1.0;
+
+	predicted = predict_num_groups(root, subpath, groupExprs, &fss);
+	if (predicted > 0.)
+	{
+		grouped_rel->predicted_cardinality = predicted;
+		grouped_rel->rows = predicted;
+		grouped_rel->fss_hash = fss;
+		return predicted;
+	}
+	else
+		/*
+		 * Some nodes AQO doesn't know yet, some nodes are ignored by AQO
+		 * permanently - as an example, SubqueryScan.
+		 */
+		grouped_rel->predicted_cardinality = -1;
+
+default_estimator:
+	return default_estimate_num_groups(root, groupExprs, subpath, grouped_rel,
+									   pgset);
 }
