@@ -17,7 +17,6 @@
  */
 
 #include "aqo.h"
-#include "ignorance.h"
 
 #include "access/parallel.h"
 #include "optimizer/optimizer.h"
@@ -114,16 +113,6 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 	target = log(true_cardinality);
 	fss_hash = get_fss_for_object(clauselist, selectivities, relidslist,
 								  &nfeatures, &features);
-
-	if (aqo_log_ignorance && plan->predicted_cardinality <= 0 &&
-		load_fss(fhash, fss_hash, 0, NULL, NULL, NULL) )
-	{
-		/*
-		 * If ignorance logging is enabled and the feature space was existed in
-		 * the ML knowledge base, log this issue.
-		 */
-		update_ignorance(query_context.query_hash, fhash, fss_hash, plan);
-	}
 
 	if (nfeatures > 0)
 		for (i = 0; i < aqo_K; ++i)

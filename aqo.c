@@ -9,7 +9,6 @@
  */
 
 #include "aqo.h"
-#include "ignorance.h"
 
 #include "access/relation.h"
 #include "access/table.h"
@@ -186,19 +185,6 @@ _PG_init(void)
 							 0,
 							 NULL,
 							 NULL,
-							 NULL
-	);
-
-	DefineCustomBoolVariable(
-							 "aqo.log_ignorance",
-							 "Log in a special table all feature spaces for which the AQO prediction was not successful.",
-							 NULL,
-							 &aqo_log_ignorance,
-							 false,
-							 PGC_SUSET,
-							 0,
-							 NULL,
-							 set_ignorance,
 							 NULL
 	);
 
