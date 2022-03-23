@@ -314,7 +314,10 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 									selectivities);
 			break;
 		case T_SubqueryScanPath:
-			return get_path_clauses(((SubqueryScanPath *) path)->subpath, root,
+			/* Recursing into Subquery we must use subroot */
+			Assert(path->parent->subroot != NULL);
+			return get_path_clauses(((SubqueryScanPath *) path)->subpath,
+									path->parent->subroot,
 									selectivities);
 			break;
 		case T_ModifyTablePath:
