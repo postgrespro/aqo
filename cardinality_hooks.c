@@ -298,7 +298,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	List	   *inner_selectivities;
 	List	   *outer_selectivities;
 	List	   *current_selectivities = NULL;
-	int				fss = 0;
+	int			fss = 0;
 
 	if (IsQueryDisabled())
 		/* Fast path */
