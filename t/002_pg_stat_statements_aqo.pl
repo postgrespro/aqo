@@ -14,7 +14,6 @@ $node->append_conf('postgresql.conf', qq{
 						aqo.profile_classes = -1
 						aqo.profile_enable = 'true'
 						aqo.force_collect_stat = 'false'
-						aqo.log_ignorance = 'off'
 						log_statement = 'ddl' # reduce size of logs.
 					});
 # Test constants.
