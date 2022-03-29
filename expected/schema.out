@@ -24,7 +24,7 @@ SELECT * FROM test;
 -- Check AQO service relations state after some manipulations
 -- Exclude fields with hash values from the queries. Hash is depend on
 -- nodefuncs code which is highly PostgreSQL version specific.
-SELECT query_text FROM public.aqo_query_texts;
+SELECT query_text FROM aqo_query_texts;
                  query_text                 
 --------------------------------------------
  COMMON feature space (do not delete!)
@@ -32,7 +32,7 @@ SELECT query_text FROM public.aqo_query_texts;
  SELECT * FROM test;
 (3 rows)
 
-SELECT learn_aqo, use_aqo, auto_tuning FROM public.aqo_queries;
+SELECT learn_aqo, use_aqo, auto_tuning FROM aqo_queries;
  learn_aqo | use_aqo | auto_tuning 
 -----------+---------+-------------
  f         | f       | f

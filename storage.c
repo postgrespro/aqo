@@ -98,7 +98,7 @@ find_query(uint64 qhash, Datum *search_values, bool *search_nulls)
 	SnapshotData snap;
 	bool		find_ok = false;
 
-	if (!open_aqo_relation("public", "aqo_queries", "aqo_queries_query_hash_idx",
+	if (!open_aqo_relation(NULL, "aqo_queries", "aqo_queries_query_hash_idx",
 		AccessShareLock, &hrel, &irel))
 		return false;
 
@@ -157,7 +157,7 @@ update_query(uint64 qhash, uint64 fhash,
 	if (XactReadOnly)
 		return false;
 
-	if (!open_aqo_relation("public", "aqo_queries", "aqo_queries_query_hash_idx",
+	if (!open_aqo_relation(NULL, "aqo_queries", "aqo_queries_query_hash_idx",
 		RowExclusiveLock, &hrel, &irel))
 		return false;
 
@@ -261,7 +261,7 @@ add_query_text(uint64 qhash, const char *query_string)
 	if (XactReadOnly)
 		return false;
 
-	if (!open_aqo_relation("public", "aqo_query_texts",
+	if (!open_aqo_relation(NULL, "aqo_query_texts",
 						   "aqo_query_texts_query_hash_idx",
 						   RowExclusiveLock, &hrel, &irel))
 		return false;
@@ -375,7 +375,7 @@ load_fss(uint64 fhash, int fss_hash,
 	bool		isnull[6];
 	bool		success = true;
 
-	if (!open_aqo_relation("public", "aqo_data",
+	if (!open_aqo_relation(NULL, "aqo_data",
 						   "aqo_fss_access_idx",
 						   AccessShareLock, &hrel, &irel))
 		return false;
@@ -465,7 +465,7 @@ update_fss(uint64 fhash, int fsshash, int nrows, int ncols,
 	if (XactReadOnly)
 		return false;
 
-	if (!open_aqo_relation("public", "aqo_data",
+	if (!open_aqo_relation(NULL, "aqo_data",
 						   "aqo_fss_access_idx",
 						   RowExclusiveLock, &hrel, &irel))
 		return false;
@@ -580,7 +580,7 @@ get_aqo_stat(uint64 qhash)
 	bool		shouldFree;
 
 
-	if (!open_aqo_relation("public", "aqo_query_stat",
+	if (!open_aqo_relation(NULL, "aqo_query_stat",
 						   "aqo_query_stat_idx",
 						   AccessShareLock, &hrel, &irel))
 		return false;
@@ -648,7 +648,7 @@ update_aqo_stat(uint64 qhash, QueryStat *stat)
 	if (XactReadOnly)
 		return;
 
-	if (!open_aqo_relation("public", "aqo_query_stat",
+	if (!open_aqo_relation(NULL, "aqo_query_stat",
 						   "aqo_query_stat_idx",
 						   RowExclusiveLock, &hrel, &irel))
 		return;

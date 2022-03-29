@@ -1,9 +1,9 @@
-ALTER TABLE public.aqo_data ADD COLUMN oids OID [] DEFAULT NULL;
+ALTER TABLE aqo_data ADD COLUMN oids OID [] DEFAULT NULL;
 
 --
 -- Remove data, related to previously dropped tables, from the AQO tables.
 --
-CREATE OR REPLACE FUNCTION public.clean_aqo_data() RETURNS void AS $$
+CREATE OR REPLACE FUNCTION clean_aqo_data() RETURNS void AS $$
 DECLARE
     aqo_data_row aqo_data%ROWTYPE;
     aqo_queries_row aqo_queries%ROWTYPE;
@@ -87,7 +87,7 @@ $$ LANGUAGE plpgsql;
 --
 --  Top of queries with the highest value of execution time.
 --
-CREATE OR REPLACE FUNCTION public.top_time_queries(n int)
+CREATE OR REPLACE FUNCTION top_time_queries(n int)
   RETURNS TABLE(num bigint,
                 fspace_hash bigint,
                 query_hash bigint,
@@ -113,7 +113,7 @@ $$ LANGUAGE plpgsql;
 --
 --  Top of queries with largest value of total cardinality error.
 --
-CREATE OR REPLACE FUNCTION public.top_error_queries(n int)
+CREATE OR REPLACE FUNCTION top_error_queries(n int)
   RETURNS TABLE(num bigint,
                 fspace_hash bigint,
                 query_hash bigint,

@@ -23,7 +23,8 @@ REGRESS =	aqo_disabled \
 			unsupported \
 			clean_aqo_data \
 			plancache	\
-			top_queries
+			top_queries \
+			relocatable
 
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw
 stat_srcdir = $(top_srcdir)/contrib/pg_stat_statements
