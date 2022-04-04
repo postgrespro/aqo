@@ -108,7 +108,6 @@ set_baserel_rows_estimate_hook_type			prev_set_baserel_rows_estimate_hook;
 get_parameterized_baserel_size_hook_type	prev_get_parameterized_baserel_size_hook;
 set_joinrel_size_estimates_hook_type		prev_set_joinrel_size_estimates_hook;
 get_parameterized_joinrel_size_hook_type	prev_get_parameterized_joinrel_size_hook;
-create_plan_hook_type						prev_create_plan_hook;
 ExplainOnePlan_hook_type					prev_ExplainOnePlan_hook;
 ExplainOneNode_hook_type					prev_ExplainOneNode_hook;
 
