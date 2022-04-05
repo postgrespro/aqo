@@ -859,25 +859,21 @@ ExtractFromQueryEnv(QueryDesc *queryDesc)
 void
 print_node_explain(ExplainState *es, PlanState *ps, Plan *plan)
 {
-	int wrkrs = 1;
-	double error = -1.;
-	AQOPlanNode *aqo_node;
+	int				wrkrs = 1;
+	double			error = -1.;
+	AQOPlanNode	   *aqo_node;
 
 	/* Extension, which took a hook early can be executed early too. */
 	if (prev_ExplainOneNode_hook)
 		prev_ExplainOneNode_hook(es, ps, plan);
 
-	if (IsQueryDisabled())
+	if (IsQueryDisabled() || !plan || es->format != EXPLAIN_FORMAT_TEXT)
 		return;
-
-	if (es->format != EXPLAIN_FORMAT_TEXT)
-		/* Only text format is supported. */
-		return;
-
-	if (!aqo_show_details || !plan || !ps)
-		goto explain_end;
 
 	aqo_node = get_aqo_plan_node(plan, false);
+
+	if (!aqo_show_details || !ps)
+		goto explain_end;
 
 	if (!ps->instrument)
 		/* We can show only prediction, without error calculation */
@@ -921,7 +917,7 @@ explain_print:
 		appendStringInfo(es->str, "AQO not used");
 
 explain_end:
-	/* XXX: Do we really have situations than plan is NULL? */
+	/* XXX: Do we really have situations when the plan is a NULL pointer? */
 	if (plan && aqo_show_hash)
 		appendStringInfo(es->str, ", fss=%d", aqo_node->fss);
 }
