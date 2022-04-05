@@ -56,6 +56,12 @@ create_aqo_plan_node()
 	return node;
 }
 
+/*
+ * Extract an AQO node from the plan private field.
+ * If no one node was found, return pointer to the default value or allocate new
+ * node (with default value) according to 'create' field.
+ * Can't return NULL value at all.
+ */
 AQOPlanNode *
 get_aqo_plan_node(Plan *plan, bool create)
 {
