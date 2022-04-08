@@ -26,7 +26,7 @@
 #ifdef AQO_DEBUG_PRINT
 static void
 predict_debug_output(List *clauses, List *selectivities,
-					 List *relids, int fss_hash, double result)
+					 List *relnames, int fss, double result)
 {
 	StringInfoData debug_str;
 	ListCell *lc;
@@ -42,11 +42,11 @@ predict_debug_output(List *clauses, List *selectivities,
 		appendStringInfo(&debug_str, "%lf ", *s);
 	}
 
-	appendStringInfoString(&debug_str, "}, relids: { ");
-	foreach(lc, relids)
+	appendStringInfoString(&debug_str, "}, relnames: { ");
+	foreach(lc, relnames)
 	{
-		int relid = lfirst_int(lc);
-		appendStringInfo(&debug_str, "%d ", relid);
+		String *relname = lfirst_node(String, lc);
+		appendStringInfo(&debug_str, "%s ", relname->sval);
 	}
 
 	appendStringInfo(&debug_str, "}, result: %lf", result);
@@ -60,22 +60,22 @@ predict_debug_output(List *clauses, List *selectivities,
  */
 double
 predict_for_relation(List *clauses, List *selectivities,
-					 List *relids, int *fss)
+					 List *relnames, int *fss)
 {
 	double	   *features;
 	double		result;
 	int			i;
 	OkNNrdata	data;
 
-	if (relids == NIL)
+	if (relnames == NIL)
 		/*
 		 * Don't make prediction for query plans without any underlying plane
 		 * tables. Use return value -4 for debug purposes.
 		 */
 		return -4.;
 
-	*fss = get_fss_for_object(relids, clauses,
-								   selectivities, &data.cols, &features);
+	*fss = get_fss_for_object(relnames, clauses, selectivities,
+							  &data.cols, &features);
 
 	if (data.cols > 0)
 		for (i = 0; i < aqo_K; ++i)
@@ -94,7 +94,7 @@ predict_for_relation(List *clauses, List *selectivities,
 		result = -1;
 	}
 #ifdef AQO_DEBUG_PRINT
-	predict_debug_output(clauses, selectivities, relids, *fss_hash, result);
+	predict_debug_output(clauses, selectivities, relnames, *fss, result);
 #endif
 	pfree(features);
 	if (data.cols > 0)
