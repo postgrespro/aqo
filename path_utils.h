@@ -16,6 +16,7 @@ typedef struct AQOPlanNode
 	ExtensibleNode node;
 	bool		had_path;
 	List		*relids;
+	List		*temp_relnames; /* We store name of temporary table because OID by-default haven't sense at other backends. */
 	List		*clauses;
 	List		*selectivities;
 
@@ -47,7 +48,7 @@ extern List *get_selectivities(PlannerInfo *root,
 							   int varRelid,
 							   JoinType jointype,
 							   SpecialJoinInfo *sjinfo);
-extern List *get_list_of_relids(PlannerInfo *root, Relids relids);
+extern List *get_relnames(PlannerInfo *root, Relids relids);
 
 extern List *get_path_clauses(Path *path,
 							  PlannerInfo *root,

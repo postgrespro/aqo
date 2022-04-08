@@ -7,12 +7,10 @@
 
 extern bool aqo_learn_statement_timeout;
 
-extern bool lc_update_fss(uint64 fhash, int fsshash, OkNNrdata *data,
-						  List *relids);
-extern bool lc_has_fss(uint64 fhash, int fss);
-extern bool lc_load_fss(uint64 fhash, int fsshash, OkNNrdata *data,
-						List **relids);
-extern void lc_remove_fss(uint64 fhash, int fss_hash);
+extern bool lc_update_fss(uint64 fs, int fss, OkNNrdata *data, List *relnames);
+extern bool lc_has_fss(uint64 fs, int fss);
+extern bool lc_load_fss(uint64 fs, int fss, OkNNrdata *data, List **relnames);
+extern void lc_remove_fss(uint64 fs, int fss);
 extern void lc_flush_data(void);
 extern void lc_assign_hook(bool newval, void *extra);
 

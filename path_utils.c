@@ -125,14 +125,14 @@ get_selectivities(PlannerInfo *root,
 
 /*
  * Transforms given relids from path optimization stage format to list of
- * an absolute (independent on query optimization context) relids.
+ * an absolute (independent on query optimization context) relnames.
  */
 List *
-get_list_of_relids(PlannerInfo *root, Relids relids)
+get_relnames(PlannerInfo *root, Relids relids)
 {
-	int			i;
-	RangeTblEntry *entry;
-	List	   *l = NIL;
+	int				i;
+	RangeTblEntry  *rte;
+	List		   *l = NIL;
 
 	if (relids == NULL)
 		return NIL;
@@ -146,9 +146,14 @@ get_list_of_relids(PlannerInfo *root, Relids relids)
 	i = -1;
 	while ((i = bms_next_member(relids, i)) >= 0)
 	{
-		entry = planner_rt_fetch(i, root);
-		if (OidIsValid(entry->relid))
-			l = lappend_int(l, entry->relid);
+		rte = planner_rt_fetch(i, root);
+		if (OidIsValid(rte->relid))
+		{
+			String *s = makeNode(String);
+
+			s->sval = pstrdup(rte->eref->aliasname);
+			l = lappend(l, s);
+		}
 	}
 	return l;
 }
@@ -410,9 +415,9 @@ is_appropriate_path(Path *path)
 void
 aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 {
-	bool is_join_path;
-	Plan *plan = *dest;
-	AQOPlanNode	*node;
+	bool			is_join_path;
+	Plan		   *plan = *dest;
+	AQOPlanNode	   *node;
 
 	if (prev_create_plan_hook)
 		prev_create_plan_hook(root, src, dest);
@@ -450,7 +455,7 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 												(*dest)->lefttree->targetlist);
 		/* Copy bare expressions for further AQO learning case. */
 		node->grouping_exprs = copyObject(groupExprs);
-		node->relids = get_list_of_relids(root, ap->subpath->parent->relids);
+		node->relids = get_relnames(root, ap->subpath->parent->relids);
 		node->jointype = JOIN_INNER;
 	}
 	else if (is_appropriate_path(src))
@@ -462,7 +467,7 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 	}
 
 	node->relids = list_concat(node->relids,
-								get_list_of_relids(root, src->parent->relids));
+							   get_relnames(root, src->parent->relids));
 
 	if (src->parallel_workers > 0)
 		node->parallel_divisor = get_parallel_divisor(src);
@@ -632,7 +637,7 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 							   void *extra)
 {
 	A_Const	*fss_node = makeNode(A_Const);
-	List	*relids;
+	List	*relnames;
 	List	*clauses;
 	List	*selectivities;
 

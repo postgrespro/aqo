@@ -31,7 +31,7 @@ static int	get_node_hash(Node *node);
 static int	get_unsorted_unsafe_int_array_hash(int *arr, int len);
 static int	get_unordered_int_list_hash(List *lst);
 
-static int	get_relidslist_hash(List *relidslist);
+static int64 get_relations_hash(List *relnames);
 static int get_fss_hash(int clauses_hash, int eclasses_hash,
 			 int relidslist_hash);
 
@@ -149,7 +149,7 @@ get_grouped_exprs_hash(int child_fss, List *group_exprs)
 }
 
 /*
- * For given object (clauselist, selectivities, relidslist) creates feature
+ * For given object (clauselist, selectivities, relnames) creates feature
  * subspace:
  *		sets nfeatures
  *		creates and computes fss_hash
@@ -158,7 +158,7 @@ get_grouped_exprs_hash(int child_fss, List *group_exprs)
  * Special case for nfeatures == NULL: don't calculate features.
  */
 int
-get_fss_for_object(List *relidslist, List *clauselist,
+get_fss_for_object(List *relnames, List *clauselist,
 				   List *selectivities, int *nfeatures, double **features)
 {
 	int			n;
@@ -172,7 +172,7 @@ get_fss_for_object(List *relidslist, List *clauselist,
 	int		   *eclass_hash;
 	int			clauses_hash;
 	int			eclasses_hash;
-	int			relidslist_hash;
+	int			relnames_hash;
 	List	  **args;
 	ListCell   *lc;
 	int			i,
@@ -181,7 +181,7 @@ get_fss_for_object(List *relidslist, List *clauselist,
 				m;
 	int			sh = 0,
 				old_sh;
-	int fss_hash;
+	int			fss_hash;
 
 	n = list_length(clauselist);
 
@@ -259,13 +259,11 @@ get_fss_for_object(List *relidslist, List *clauselist,
 
 	/*
 	 * Generate feature subspace hash.
-	 * XXX: Remember! that relidslist_hash isn't portable between postgres
-	 * instances.
 	 */
 	clauses_hash = get_int_array_hash(sorted_clauses, n - sh);
 	eclasses_hash = get_int_array_hash(eclass_hash, nargs);
-	relidslist_hash = get_relidslist_hash(relidslist);
-	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relidslist_hash);
+	relnames_hash = (int) get_relations_hash(relnames);
+	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relnames_hash);
 
 	pfree(clause_hashes);
 	pfree(sorted_clauses);
@@ -436,13 +434,37 @@ get_fss_hash(int clauses_hash, int eclasses_hash, int relidslist_hash)
 }
 
 /*
- * Computes hash for given list of relids.
- * Hash is supposed to be relids-order-insensitive.
+ * Computes hash for given list of relations.
+ * Hash is supposed to be relations-order-insensitive.
+ * Each element of a list must have a String type,
  */
-int
-get_relidslist_hash(List *relidslist)
+static int64
+get_relations_hash(List *relnames)
 {
-	return get_unordered_int_list_hash(relidslist);
+	int64	   *hashes = palloc(list_length(relnames) * sizeof(int64));
+	ListCell   *lc;
+	int64		hash = 0;
+	int			i = 0;
+
+	/* generate array of hashes. */
+	foreach(lc, relnames)
+	{
+		String *relname = lfirst_node(String, lc);
+
+		hashes[i++] = DatumGetInt64(hash_any_extended(
+												(unsigned char *) relname->sval,
+												strlen(relname->sval), 0));
+	}
+
+	/* Sort the array to make query insensitive to input order of relations. */
+	qsort(hashes, i, sizeof(int64), int64_compare);
+
+	/* Make a final hash value */
+	hash = DatumGetInt64(hash_any_extended((unsigned char *) hashes,
+										   i * sizeof(int64), 0));
+
+	pfree(hashes);
+	return hash;
 }
 
 /*
