@@ -56,10 +56,10 @@ static char *PlanStateInfo = "PlanStateInfo";
 
 
 /* Query execution statistics collecting utilities */
-static void atomic_fss_learn_step(uint64 fhash, int fss_hash, OkNNrdata *data,
+static void atomic_fss_learn_step(uint64 fhash, int fss, OkNNrdata *data,
 								  double *features,
 								  double target, double rfactor,
-								  List *relids, bool isTimedOut);
+								  List *relnames, bool isTimedOut);
 static bool learnOnPlanState(PlanState *p, void *context);
 static void learn_agg_sample(aqo_obj_stat *ctx, List *relidslist,
 							 double learned, double rfactor, Plan *plan,
@@ -90,8 +90,8 @@ static bool ExtractFromQueryEnv(QueryDesc *queryDesc);
  */
 static void
 atomic_fss_learn_step(uint64 fs, int fss, OkNNrdata *data,
-					 double *features, double target, double rfactor,
-					 List *relids, bool isTimedOut)
+					  double *features, double target, double rfactor,
+					  List *relnames, bool isTimedOut)
 {
 	LOCKTAG		tag;
 
@@ -102,13 +102,13 @@ atomic_fss_learn_step(uint64 fs, int fss, OkNNrdata *data,
 		data->rows = 0;
 
 	data->rows = OkNNr_learn(data, features, target, rfactor);
-	update_fss_ext(fs, fss, data, relids, isTimedOut);
+	update_fss_ext(fs, fss, data, relnames, isTimedOut);
 
 	LockRelease(&tag, ExclusiveLock, false);
 }
 
 static void
-learn_agg_sample(aqo_obj_stat *ctx, List *relidslist,
+learn_agg_sample(aqo_obj_stat *ctx, List *relnames,
 			 double learned, double rfactor, Plan *plan, bool notExecuted)
 {
 	AQOPlanNode	   *aqo_node = get_aqo_plan_node(plan, false);
@@ -127,7 +127,7 @@ learn_agg_sample(aqo_obj_stat *ctx, List *relidslist,
 		return;
 
 	target = log(learned);
-	child_fss = get_fss_for_object(relidslist, ctx->clauselist, NIL, NULL, NULL);
+	child_fss = get_fss_for_object(relnames, ctx->clauselist, NIL, NULL, NULL);
 	fss = get_grouped_exprs_hash(child_fss, aqo_node->grouping_exprs);
 
 	memset(&data, 0, sizeof(OkNNrdata));
@@ -136,7 +136,7 @@ learn_agg_sample(aqo_obj_stat *ctx, List *relidslist,
 
 	/* Critical section */
 	atomic_fss_learn_step(fhash, fss, &data, NULL,
-						  target, rfactor, relidslist, ctx->isTimedOut);
+						  target, rfactor, relnames, ctx->isTimedOut);
 	/* End of critical section */
 }
 
@@ -145,7 +145,7 @@ learn_agg_sample(aqo_obj_stat *ctx, List *relidslist,
  * true cardinalities) performs learning procedure.
  */
 static void
-learn_sample(aqo_obj_stat *ctx, List *relidslist,
+learn_sample(aqo_obj_stat *ctx, List *relnames,
 			 double learned, double rfactor, Plan *plan, bool notExecuted)
 {
 	AQOPlanNode	   *aqo_node = get_aqo_plan_node(plan, false);
@@ -158,8 +158,8 @@ learn_sample(aqo_obj_stat *ctx, List *relidslist,
 
 	memset(&data, 0, sizeof(OkNNrdata));
 	target = log(learned);
-	fss = get_fss_for_object(relidslist, ctx->clauselist,
-								  ctx->selectivities, &data.cols, &features);
+	fss = get_fss_for_object(relnames, ctx->clauselist,
+							 ctx->selectivities, &data.cols, &features);
 
 	/* Only Agg nodes can have non-empty a grouping expressions list. */
 	Assert(!IsA(plan, Agg) || aqo_node->grouping_exprs != NIL);
@@ -177,7 +177,7 @@ learn_sample(aqo_obj_stat *ctx, List *relidslist,
 
 	/* Critical section */
 	atomic_fss_learn_step(fs, fss, &data, features, target, rfactor,
-						  relidslist, ctx->isTimedOut);
+						  relnames, ctx->isTimedOut);
 	/* End of critical section */
 
 	if (data.cols > 0)
@@ -192,9 +192,7 @@ learn_sample(aqo_obj_stat *ctx, List *relidslist,
  * the same selectivities of clauses as were used at query optimization stage.
  */
 List *
-restore_selectivities(List *clauselist,
-					  List *relidslist,
-					  JoinType join_type,
+restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 					  bool was_parametrized)
 {
 	List		*lst = NIL;

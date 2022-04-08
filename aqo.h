@@ -280,13 +280,12 @@ extern bool find_query(uint64 qhash, QueryContextData *ctx);
 extern bool update_query(uint64 qhash, uint64 fhash,
 						 bool learn_aqo, bool use_aqo, bool auto_tuning);
 extern bool add_query_text(uint64 query_hash, const char *query_string);
-extern bool load_fss_ext(uint64 fs, int fss, OkNNrdata *data,
-						 List **relids, bool isSafe);
-extern bool load_fss(uint64 fhash, int fss_hash, OkNNrdata *data, List **relids);
-extern bool update_fss_ext(uint64 fhash, int fsshash, OkNNrdata *data,
-						   List *relids, bool isTimedOut);
-extern bool update_fss(uint64 fhash, int fss_hash, OkNNrdata *data,
-					   List *relids);
+extern bool load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **relnames,
+						 bool isSafe);
+extern bool load_fss(uint64 fs, int fss, OkNNrdata *data, List **relnames);
+extern bool update_fss_ext(uint64 fs, int fss, OkNNrdata *data,
+						   List *relnames, bool isTimedOut);
+extern bool update_fss(uint64 fs, int fss, OkNNrdata *data, List *relnames);
 QueryStat *get_aqo_stat(uint64 query_hash);
 void update_aqo_stat(uint64 query_hash, QueryStat * stat);
 extern bool my_index_insert(Relation indexRelation,	Datum *values, bool *isnull,
@@ -307,7 +306,7 @@ extern void print_node_explain(ExplainState *es, PlanState *ps, Plan *plan);
 
 /* Cardinality estimation */
 double predict_for_relation(List *restrict_clauses, List *selectivities,
-					 List *relids, int *fss_hash);
+							List *relnames, int *fss);
 
 /* Query execution statistics collecting hooks */
 void aqo_ExecutorStart(QueryDesc *queryDesc, int eflags);
@@ -319,13 +318,14 @@ void aqo_ExecutorEnd(QueryDesc *queryDesc);
 extern void automatical_query_tuning(uint64 query_hash, QueryStat * stat);
 
 /* Utilities */
-int			int_cmp(const void *a, const void *b);
-int			double_cmp(const void *a, const void *b);
-int *argsort(void *a, int n, size_t es,
-		int (*cmp) (const void *, const void *));
-int		   *inverse_permutation(int *a, int n);
-QueryStat  *palloc_query_stat(void);
-void		pfree_query_stat(QueryStat *stat);
+extern int int64_compare(const void *a, const void *b);
+extern int int_cmp(const void *a, const void *b);
+extern int double_cmp(const void *a, const void *b);
+extern int *argsort(void *a, int n, size_t es,
+					int (*cmp) (const void *, const void *));
+extern int *inverse_permutation(int *a, int n);
+extern QueryStat *palloc_query_stat(void);
+extern void pfree_query_stat(QueryStat *stat);
 
 /* Selectivity cache for parametrized baserels */
 extern void cache_selectivity(int clause_hash, int relid, int global_relid,
