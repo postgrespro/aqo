@@ -1,4 +1,4 @@
-ALTER TABLE public.aqo_data ADD COLUMN oids OID [] DEFAULT NULL;
+ALTER TABLE public.aqo_data ADD COLUMN oids text [] DEFAULT NULL;
 
 --
 -- Remove data, related to previously dropped tables, from the AQO tables.
@@ -9,7 +9,7 @@ DECLARE
     aqo_queries_row aqo_queries%ROWTYPE;
     aqo_query_texts_row aqo_query_texts%ROWTYPE;
     aqo_query_stat_row aqo_query_stat%ROWTYPE;
-    oid_var oid;
+    oid_var text;
     fspace_hash_var bigint;
     delete_row boolean DEFAULT false;
 BEGIN
@@ -23,7 +23,7 @@ BEGIN
     IF (aqo_data_row.oids IS NOT NULL) THEN
       FOREACH oid_var IN ARRAY aqo_data_row.oids
       LOOP
-        IF NOT EXISTS (SELECT relname FROM pg_class WHERE oid = oid_var) THEN
+        IF NOT EXISTS (SELECT relname FROM pg_class WHERE oid::regclass::text = oid_var) THEN
           delete_row = true;
         END IF;
       END LOOP;
