@@ -252,9 +252,11 @@ init_with_dsm(OkNNrdata *data, dsm_block_hdr *hdr, List **relnames)
 			*relnames = lappend(*relnames, s);
 			ptr += len;
 		}
+		return calculate_size(hdr->cols, *relnames);
 	}
 
-	return calculate_size(hdr->cols, *relnames);
+	/* It is just read operation. No any interest in size calculation. */
+	return 0;
 }
 
 void
@@ -275,10 +277,11 @@ lc_flush_data(void)
 	{
 		dsm_block_hdr  *hdr = (dsm_block_hdr *) ptr;
 		OkNNrdata		data;
-		List		   *relnames;
+		List		   *relnames = NIL;
 		uint32			delta = 0;
 
 		delta = init_with_dsm(&data, hdr, &relnames);
+		Assert(delta > 0);
 		ptr += delta;
 		size -= delta;
 		update_fss(hdr->key.fs, hdr->key.fss, &data, relnames);
