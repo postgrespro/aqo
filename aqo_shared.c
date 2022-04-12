@@ -50,7 +50,7 @@ get_dsm_all(uint32 *size)
 		seg = dsm_attach(aqo_state->dsm_handler);
 		Assert(seg);
 		dsm_pin_mapping(seg);
-		on_shmem_exit(aqo_detach_shmem, (Datum) &aqo_state->dsm_handler);
+		before_shmem_exit(aqo_detach_shmem, (Datum) &aqo_state->dsm_handler);
 	}
 
 	hdr = (dsm_seg_hdr	*) dsm_segment_address(seg);
@@ -102,7 +102,7 @@ get_cache_address(void)
 			/* Another process created the segment yet. Just attach to. */
 			seg = dsm_attach(aqo_state->dsm_handler);
 			dsm_pin_mapping(seg);
-			on_shmem_exit(aqo_detach_shmem, (Datum) &aqo_state->dsm_handler);
+			before_shmem_exit(aqo_detach_shmem, (Datum) &aqo_state->dsm_handler);
 		}
 
 		hdr = (dsm_seg_hdr	*) dsm_segment_address(seg);
@@ -118,7 +118,7 @@ get_cache_address(void)
 		dsm_pin_mapping(seg);
 		dsm_pin_segment(seg);
 		aqo_state->dsm_handler = dsm_segment_handle(seg);
-		on_shmem_exit(aqo_detach_shmem, (Datum) &aqo_state->dsm_handler);
+		before_shmem_exit(aqo_detach_shmem, (Datum) &aqo_state->dsm_handler);
 
 		hdr = (dsm_seg_hdr *) dsm_segment_address(seg);
 		hdr->magic = AQO_SHARED_MAGIC;
@@ -189,7 +189,6 @@ aqo_init_shmem(void)
 							  HASH_ELEM | HASH_BLOBS);
 
 	LWLockRelease(AddinShmemInitLock);
-
 	LWLockRegisterTranche(aqo_state->lock.tranche, "aqo");
 }
 
