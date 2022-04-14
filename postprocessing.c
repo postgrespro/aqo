@@ -351,11 +351,12 @@ should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
 		}
 
 		/* Has the executor finished its work? */
-		if (TupIsNull(ps->ps_ResultTupleSlot) &&
+		if (!ps->instrument->running && TupIsNull(ps->ps_ResultTupleSlot) &&
 			ps->instrument->nloops > 0.) /* Node was visited by executor at least once. */
 		{
 			/* This is much more reliable data. So we can correct our prediction. */
-			if (ctx->learn && aqo_show_details && fabs(*nrows - predicted) / predicted > 0.2)
+			if (ctx->learn && aqo_show_details &&
+				fabs(*nrows - predicted) / predicted > 0.2)
 				elog(NOTICE,
 					 "[AQO] Learn on a finished plan node (%lu, %d), "
 					 "predicted rows: %.0lf, updated prediction: %.0lf",
@@ -695,7 +696,7 @@ aqo_timeout_handler(void)
 	ctx.learn = query_context.learn_aqo;
 	ctx.isTimedOut = true;
 
-	elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. Try to learn on partial data.");
+	elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data.");
 	learnOnPlanState(timeoutCtl.queryDesc->planstate, (void *) &ctx);
 }
 

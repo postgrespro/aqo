@@ -23,6 +23,7 @@ REGRESS =	aqo_disabled \
 			unsupported \
 			clean_aqo_data \
 			plancache	\
+			statement_timeout \
 			top_queries
 
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw

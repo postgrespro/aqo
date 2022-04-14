@@ -199,8 +199,7 @@ OkNNr_learn(OkNNrdata *data, double *features, double target, double rfactor)
 
 		return data->rows;
 	}
-
-	if (data->rows < aqo_K)
+	else if (data->rows < aqo_K)
 	{
 		/* We don't reach a limit of stored neighbors */
 
@@ -275,6 +274,5 @@ OkNNr_learn(OkNNrdata *data, double *features, double target, double rfactor)
 			}
 		}
 	}
-
 	return data->rows;
 }
