@@ -55,8 +55,8 @@ open_aqo_relation(char *heaprelnspname, char *heaprelname,
 				  char *indrelname, LOCKMODE lockmode,
 				  Relation *hrel, Relation *irel)
 {
-	Oid reloid;
-	RangeVar *rv;
+	Oid			reloid;
+	RangeVar   *rv;
 
 	reloid = RelnameGetRelid(indrelname);
 	if (!OidIsValid(reloid))
@@ -67,7 +67,10 @@ open_aqo_relation(char *heaprelnspname, char *heaprelname,
 	if (*hrel == NULL)
 		goto cleanup;
 
-	*irel = index_open(reloid,  lockmode);
+	/* Try to open index relation carefully. */
+	*irel = try_relation_open(reloid,  lockmode);
+	if (*irel == NULL)
+		goto cleanup;
 	return true;
 
 cleanup:
