@@ -110,6 +110,10 @@ append_to_file($analytics, q{
 	(SELECT count(aid) AS x FROM pgbench_accounts GROUP BY abalance HAVING abalance < :border) AS q1
 	WHERE pgbb.bid = q1.x;
 });
+
+# Avoid problems with an error fluctuations during the test above.
+$node->safe_psql('postgres', "TRUNCATE aqo_query_stat");
+
 # Look for top of problematic queries.
 $node->command_ok([ 'pgbench', '-t', "10", '-c', "$CLIENTS", '-j', "$THREADS",
 					'-f', "$analytics" ],
@@ -128,7 +132,7 @@ note("\n Queries: \n $res \n");
 $res = $node->safe_psql('postgres',
 						"SELECT count(*) FROM top_time_queries(10) v
 						WHERE v.execution_time > 0.");
-is($res, 10);
+is($res, 5);
 
 # ##############################################################################
 #
@@ -282,7 +286,8 @@ append_to_file($bank, q{
 	SELECT abalance FROM pgbench_accounts WHERE aid = :aid;
 	UPDATE pgbench_tellers SET tbalance = tbalance + :delta WHERE tid = :tid;
 	UPDATE pgbench_branches SET bbalance = bbalance + :delta WHERE bid = :bid;
-	INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (:tid, :bid, :aid, :delta, CURRENT_TIMESTAMP);
+	INSERT INTO pgbench_history (tid, bid, aid, delta, mtime)
+		VALUES (:tid, :bid, :aid, :delta, CURRENT_TIMESTAMP);
 	END;
 	\endif
 });
@@ -296,7 +301,7 @@ $node->safe_psql('postgres', "
 $node->restart();
 
 $node->command_ok([ 'pgbench', '-T',
-					"5", '-c', "$CLIENTS", '-j', "$THREADS" , '-f', "$bank"],
+					"50", '-c', "$CLIENTS", '-j', "$THREADS" , '-f', "$bank"],
 					'Conflicts with an AQO dropping command.');
 
 $node->stop();
