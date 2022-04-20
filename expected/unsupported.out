@@ -538,5 +538,54 @@ EXPLAIN (COSTS OFF)
  JOINS: 0
 (9 rows)
 
+-- XXX: Do we stuck into an unstable behavior of an error value?
+-- Live with this variant of the test for some time.
+SELECT
+  num,
+  to_char(error, '9.99EEEE')::text AS error
+FROM public.show_cardinality_errors()
+WHERE error > 0.;
+ num |   error   
+-----+-----------
+   1 |  9.69e+02
+   2 |  1.15e+02
+   3 |  3.00e+01
+   4 |  3.00e+01
+   5 |  3.00e+01
+   6 |  1.33e+00
+(6 rows)
+
 DROP TABLE t,t1 CASCADE;
+SELECT public.clean_aqo_data();
+NOTICE:  Cleaning aqo_data records
+ clean_aqo_data 
+----------------
+ 
+(1 row)
+
+-- TODO: figure out with remaining queries in the ML storage.
+SELECT num, to_char(error, '9.99EEEE')::text AS error, query_text
+FROM public.show_cardinality_errors() cef, aqo_query_texts aqt
+WHERE aqt.query_hash = cef.id;
+ num |   error   |                                        query_text                                         
+-----+-----------+-------------------------------------------------------------------------------------------
+   1 |  9.69e+02 | SELECT str FROM expln('                                                                  +
+     |           | EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)                                    +
+     |           | SELECT count(*) FROM                                                                     +
+     |           |         (SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x = t.x)) AS q1 +
+     |           |                 JOIN                                                                     +
+     |           |         (SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x <> t.x)) AS q2+
+     |           |                 ON q1.x = q2.x+1;                                                        +
+     |           | ') AS str WHERE str NOT LIKE '%Memory Usage%';
+   2 |  3.27e+02 | SELECT                                                                                   +
+     |           |   num,                                                                                   +
+     |           |   to_char(error, '9.99EEEE')::text AS error                                              +
+     |           | FROM public.show_cardinality_errors()                                                    +
+     |           | WHERE error > 0.;
+   3 |  0.00e+00 | CREATE TABLE t AS SELECT (gs.* / 50) AS x FROM generate_series(1,1000) AS gs;
+   4 |  0.00e+00 | SELECT public.clean_aqo_data();
+   5 |  0.00e+00 | CREATE TABLE t1 AS SELECT mod(gs,10) AS x, mod(gs+1,10) AS y                             +
+     |           |         FROM generate_series(1,1000) AS gs;
+(5 rows)
+
 DROP EXTENSION aqo;
