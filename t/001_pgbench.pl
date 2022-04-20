@@ -15,10 +15,24 @@ $node->append_conf('postgresql.conf', qq{
 						log_statement = 'ddl'
 					});
 
-# Test constants.
+# Test constants. Default values.
 my $TRANSACTIONS = 1000;
 my $CLIENTS = 10;
 my $THREADS = 10;
+
+# Change pgbench parameters according to the environment variable.
+if (defined $ENV{TRANSACTIONS})
+{
+	$TRANSACTIONS = $ENV{TRANSACTIONS};
+}
+if (defined $ENV{CLIENTS})
+{
+	$CLIENTS = $ENV{CLIENTS};
+}
+if (defined $ENV{THREADS})
+{
+	$THREADS = $ENV{THREADS};
+}
 
 # General purpose variables.
 my $res;
