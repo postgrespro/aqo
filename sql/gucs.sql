@@ -11,4 +11,7 @@ EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 	SELECT x FROM t;
 
+-- Check existence of the interface functions.
+SELECT obj_description('public.show_cardinality_errors'::regproc::oid);
+
 DROP EXTENSION aqo;
