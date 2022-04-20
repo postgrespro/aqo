@@ -67,7 +67,10 @@ open_aqo_relation(char *heaprelnspname, char *heaprelname,
 	/* Try to open index relation carefully. */
 	*irel = try_relation_open(reloid,  lockmode);
 	if (*irel == NULL)
+	{
+		relation_close(*hrel, lockmode);
 		goto cleanup;
+	}
 	return true;
 
 cleanup:
