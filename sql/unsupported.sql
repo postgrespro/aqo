@@ -159,7 +159,7 @@ EXPLAIN (COSTS OFF)
 SELECT
   num,
   to_char(error, '9.99EEEE')::text AS error
-FROM public.show_cardinality_errors()
+FROM public.show_cardinality_errors(true)
 WHERE error > 0.;
 
 DROP TABLE t,t1 CASCADE;
@@ -168,7 +168,7 @@ SELECT public.clean_aqo_data();
 
 -- TODO: figure out with remaining queries in the ML storage.
 SELECT num, to_char(error, '9.99EEEE')::text AS error, query_text
-FROM public.show_cardinality_errors() cef, aqo_query_texts aqt
+FROM public.show_cardinality_errors(true) cef, aqo_query_texts aqt
 WHERE aqt.query_hash = cef.id;
 
 DROP EXTENSION aqo;
