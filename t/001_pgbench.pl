@@ -133,24 +133,24 @@ $node->command_ok([ 'pgbench', '-t', "10", '-c', "$CLIENTS", '-j', "$THREADS",
 					'analytical queries in pgbench (disabled mode)');
 
 $res = $node->safe_psql('postgres',
-						"SELECT count(*) FROM top_error_queries(10) v
-						JOIN aqo_query_texts t ON (t.query_hash = v.fspace_hash)
+						"SELECT count(*) FROM show_cardinality_errors(false) v
+						JOIN aqo_query_texts t ON (t.query_hash = v.id)
 						WHERE v.error > 0. AND t.query_text LIKE '%pgbench_accounts%'");
 is($res, 3);
 $res = $node->safe_psql('postgres',
-						"SELECT * FROM top_error_queries(10) v
-						JOIN aqo_query_texts t ON (t.query_hash = v.fspace_hash)
+						"SELECT * FROM show_cardinality_errors(false) v
+						JOIN aqo_query_texts t ON (t.query_hash = v.id)
 						WHERE v.error > 0. AND t.query_text LIKE '%pgbench_accounts%'");
 note("\n TopN: \n $res \n");
 $res = $node->safe_psql('postgres',
-						"SELECT v.error, t.query_text FROM top_error_queries(10) v
-						JOIN aqo_query_texts t ON (t.query_hash = v.fspace_hash)
+						"SELECT v.error, t.query_text FROM show_cardinality_errors(false) v
+						JOIN aqo_query_texts t ON (t.query_hash = v.id)
 						WHERE v.error > 0.");
 note("\n Queries: \n $res \n");
 $res = $node->safe_psql('postgres',
 						"SELECT count(*) FROM top_time_queries(10) v
 						WHERE v.execution_time > 0.");
-is($res, 5);
+is($res, 3);
 
 # ##############################################################################
 #
