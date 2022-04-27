@@ -85,14 +85,13 @@ cleanup:
 	aqo_enabled = false;
 	disable_aqo_for_query();
 	return false;
-
 }
 
 /*
  * Returns whether the query with given hash is in aqo_queries.
  * If yes, returns the content of the first line with given hash.
  *
- * Use dirty snapshot to see all (include in-progess) data. We want to prevent
+ * Use dirty snapshot to see all (include in-progress) data. We want to prevent
  * wait in the XactLockTableWait routine.
  */
 bool
