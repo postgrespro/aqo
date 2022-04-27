@@ -1,3 +1,8 @@
+-- Switch off parallel workers because of unsteadiness.
+-- Do this in each aqo test separately, so that server regression tests pass
+-- with aqo's temporary configuration file loaded.
+SET max_parallel_workers TO 0;
+
 CREATE EXTENSION aqo;
 SET aqo.mode = 'learn';
 

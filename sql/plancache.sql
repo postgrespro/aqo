@@ -1,5 +1,10 @@
 -- Tests on interaction of AQO with cached plans.
 
+-- Switch off parallel workers because of unsteadiness.
+-- Do this in each aqo test separately, so that server regression tests pass
+-- with aqo's temporary configuration file loaded.
+SET max_parallel_workers TO 0;
+
 CREATE EXTENSION aqo;
 SET aqo.mode = 'intelligent';
 SET aqo.show_details = 'on';
