@@ -97,19 +97,22 @@ cleanup:
  *
  * Use dirty snapshot to see all (include in-progess) data. We want to prevent
  * wait in the XactLockTableWait routine.
+ * If query is found in the knowledge base, fill the query context struct.
  */
 bool
-find_query(uint64 qhash, Datum *search_values, bool *search_nulls)
+find_query(uint64 qhash, QueryContextData *ctx)
 {
-	Relation	hrel;
-	Relation	irel;
-	HeapTuple	tuple;
+	Relation		hrel;
+	Relation		irel;
+	HeapTuple		tuple;
 	TupleTableSlot *slot;
-	bool shouldFree;
-	IndexScanDesc scan;
-	ScanKeyData key;
-	SnapshotData snap;
-	bool		find_ok = false;
+	bool			shouldFree = true;
+	IndexScanDesc	scan;
+	ScanKeyData		key;
+	SnapshotData	snap;
+	bool			find_ok = false;
+	Datum			values[5];
+	bool			nulls[5] = {false, false, false, false, false};
 
 	if (!open_aqo_relation("public", "aqo_queries", "aqo_queries_query_hash_idx",
 		AccessShareLock, &hrel, &irel))
@@ -117,24 +120,30 @@ find_query(uint64 qhash, Datum *search_values, bool *search_nulls)
 
 	InitDirtySnapshot(snap);
 	scan = index_beginscan(hrel, irel, &snap, 1, 0);
-	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT4EQ, Int64GetDatum(qhash));
+	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(qhash));
 
 	index_rescan(scan, &key, 1, NULL, 0);
 	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
 	find_ok = index_getnext_slot(scan, ForwardScanDirection, slot);
 
-	if (find_ok && search_values != NULL)
+	if (find_ok)
 	{
 		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
 		Assert(shouldFree != true);
-		heap_deform_tuple(tuple, hrel->rd_att, search_values, search_nulls);
+		heap_deform_tuple(tuple, hrel->rd_att, values, nulls);
+
+		/* Fill query context data */
+		ctx->learn_aqo = DatumGetBool(values[1]);
+		ctx->use_aqo = DatumGetBool(values[2]);
+		ctx->fspace_hash = DatumGetInt64(values[3]);
+		ctx->auto_tuning = DatumGetBool(values[4]);
+		ctx->collect_stat = query_context.auto_tuning;
 	}
 
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(scan);
 	index_close(irel,  AccessShareLock);
 	table_close(hrel,  AccessShareLock);
-
 	return find_ok;
 }
 
@@ -180,7 +189,7 @@ update_query(uint64 qhash, uint64 fhash,
 	 */
 	InitDirtySnapshot(snap);
 	scan = index_beginscan(hrel, irel, &snap, 1, 0);
-	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(qhash));
+	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(qhash));
 
 	index_rescan(scan, &key, 1, NULL, 0);
 	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
@@ -225,7 +234,8 @@ update_query(uint64 qhash, uint64 fhash,
 			 * Ooops, somebody concurrently updated the tuple. It is possible
 			 * only in the case of changes made by third-party code.
 			 */
-			elog(ERROR, "AQO feature space data for signature (%ld, %ld) concurrently"
+			elog(ERROR, "AQO feature space data for signature ("UINT64_FORMAT \
+						", "UINT64_FORMAT") concurrently"
 						" updated by a stranger backend.",
 						qhash, fhash);
 			result = false;
@@ -287,7 +297,7 @@ add_query_text(uint64 qhash, const char *query_string)
 	 */
 	InitDirtySnapshot(snap);
 	scan = index_beginscan(hrel, irel, &snap, 1, 0);
-	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(qhash));
+	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(qhash));
 
 	index_rescan(scan, &key, 1, NULL, 0);
 	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
@@ -389,17 +399,17 @@ load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **relnames, bool isSafe)
 bool
 load_fss(uint64 fs, int fss, OkNNrdata *data, List **relnames)
 {
-	Relation	hrel;
-	Relation	irel;
-	HeapTuple	tuple;
+	Relation		hrel;
+	Relation		irel;
+	HeapTuple		tuple;
 	TupleTableSlot *slot;
-	bool		shouldFree;
-	bool		find_ok = false;
-	IndexScanDesc scan;
-	ScanKeyData	key[2];
-	Datum		values[AQO_DATA_COLUMNS];
-	bool		isnull[AQO_DATA_COLUMNS];
-	bool		success = true;
+	bool			shouldFree;
+	bool			find_ok = false;
+	IndexScanDesc	scan;
+	ScanKeyData		key[2];
+	Datum			values[AQO_DATA_COLUMNS];
+	bool			isnull[AQO_DATA_COLUMNS];
+	bool			success = true;
 
 	if (!open_aqo_relation("public", "aqo_data",
 						   "aqo_fss_access_idx",
@@ -407,7 +417,7 @@ load_fss(uint64 fs, int fss, OkNNrdata *data, List **relnames)
 		return false;
 
 	scan = index_beginscan(hrel, irel, SnapshotSelf, 2, 0);
-	ScanKeyInit(&key[0], 1, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fs));
+	ScanKeyInit(&key[0], 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(fs));
 	ScanKeyInit(&key[1], 2, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fss));
 	index_rescan(scan, key, 2, NULL, 0);
 
@@ -435,9 +445,10 @@ load_fss(uint64 fs, int fss, OkNNrdata *data, List **relnames)
 				*relnames = deform_strings_vector(values[5]);
 		}
 		else
-			elog(PANIC, "unexpected number of features for hash (%ld, %d):\
-						   expected %d features, obtained %d",
-						   fs, fss, data->cols, DatumGetInt32(values[2]));
+			elog(ERROR, "Unexpected number of features for hash (" \
+						UINT64_FORMAT", %d):\
+						expected %d features, obtained %d",
+						fs, fss, data->cols, DatumGetInt32(values[2]));
 	}
 	else
 		success = false;
@@ -506,9 +517,8 @@ update_fss(uint64 fs, int fss, OkNNrdata *data, List *relnames)
 	InitDirtySnapshot(snap);
 	scan = index_beginscan(hrel, irel, &snap, 2, 0);
 
-	ScanKeyInit(&key[0], 1, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fs));
+	ScanKeyInit(&key[0], 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(fs));
 	ScanKeyInit(&key[1], 2, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fss));
-
 	index_rescan(scan, key, 2, NULL, 0);
 
 	slot = MakeSingleTupleTableSlot(tupDesc, &TTSOpsBufferHeapTuple);
@@ -516,7 +526,7 @@ update_fss(uint64 fs, int fss, OkNNrdata *data, List *relnames)
 
 	if (!find_ok)
 	{
-		values[0] = Int32GetDatum(fs);
+		values[0] = Int64GetDatum(fs);
 		values[1] = Int32GetDatum(fss);
 		values[2] = Int32GetDatum(data->cols);
 
@@ -571,9 +581,8 @@ update_fss(uint64 fs, int fss, OkNNrdata *data, List *relnames)
 			 * Ooops, somebody concurrently updated the tuple. It is possible
 			 * only in the case of changes made by third-party code.
 			 */
-			elog(ERROR, "AQO data piece (%ld %d) concurrently updated"
-				 " by a stranger backend.",
-				 fs, fss);
+			elog(ERROR, "AQO data piece ("UINT64_FORMAT" %d) concurrently"
+				 " updated by a stranger backend.", fs, fss);
 			result = false;
 		}
 	}
@@ -618,7 +627,7 @@ get_aqo_stat(uint64 qhash)
 		return false;
 
 	scan = index_beginscan(hrel, irel, SnapshotSelf, 1, 0);
-	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(qhash));
+	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(qhash));
 	index_rescan(scan, &key, 1, NULL, 0);
 	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
 
@@ -689,7 +698,7 @@ update_aqo_stat(uint64 qhash, QueryStat *stat)
 
 	InitDirtySnapshot(snap);
 	scan = index_beginscan(hrel, irel, &snap, 1, 0);
-	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT4EQ, Int64GetDatum(qhash));
+	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(qhash));
 	index_rescan(scan, &key, 1, NULL, 0);
 	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
 
@@ -735,8 +744,8 @@ update_aqo_stat(uint64 qhash, QueryStat *stat)
 			 * Ooops, somebody concurrently updated the tuple. It is possible
 			 * only in the case of changes made by third-party code.
 			 */
-			elog(ERROR, "AQO statistic data for query signature %ld concurrently"
-						" updated by a stranger backend.",
+			elog(ERROR, "AQO statistic data for query signature "UINT64_FORMAT
+						" concurrently updated by a stranger backend.",
 				 qhash);
 		}
 	}
@@ -936,8 +945,8 @@ init_deactivated_queries_storage(void)
 
 	/* Create the hashtable proper */
 	MemSet(&hash_ctl, 0, sizeof(hash_ctl));
-	hash_ctl.keysize = sizeof(int);
-	hash_ctl.entrysize = sizeof(int);
+	hash_ctl.keysize = sizeof(uint64);
+	hash_ctl.entrysize = sizeof(uint64);
 	deactivated_queries = hash_create("aqo_deactivated_queries",
 									  128,		/* start small and extend */
 									  &hash_ctl,
