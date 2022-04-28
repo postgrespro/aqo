@@ -281,7 +281,7 @@ int get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash);
 
 
 /* Storage interaction */
-extern bool find_query(uint64 qhash, Datum *search_values, bool *search_nulls);
+extern bool find_query(uint64 qhash, QueryContextData *ctx);
 extern bool update_query(uint64 qhash, uint64 fhash,
 						 bool learn_aqo, bool use_aqo, bool auto_tuning);
 extern bool add_query_text(uint64 query_hash, const char *query_string);
@@ -344,7 +344,7 @@ extern double *selectivity_cache_find_global_relid(int clause_hash,
 extern void selectivity_cache_clear(void);
 
 extern Oid get_aqo_schema(void);
-extern void init_lock_tag(LOCKTAG *tag, uint32 key1, uint32 key2);
+extern void init_lock_tag(LOCKTAG *tag, uint64 key1, int32 key2);
 extern bool IsQueryDisabled(void);
 
 extern List *cur_classes;

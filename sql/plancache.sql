@@ -37,7 +37,7 @@ END $$ LANGUAGE 'plpgsql';
 
 -- The function shows 6 executions without an AQO support (nnex) and
 -- 4 executions with usage of an AQO knowledge base (nex). Planning time in the
--- case of AQO support (pt) is equal to '-1', because the query plan is exracted
+-- case of AQO support (pt) is equal to '-1', because the query plan is extracted
 -- from the plan cache.
 SELECT * FROM f1();
 

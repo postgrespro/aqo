@@ -175,8 +175,6 @@ aqo_planner(Query *parse,
 			ParamListInfo boundParams)
 {
 	bool		query_is_stored = false;
-	Datum		query_params[5];
-	bool		query_nulls[5] = {false, false, false, false, false};
 	LOCKTAG		tag;
 	MemoryContext oldCxt;
 
@@ -226,7 +224,7 @@ aqo_planner(Query *parse,
 									boundParams);
 	}
 
-	elog(DEBUG1, "AQO will be used for query '%s', class %ld",
+	elog(DEBUG1, "AQO will be used for query '%s', class "UINT64_FORMAT,
 		 query_string ? query_string : "null string", query_context.query_hash);
 
 	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
@@ -240,8 +238,7 @@ aqo_planner(Query *parse,
 		goto ignore_query_settings;
 	}
 
-	query_is_stored = find_query(query_context.query_hash, &query_params[0],
-															&query_nulls[0]);
+	query_is_stored = find_query(query_context.query_hash, &query_context);
 
 	if (!query_is_stored)
 	{
@@ -295,16 +292,12 @@ aqo_planner(Query *parse,
 	else /* Query class exists in a ML knowledge base. */
 	{
 		query_context.adding_query = false;
-		query_context.learn_aqo = DatumGetBool(query_params[1]);
-		query_context.use_aqo = DatumGetBool(query_params[2]);
-		query_context.fspace_hash = DatumGetInt64(query_params[3]);
-		query_context.auto_tuning = DatumGetBool(query_params[4]);
-		query_context.collect_stat = query_context.auto_tuning;
+
+		/* Other query_context fields filled in the find_query() routine. */
 
 		/*
 		 * Deactivate query if no one reason exists for usage of an AQO machinery.
 		 */
-		Assert(query_context.query_hash>=0);
 		if (!query_context.learn_aqo && !query_context.use_aqo &&
 			!query_context.auto_tuning && !force_collect_stat)
 			add_deactivated_query(query_context.query_hash);
@@ -330,7 +323,6 @@ aqo_planner(Query *parse,
 			 * In this mode we want to learn with incoming query (if it is not
 			 * suppressed manually) and collect stats.
 			 */
-			Assert(query_context.query_hash>=0);
 			query_context.collect_stat = true;
 			query_context.fspace_hash = query_context.query_hash;
 			break;
@@ -354,15 +346,13 @@ ignore_query_settings:
 		 * find-add query and query text must be atomic operation to prevent
 		 * concurrent insertions.
 		 */
-		Assert(query_context.query_hash>=0);
-		init_lock_tag(&tag, (uint32) query_context.query_hash, (uint32) 0);//my code
+		init_lock_tag(&tag, query_context.query_hash, 0);
 		LockAcquire(&tag, ExclusiveLock, false, false);
 		/*
 		 * Add query into the AQO knowledge base. To process an error with
 		 * concurrent addition from another backend we will try to restart
 		 * preprocessing routine.
 		 */
-		Assert(query_context.query_hash>=0);
 		update_query(query_context.query_hash, query_context.fspace_hash,
 					 query_context.learn_aqo, query_context.use_aqo,
 					 query_context.auto_tuning);
@@ -371,7 +361,6 @@ ignore_query_settings:
 		 * Add query text into the ML-knowledge base. Just for further
 		 * analysis. In the case of cached plans we could have NULL query text.
 		 */
-		Assert(query_context.query_hash>=0);
 		if (query_string != NULL)
 			add_query_text(query_context.query_hash, query_string);
 
@@ -385,7 +374,6 @@ ignore_query_settings:
 		 * query execution statistics in any mode.
 		 */
 		query_context.collect_stat = true;
-		Assert(query_context.query_hash>=0);
 		query_context.fspace_hash = query_context.query_hash;
 	}
 
