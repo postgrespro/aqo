@@ -144,7 +144,7 @@ is_in_infinite_loop_cq(double *elems, int nelems)
  * this query to false.
  */
 void
-automatical_query_tuning(uint64 query_hash, QueryStat * stat)
+automatical_query_tuning(uint64 qhash, QueryStat * stat)
 {
 	double		unstability = auto_tuning_exploration;
 	double		t_aqo,
@@ -203,11 +203,11 @@ automatical_query_tuning(uint64 query_hash, QueryStat * stat)
 		query_context.learn_aqo = query_context.use_aqo;
 	}
 	if (num_iterations <= auto_tuning_max_iterations || p_use > 0.5)
-		update_query(query_hash,
+		update_query(qhash,
 					 query_context.fspace_hash,
 					 query_context.learn_aqo,
 					 query_context.use_aqo,
 					 true);
 	else
-		update_query(query_hash, query_context.fspace_hash, false, false, false);
+		update_query(qhash, query_context.fspace_hash, false, false, false);
 }
