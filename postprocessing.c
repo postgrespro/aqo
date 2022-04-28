@@ -94,7 +94,7 @@ atomic_fss_learn_step(uint64 fhash, int fss_hash, int ncols,
 	LOCKTAG	tag;
 	int		nrows;
 
-	init_lock_tag(&tag, (uint32) fhash, fss_hash);
+	init_lock_tag(&tag, fhash, fss_hash);
 	LockAcquire(&tag, ExclusiveLock, false, false);
 
 	if (!load_fss(fhash, fss_hash, ncols, matrix, targets, &nrows, NULL))
@@ -671,10 +671,9 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 			cardinality_error = cardinality_sum_errors / cardinality_num_objects;
 		else
 			cardinality_error = -1;
-		Assert(query_context.query_hash>=0);
+
 		/* Prevent concurrent updates. */
-		init_lock_tag(&tag, (uint32) query_context.query_hash,//my code
-					 (uint32) query_context.fspace_hash);//possible here
+		init_lock_tag(&tag, query_context.query_hash, query_context.fspace_hash);
 		LockAcquire(&tag, ExclusiveLock, false, false);
 
 		if (stat != NULL)
@@ -706,7 +705,6 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 									 &stat->executions_without_aqo);
 
 			/* Store all learn data into the AQO service relations. */
-			Assert(query_context.query_hash>=0);
 			if (!query_context.adding_query && query_context.auto_tuning)
 				automatical_query_tuning(query_context.query_hash, stat);
 
@@ -970,7 +968,6 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 	 */
 	if (aqo_mode != AQO_MODE_DISABLED || force_collect_stat)
 	{
-		Assert(query_context.query_hash>=0);
 		if (aqo_show_hash)
 			ExplainPropertyInteger("Query hash", NULL,
 									query_context.query_hash, es);
