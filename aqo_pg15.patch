@@ -45,14 +45,14 @@ index 060c6186dd..742a0a3e84 100644
  	if (es->format == EXPLAIN_FORMAT_TEXT)
  		appendStringInfoChar(es->str, '\n');
 diff --git a/src/backend/nodes/copyfuncs.c b/src/backend/nodes/copyfuncs.c
-index b39b77050e..7da036f5c1 100644
+index b39b77050e..f6262419e9 100644
 --- a/src/backend/nodes/copyfuncs.c
 +++ b/src/backend/nodes/copyfuncs.c
 @@ -136,6 +136,7 @@ CopyPlanFields(const Plan *from, Plan *newnode)
  	COPY_NODE_FIELD(initPlan);
  	COPY_BITMAPSET_FIELD(extParam);
  	COPY_BITMAPSET_FIELD(allParam);
-+	COPY_NODE_FIELD(private);
++	COPY_NODE_FIELD(ext_nodes);
  }
  
  /*
@@ -69,14 +69,14 @@ index 3f8e58626c..996e21f694 100644
  
  /*
 diff --git a/src/backend/nodes/readfuncs.c b/src/backend/nodes/readfuncs.c
-index c84e5af3a2..141cab8715 100644
+index c84e5af3a2..7ded7f5397 100644
 --- a/src/backend/nodes/readfuncs.c
 +++ b/src/backend/nodes/readfuncs.c
 @@ -1666,6 +1666,11 @@ ReadCommonPlan(Plan *local_node)
  	READ_NODE_FIELD(initPlan);
  	READ_BITMAPSET_FIELD(extParam);
  	READ_BITMAPSET_FIELD(allParam);
-+	local_node->private = NIL;
++	local_node->ext_nodes = NIL;
 +	/* READ_NODE_FIELD(private);
 +	 * Don't serialize this field. It is required to serialize RestrictInfo and
 +	 * EqualenceClass.
@@ -350,7 +350,7 @@ index 8a7f61b0ae..0f10645616 100644
  {
  	double		parallel_divisor = path->parallel_workers;
 diff --git a/src/backend/optimizer/plan/createplan.c b/src/backend/optimizer/plan/createplan.c
-index 76606faa3e..c4fca39f64 100644
+index 76606faa3e..3981bea57a 100644
 --- a/src/backend/optimizer/plan/createplan.c
 +++ b/src/backend/optimizer/plan/createplan.c
 @@ -70,6 +70,7 @@
@@ -376,7 +376,7 @@ index 76606faa3e..c4fca39f64 100644
  	dest->plan_width = src->pathtarget->width;
  	dest->parallel_aware = src->parallel_aware;
  	dest->parallel_safe = src->parallel_safe;
-+	dest->private = NIL;
++	dest->ext_nodes = NIL;
  }
  
  /*
@@ -462,14 +462,14 @@ index a0f2390334..51f5a7d626 100644
  								 extra->targetList);
  
 diff --git a/src/backend/optimizer/util/relnode.c b/src/backend/optimizer/util/relnode.c
-index 520409f4ba..541342803f 100644
+index 520409f4ba..fd0524d72b 100644
 --- a/src/backend/optimizer/util/relnode.c
 +++ b/src/backend/optimizer/util/relnode.c
 @@ -259,6 +259,7 @@ build_simple_rel(PlannerInfo *root, int relid, RelOptInfo *parent)
  	rel->all_partrels = NULL;
  	rel->partexprs = NULL;
  	rel->nullable_partexprs = NULL;
-+	rel->private = NULL;
++	rel->ext_nodes = NULL;
  
  	/*
  	 * Pass assorted information down the inheritance hierarchy.
@@ -485,7 +485,7 @@ index 520409f4ba..541342803f 100644
  	joinrel->all_partrels = NULL;
  	joinrel->partexprs = NULL;
  	joinrel->nullable_partexprs = NULL;
-+	joinrel->private = NULL;
++	joinrel->ext_nodes = NULL;
  
  	/* Compute information relevant to the foreign relations. */
  	set_foreign_rel_properties(joinrel, outer_rel, inner_rel);
@@ -493,7 +493,7 @@ index 520409f4ba..541342803f 100644
  	joinrel->all_partrels = NULL;
  	joinrel->partexprs = NULL;
  	joinrel->nullable_partexprs = NULL;
-+	joinrel->private = NULL;
++	joinrel->ext_nodes = NULL;
  
  	joinrel->top_parent_relids = bms_union(outer_rel->top_parent_relids,
  										   inner_rel->top_parent_relids);
@@ -584,7 +584,7 @@ index 666977fb1f..33b109afbb 100644
  extern void ExplainQuery(ParseState *pstate, ExplainStmt *stmt,
  						 ParamListInfo params, DestReceiver *dest);
 diff --git a/src/include/nodes/pathnodes.h b/src/include/nodes/pathnodes.h
-index a6e5db4eec..34d1840f34 100644
+index a6e5db4eec..e8bd0e52c8 100644
 --- a/src/include/nodes/pathnodes.h
 +++ b/src/include/nodes/pathnodes.h
 @@ -757,6 +757,10 @@ typedef struct RelOptInfo
@@ -604,7 +604,7 @@ index a6e5db4eec..34d1840f34 100644
  	List	  **nullable_partexprs; /* Nullable partition key expressions */
 -} RelOptInfo;
 +
-+	List		*private;
++	List		*ext_nodes;
 +} 	RelOptInfo;
  
  /*
@@ -621,7 +621,7 @@ index a6e5db4eec..34d1840f34 100644
  
  
 diff --git a/src/include/nodes/plannodes.h b/src/include/nodes/plannodes.h
-index 0ea9a22dfb..831e213eb0 100644
+index 0ea9a22dfb..d084e4f8a0 100644
 --- a/src/include/nodes/plannodes.h
 +++ b/src/include/nodes/plannodes.h
 @@ -159,6 +159,9 @@ typedef struct Plan
@@ -630,7 +630,7 @@ index 0ea9a22dfb..831e213eb0 100644
  	Bitmapset  *allParam;
 +
 +	/* Additional field for an extension purposes. */
-+	List		*private;
++	List		*ext_nodes;
  } Plan;
  
  /* ----------------
