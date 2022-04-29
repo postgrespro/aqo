@@ -68,7 +68,7 @@ get_aqo_plan_node(Plan *plan, bool create)
 	AQOPlanNode *node = NULL;
 	ListCell	*lc;
 
-	foreach(lc, plan->private)
+	foreach(lc, plan->ext_nodes)
 	{
 		AQOPlanNode *candidate = (AQOPlanNode *) lfirst(lc);
 
@@ -88,7 +88,7 @@ get_aqo_plan_node(Plan *plan, bool create)
 			return &DefaultAQOPlanNode;
 
 		node = create_aqo_plan_node();
-		plan->private = lappend(plan->private, node);
+		plan->ext_nodes = lappend(plan->ext_nodes, node);
 	}
 
 	Assert(node);
@@ -176,10 +176,10 @@ subplan_hunter(Node *node, void *context)
 										   splan->plan_id - 1);
 		upper_rel = fetch_upper_rel(subroot, UPPERREL_FINAL, NULL);
 
-		Assert(list_length(upper_rel->private) == 1);
-		Assert(IsA((Node *) linitial(upper_rel->private), A_Const));
+		Assert(list_length(upper_rel->ext_nodes) == 1);
+		Assert(IsA((Node *) linitial(upper_rel->ext_nodes), A_Const));
 
-		fss = (A_Const *) linitial(upper_rel->private);
+		fss = (A_Const *) linitial(upper_rel->ext_nodes);
 		return (Node *) copyObject(fss);
 	}
 	return expression_tree_mutator(node, subplan_hunter, context);
@@ -665,5 +665,5 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 	fss_node->val.type = T_Integer;
 	fss_node->location = -1;
 	fss_node->val.val.ival = get_fss_for_object(relids, clauses, NIL, NULL, NULL);
-	output_rel->private = lappend(output_rel->private, (void *) fss_node);
+	output_rel->ext_nodes = lappend(output_rel->ext_nodes, (void *) fss_node);
 }
