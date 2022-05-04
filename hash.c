@@ -449,11 +449,11 @@ get_relations_hash(List *relnames)
 	/* generate array of hashes. */
 	foreach(lc, relnames)
 	{
-		String *relname = lfirst_node(String, lc);
+		Value *relname = (Value *) lfirst(lc);
 
 		hashes[i++] = DatumGetInt64(hash_any_extended(
-												(unsigned char *) relname->sval,
-												strlen(relname->sval), 0));
+											(unsigned char *) strVal(relname),
+											strlen(strVal(relname)), 0));
 	}
 
 	/* Sort the array to make query insensitive to input order of relations. */
