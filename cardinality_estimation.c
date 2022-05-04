@@ -45,8 +45,8 @@ predict_debug_output(List *clauses, List *selectivities,
 	appendStringInfoString(&debug_str, "}, relnames: { ");
 	foreach(lc, relnames)
 	{
-		String *relname = lfirst_node(String, lc);
-		appendStringInfo(&debug_str, "%s ", relname->sval);
+		Value *relname = lfirst_node(String, lc);
+		appendStringInfo(&debug_str, "%s ", valStr(relname));
 	}
 
 	appendStringInfo(&debug_str, "}, result: %lf", result);

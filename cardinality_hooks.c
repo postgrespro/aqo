@@ -164,12 +164,9 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	rte = planner_rt_fetch(rel->relid, root);
 	if (rte && OidIsValid(rte->relid))
 	{
-		String *s = makeNode(String);
-
 		/* Predict for a plane table. */
 		Assert(rte->eref && rte->eref->aliasname);
-		s->sval = pstrdup(rte->eref->aliasname);
-		relnames = list_make1(s);
+		relnames = list_make1(makeString(pstrdup(rte->eref->aliasname)));
 	}
 
 	clauses = aqo_get_clauses(root, rel->baserestrictinfo);
@@ -269,12 +266,9 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 
 	if (rte && OidIsValid(rte->relid))
 	{
-		String *s = makeNode(String);
-
 		/* Predict for a plane table. */
 		Assert(rte->eref && rte->eref->aliasname);
-		s->sval = pstrdup(rte->eref->aliasname);
-		relnames = list_make1(s);
+		relnames = list_make1(makeString(pstrdup(rte->eref->aliasname)));
 	}
 
 	predicted = predict_for_relation(allclauses, selectivities, relnames, &fss);

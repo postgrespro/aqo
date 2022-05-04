@@ -243,7 +243,7 @@ _PG_init(void)
 	RegisterResourceReleaseCallback(aqo_free_callback, NULL);
 	RegisterAQOPlanNodeMethods();
 
-	MarkGUCPrefixReserved("aqo");
+	EmitWarningsOnPlaceholders("aqo");
 	RequestAddinShmemSpace(aqo_memsize());
 }
 
