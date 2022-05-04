@@ -138,12 +138,12 @@ default_estimate_num_groups(PlannerInfo *root, List *groupExprs,
 void
 aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 {
-	double	predicted;
-	RangeTblEntry *rte;
-	List   *relnames = NIL;
-	List   *selectivities = NULL;
-	List   *clauses;
-	int		fss = 0;
+	double			predicted;
+	RangeTblEntry  *rte;
+	RelSortOut		rels = {NIL, NIL};
+	List		   *selectivities = NULL;
+	List		   *clauses;
+	int				fss = 0;
 
 	if (IsQueryDisabled())
 		/* Fast path. */
@@ -164,21 +164,21 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	rte = planner_rt_fetch(rel->relid, root);
 	if (rte && OidIsValid(rte->relid))
 	{
-		String *s = makeNode(String);
-
 		/* Predict for a plane table. */
 		Assert(rte->eref && rte->eref->aliasname);
-		s->sval = pstrdup(rte->eref->aliasname);
-		relnames = list_make1(s);
+
+		 get_list_of_relids(root, rel->relids, &rels);
 	}
 
 	clauses = aqo_get_clauses(root, rel->baserestrictinfo);
-	predicted = predict_for_relation(clauses, selectivities, relnames, &fss);
+	predicted = predict_for_relation(clauses, selectivities, rels.signatures,
+									 &fss);
 	rel->fss_hash = fss;
 
+	list_free(rels.hrels);
+	list_free(rels.signatures);
 	list_free_deep(selectivities);
 	list_free(clauses);
-	list_free(relnames);
 
 	if (predicted >= 0)
 	{
@@ -215,7 +215,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 {
 	double		predicted;
 	RangeTblEntry *rte = NULL;
-	List	   *relnames = NIL;
+	RelSortOut	rels = {NIL, NIL};
 	List	   *allclauses = NULL;
 	List	   *selectivities = NULL;
 	ListCell   *l;
@@ -270,15 +270,15 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 
 	if (rte && OidIsValid(rte->relid))
 	{
-		String *s = makeNode(String);
-
 		/* Predict for a plane table. */
 		Assert(rte->eref && rte->eref->aliasname);
-		s->sval = pstrdup(rte->eref->aliasname);
-		relnames = list_make1(s);
+
+		get_list_of_relids(root, rel->relids, &rels);
 	}
 
-	predicted = predict_for_relation(allclauses, selectivities, relnames, &fss);
+	predicted = predict_for_relation(allclauses, selectivities, rels.signatures, &fss);
+	list_free(rels.hrels);
+	list_free(rels.signatures);
 
 	predicted_ppi_rows = predicted;
 	fss_ppi_hash = fss;
@@ -303,7 +303,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 							   List *restrictlist)
 {
 	double		predicted;
-	List	   *relnames;
+	RelSortOut rels = {NIL, NIL};
 	List	   *outer_clauses;
 	List	   *inner_clauses;
 	List	   *allclauses;
@@ -329,7 +329,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 		goto default_estimator;
 	}
 
-	relnames = get_relnames(root, rel->relids);
+	get_list_of_relids(root, rel->relids, &rels);
 	outer_clauses = get_path_clauses(outer_rel->cheapest_total_path, root,
 									 &outer_selectivities);
 	inner_clauses = get_path_clauses(inner_rel->cheapest_total_path, root,
@@ -340,7 +340,11 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 								list_concat(outer_selectivities,
 											inner_selectivities));
 
-	predicted = predict_for_relation(allclauses, selectivities, relnames, &fss);
+	predicted = predict_for_relation(allclauses, selectivities, rels.signatures,
+									 &fss);
+	list_free(rels.hrels);
+	list_free(rels.signatures);
+
 	rel->fss_hash = fss;
 
 	if (predicted >= 0)
@@ -371,7 +375,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 								   List *clauses)
 {
 	double		predicted;
-	List	   *relnames;
+	RelSortOut	rels = {NIL, NIL};
 	List	   *outer_clauses;
 	List	   *inner_clauses;
 	List	   *allclauses;
@@ -397,7 +401,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 		goto default_estimator;
 	}
 
-	relnames = get_relnames(root, rel->relids);
+	get_list_of_relids(root, rel->relids, &rels);
 	outer_clauses = get_path_clauses(outer_path, root, &outer_selectivities);
 	inner_clauses = get_path_clauses(inner_path, root, &inner_selectivities);
 	allclauses = list_concat(aqo_get_clauses(root, clauses),
@@ -406,7 +410,10 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 								list_concat(outer_selectivities,
 											inner_selectivities));
 
-	predicted = predict_for_relation(allclauses, selectivities, relnames, &fss);
+	predicted = predict_for_relation(allclauses, selectivities, rels.signatures,
+									 &fss);
+	list_free(rels.hrels);
+	list_free(rels.signatures);
 
 	predicted_ppi_rows = predicted;
 	fss_ppi_hash = fss;
@@ -433,13 +440,16 @@ predict_num_groups(PlannerInfo *root, Path *subpath, List *group_exprs,
 		child_fss = subpath->parent->fss_hash;
 	else
 	{
-		List *relnames;
-		List *clauses;
-		List *selectivities = NIL;
+		RelSortOut rels = {NIL, NIL};
+		List	  *clauses;
+		List	  *selectivities = NIL;
 
-		relnames = get_relnames(root, subpath->parent->relids);
+		get_list_of_relids(root, subpath->parent->relids, &rels);
 		clauses = get_path_clauses(subpath, root, &selectivities);
-		(void) predict_for_relation(clauses, selectivities, relnames, &child_fss);
+		(void) predict_for_relation(clauses, selectivities, rels.signatures,
+									&child_fss);
+		list_free(rels.hrels);
+		list_free(rels.signatures);
 	}
 
 	*fss = get_grouped_exprs_hash(child_fss, group_exprs);

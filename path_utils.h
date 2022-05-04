@@ -9,16 +9,28 @@
 #define AQO_PLAN_NODE	"AQOPlanNode"
 
 /*
+ * Find and sort out relations that used in the query:
+ * Use oids of relations to store dependency of ML row on a set of tables.
+ * Use oids of temporary tables to get access to these structure for preparing
+ * a kind of signature.
+ */
+typedef struct
+{
+	List *hrels; /* oids of persistent relations */
+	List *signatures; /* list of hashes: on qualified name of a persistent
+						 * table or on a table structure for temp table */
+} RelSortOut;
+
+/*
  * information for adaptive query optimization
  */
 typedef struct AQOPlanNode
 {
-	ExtensibleNode node;
-	bool		had_path;
-	List		*relids;
-	List		*temp_relnames; /* We store name of temporary table because OID by-default haven't sense at other backends. */
-	List		*clauses;
-	List		*selectivities;
+	ExtensibleNode	node;
+	bool			had_path;
+	RelSortOut	   *rels;
+	List		   *clauses;
+	List		   *selectivities;
 
 	/* Grouping expressions from a target list. */
 	List		*grouping_exprs;
@@ -48,7 +60,8 @@ extern List *get_selectivities(PlannerInfo *root,
 							   int varRelid,
 							   JoinType jointype,
 							   SpecialJoinInfo *sjinfo);
-extern List *get_relnames(PlannerInfo *root, Relids relids);
+extern void get_list_of_relids(PlannerInfo *root, Relids relids,
+							   RelSortOut *rels);
 
 extern List *get_path_clauses(Path *path,
 							  PlannerInfo *root,

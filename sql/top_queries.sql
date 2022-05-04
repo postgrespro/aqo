@@ -3,9 +3,10 @@ SET aqo.mode = 'disabled';
 SET aqo.force_collect_stat = 'on';
 
 --
--- Dummy test. CREATE TABLE shouldn't find in the ML storage. But a simple
--- select must be in. Also here we test on gathering a stat on temp and plain
+-- Dummy test. CREATE TABLE shouldn't be found in the ML storage. But a simple
+-- select must recorded. Also here we test on gathering a stat on temp and plain
 -- relations.
+-- XXX: Right now we ignore queries if no one permanent table is touched.
 --
 CREATE TEMP TABLE ttt AS SELECT count(*) AS cnt FROM generate_series(1,10);
 CREATE TABLE ttp AS SELECT count(*) AS cnt FROM generate_series(1,10);

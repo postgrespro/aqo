@@ -18,8 +18,10 @@
  *	  aqo/hash.c
  *
  */
-
 #include "postgres.h"
+
+#include "access/htup.h"
+#include "common/fe_memutils.h"
 
 #include "math.h"
 
@@ -31,7 +33,7 @@ static int	get_node_hash(Node *node);
 static int	get_unsorted_unsafe_int_array_hash(int *arr, int len);
 static int	get_unordered_int_list_hash(List *lst);
 
-static int64 get_relations_hash(List *relnames);
+static int64 get_relations_hash(List *relsigns);
 static int get_fss_hash(int clauses_hash, int eclasses_hash,
 			 int relidslist_hash);
 
@@ -149,7 +151,7 @@ get_grouped_exprs_hash(int child_fss, List *group_exprs)
 }
 
 /*
- * For given object (clauselist, selectivities, relnames) creates feature
+ * For given object (clauselist, selectivities, reloids) creates feature
  * subspace:
  *		sets nfeatures
  *		creates and computes fss_hash
@@ -158,7 +160,7 @@ get_grouped_exprs_hash(int child_fss, List *group_exprs)
  * Special case for nfeatures == NULL: don't calculate features.
  */
 int
-get_fss_for_object(List *relnames, List *clauselist,
+get_fss_for_object(List *relsigns, List *clauselist,
 				   List *selectivities, int *nfeatures, double **features)
 {
 	int			n;
@@ -172,7 +174,7 @@ get_fss_for_object(List *relnames, List *clauselist,
 	int		   *eclass_hash;
 	int			clauses_hash;
 	int			eclasses_hash;
-	int			relnames_hash;
+	int			relations_hash;
 	List	  **args;
 	ListCell   *lc;
 	int			i,
@@ -262,8 +264,8 @@ get_fss_for_object(List *relnames, List *clauselist,
 	 */
 	clauses_hash = get_int_array_hash(sorted_clauses, n - sh);
 	eclasses_hash = get_int_array_hash(eclass_hash, nargs);
-	relnames_hash = (int) get_relations_hash(relnames);
-	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relnames_hash);
+	relations_hash = (int) get_relations_hash(relsigns);
+	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relations_hash);
 
 	pfree(clause_hashes);
 	pfree(sorted_clauses);
@@ -439,32 +441,23 @@ get_fss_hash(int clauses_hash, int eclasses_hash, int relidslist_hash)
  * Each element of a list must have a String type,
  */
 static int64
-get_relations_hash(List *relnames)
+get_relations_hash(List *relsigns)
 {
-	int64	   *hashes = palloc(list_length(relnames) * sizeof(int64));
+	int			nhashes = 0;
+	int64	   *hashes = palloc(list_length(relsigns) * sizeof(uint64));
 	ListCell   *lc;
-	int64		hash = 0;
-	int			i = 0;
 
-	/* generate array of hashes. */
-	foreach(lc, relnames)
+	foreach(lc, relsigns)
 	{
-		String *relname = lfirst_node(String, lc);
-
-		hashes[i++] = DatumGetInt64(hash_any_extended(
-												(unsigned char *) relname->sval,
-												strlen(relname->sval), 0));
+		hashes[nhashes++] = *(int64 *) lfirst(lc);
 	}
 
 	/* Sort the array to make query insensitive to input order of relations. */
-	qsort(hashes, i, sizeof(int64), int64_compare);
+	qsort(hashes, nhashes, sizeof(int64), int64_compare);
 
 	/* Make a final hash value */
-	hash = DatumGetInt64(hash_any_extended((unsigned char *) hashes,
-										   i * sizeof(int64), 0));
-
-	pfree(hashes);
-	return hash;
+	return DatumGetInt64(hash_any_extended((const unsigned char *) hashes,
+										   nhashes * sizeof(int64), 0));
 }
 
 /*

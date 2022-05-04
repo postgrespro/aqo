@@ -281,12 +281,12 @@ extern bool find_query(uint64 qhash, QueryContextData *ctx);
 extern bool update_query(uint64 qhash, uint64 fhash,
 						 bool learn_aqo, bool use_aqo, bool auto_tuning);
 extern bool add_query_text(uint64 query_hash, const char *query_string);
-extern bool load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **relnames,
+extern bool load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 						 bool isSafe);
-extern bool load_fss(uint64 fs, int fss, OkNNrdata *data, List **relnames);
+extern bool load_fss(uint64 fs, int fss, OkNNrdata *data, List **reloids);
 extern bool update_fss_ext(uint64 fs, int fss, OkNNrdata *data,
-						   List *relnames, bool isTimedOut);
-extern bool update_fss(uint64 fs, int fss, OkNNrdata *data, List *relnames);
+						   List *reloids, bool isTimedOut);
+extern bool update_fss(uint64 fs, int fss, OkNNrdata *data, List *reloids);
 QueryStat *get_aqo_stat(uint64 query_hash);
 void update_aqo_stat(uint64 query_hash, QueryStat * stat);
 extern bool my_index_insert(Relation indexRelation,	Datum *values, bool *isnull,
@@ -306,8 +306,8 @@ extern void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 extern void print_node_explain(ExplainState *es, PlanState *ps, Plan *plan);
 
 /* Cardinality estimation */
-double predict_for_relation(List *restrict_clauses, List *selectivities,
-							List *relnames, int *fss);
+extern double predict_for_relation(List *restrict_clauses, List *selectivities,
+								   List *relsigns, int *fss);
 
 /* Query execution statistics collecting hooks */
 void aqo_ExecutorStart(QueryDesc *queryDesc, int eflags);

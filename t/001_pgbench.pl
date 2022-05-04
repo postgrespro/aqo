@@ -211,10 +211,10 @@ is($res, 'disabled');
 # Number of rows in aqo_data: related to pgbench test and total value.
 my $pgb_fss_count = $node->safe_psql('postgres', "
 	SELECT count(*) FROM aqo_data
-	WHERE	$aoid ::regclass::text = ANY(oids) OR
-			$boid ::regclass::text = ANY(oids) OR
-			$toid ::regclass::text = ANY(oids) OR
-			$hoid ::regclass::text = ANY(oids)
+	WHERE	$aoid = ANY(oids) OR
+			$boid = ANY(oids) OR
+			$toid = ANY(oids) OR
+			$hoid = ANY(oids)
 ");
 $fss_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_data;");
 
@@ -224,10 +224,10 @@ my $pgb_fs_count = $node->safe_psql('postgres', "
 	WHERE fspace_hash IN (
 		SELECT fspace_hash FROM aqo_data
 		WHERE
-			$aoid ::regclass::text = ANY(oids) OR
-			$boid ::regclass::text = ANY(oids) OR
-			$toid ::regclass::text = ANY(oids) OR
-			$hoid ::regclass::text = ANY(oids)
+			$aoid = ANY(oids) OR
+			$boid = ANY(oids) OR
+			$toid = ANY(oids) OR
+			$hoid = ANY(oids)
 	)
 ");
 $fs_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_queries;");
@@ -238,10 +238,10 @@ my $pgb_fs_samples_count = $node->safe_psql('postgres', "
 	WHERE query_hash IN (
 		SELECT fspace_hash FROM aqo_data
 		WHERE
-			$aoid ::regclass::text = ANY(oids) OR
-			$boid ::regclass::text = ANY(oids) OR
-			$toid ::regclass::text = ANY(oids) OR
-			$hoid ::regclass::text = ANY(oids)
+			$aoid = ANY(oids) OR
+			$boid = ANY(oids) OR
+			$toid = ANY(oids) OR
+			$hoid = ANY(oids)
 	)
 ");
 $fs_samples_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_query_texts;");
@@ -252,10 +252,10 @@ my $pgb_stat_count = $node->safe_psql('postgres', "
 	WHERE query_hash IN (
 		SELECT fspace_hash FROM aqo_data
 		WHERE
-			$aoid ::regclass::text = ANY(oids) OR
-			$boid ::regclass::text = ANY(oids) OR
-			$toid ::regclass::text = ANY(oids) OR
-			$hoid ::regclass::text = ANY(oids)
+			$aoid = ANY(oids) OR
+			$boid = ANY(oids) OR
+			$toid = ANY(oids) OR
+			$hoid = ANY(oids)
 	)
 ");
 $stat_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_query_stat;");

@@ -26,7 +26,7 @@
 #ifdef AQO_DEBUG_PRINT
 static void
 predict_debug_output(List *clauses, List *selectivities,
-					 List *relnames, int fss, double result)
+					 List *reloids, int fss, double result)
 {
 	StringInfoData debug_str;
 	ListCell *lc;
@@ -42,8 +42,8 @@ predict_debug_output(List *clauses, List *selectivities,
 		appendStringInfo(&debug_str, "%lf ", *s);
 	}
 
-	appendStringInfoString(&debug_str, "}, relnames: { ");
-	foreach(lc, relnames)
+	appendStringInfoString(&debug_str, "}, reloids: { ");
+	foreach(lc, reloids)
 	{
 		String *relname = lfirst_node(String, lc);
 		appendStringInfo(&debug_str, "%s ", relname->sval);
@@ -59,22 +59,22 @@ predict_debug_output(List *clauses, List *selectivities,
  * General method for prediction the cardinality of given relation.
  */
 double
-predict_for_relation(List *clauses, List *selectivities,
-					 List *relnames, int *fss)
+predict_for_relation(List *clauses, List *selectivities, List *relsigns,
+					 int *fss)
 {
 	double	   *features;
 	double		result;
 	int			i;
 	OkNNrdata	data;
 
-	if (relnames == NIL)
+	if (relsigns == NIL)
 		/*
 		 * Don't make prediction for query plans without any underlying plane
 		 * tables. Use return value -4 for debug purposes.
 		 */
 		return -4.;
 
-	*fss = get_fss_for_object(relnames, clauses, selectivities,
+	*fss = get_fss_for_object(relsigns, clauses, selectivities,
 							  &data.cols, &features);
 
 	if (data.cols > 0)
@@ -94,7 +94,7 @@ predict_for_relation(List *clauses, List *selectivities,
 		result = -1;
 	}
 #ifdef AQO_DEBUG_PRINT
-	predict_debug_output(clauses, selectivities, relnames, *fss, result);
+	predict_debug_output(clauses, selectivities, relsigns, *fss, result);
 #endif
 	pfree(features);
 	if (data.cols > 0)

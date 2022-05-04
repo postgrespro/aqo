@@ -174,13 +174,13 @@ aqo_planner(Query *parse,
 			int cursorOptions,
 			ParamListInfo boundParams)
 {
-	bool		query_is_stored = false;
-	LOCKTAG		tag;
-	MemoryContext oldCxt;
+	bool			query_is_stored = false;
+	LOCKTAG			tag;
+	MemoryContext	oldCxt;
 
 	 /*
 	  * We do not work inside an parallel worker now by reason of insert into
-	  * the heap during planning. Transactions is synchronized between parallel
+	  * the heap during planning. Transactions are synchronized between parallel
 	  * sections. See GetCurrentCommandId() comments also.
 	  */
 	if (!aqoIsEnabled() ||
@@ -458,7 +458,7 @@ isQueryUsingSystemRelation_walker(Node *node, void *context)
 				Relation	rel = table_open(rte->relid, AccessShareLock);
 				bool		is_catalog = IsCatalogRelation(rel);
 				bool		is_aqo_rel = IsAQORelation(rel);
-				bool		*trivQuery = (bool *) context;
+				bool	   *trivQuery = (bool *) context;
 
 				table_close(rel, AccessShareLock);
 				if (is_catalog || is_aqo_rel)
