@@ -159,6 +159,7 @@ find_query(uint64 qhash, QueryContextData *ctx)
  *
  * Such logic is possible, because this update is performed by AQO itself. It is
  * not break any learning logic besides possible additional learning iterations.
+ * Pass NIL as a value of the relations field to avoid updating it.
  */
 bool
 update_query(uint64 qhash, uint64 fhash,
@@ -324,21 +325,21 @@ add_query_text(uint64 qhash, const char *query_string)
 	return true;
 }
 
-
+/*
 static ArrayType *
-form_strings_vector(List *relnames)
+form_strings_vector(List *reloids)
 {
 	Datum	   *rels;
 	ArrayType  *array;
 	ListCell   *lc;
 	int			i = 0;
 
-	if (relnames == NIL)
+	if (reloids == NIL)
 		return NULL;
 
-	rels = (Datum *) palloc(list_length(relnames) * sizeof(Datum));
+	rels = (Datum *) palloc(list_length(reloids) * sizeof(Datum));
 
-	foreach(lc, relnames)
+	foreach(lc, reloids)
 	{
 		char *relname = strVal(lfirst(lc));
 
@@ -357,7 +358,7 @@ deform_strings_vector(Datum datum)
 	Datum	   *values;
 	int			i;
 	int			nelems = 0;
-	List	   *relnames = NIL;
+	List	   *reloids = NIL;
 
 	deconstruct_array(array, TEXTOID, -1, false, TYPALIGN_INT,
 					  &values, NULL, &nelems);
@@ -366,23 +367,24 @@ deform_strings_vector(Datum datum)
 		Value *s;
 
 		s = makeString(pstrdup(TextDatumGetCString(values[i])));
-		relnames = lappend(relnames, s);
+		reloids = lappend(reloids, s);
 	}
 
 	pfree(values);
 	pfree(array);
-	return relnames;
+	return reloids;
 }
+*/
 
 bool
-load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **relnames, bool isSafe)
+load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids, bool isSafe)
 {
 	if (isSafe && (!aqo_learn_statement_timeout || !lc_has_fss(fs, fss)))
-		return load_fss(fs, fss, data, relnames);
+		return load_fss(fs, fss, data, reloids);
 	else
 	{
 		Assert(aqo_learn_statement_timeout);
-		return lc_load_fss(fs, fss, data, relnames);
+		return lc_load_fss(fs, fss, data, reloids);
 	}
 }
 
@@ -401,7 +403,7 @@ load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **relnames, bool isSafe)
  *			objects in the given feature space
  */
 bool
-load_fss(uint64 fs, int fss, OkNNrdata *data, List **relnames)
+load_fss(uint64 fs, int fss, OkNNrdata *data, List **reloids)
 {
 	Relation	hrel;
 	Relation	irel;
@@ -445,11 +447,24 @@ load_fss(uint64 fs, int fss, OkNNrdata *data, List **relnames)
 			deform_vector(values[4], data->targets, &(data->rows));
 			deform_vector(values[6], data->rfactors, &(data->rows));
 
-			if (relnames != NULL)
-				*relnames = deform_strings_vector(values[5]);
+			if (reloids != NULL)
+			{
+				ArrayType  *array = DatumGetArrayTypePCopy(PG_DETOAST_DATUM(values[5]));
+				Datum	   *values;
+				int			nrows;
+				int			i;
+
+				deconstruct_array(array, OIDOID, sizeof(Oid), true,
+								  TYPALIGN_INT, &values, NULL, &nrows);
+				for (i = 0; i < nrows; ++i)
+					*reloids = lappend_oid(*reloids, DatumGetObjectId(values[i]));
+
+				pfree(values);
+				pfree(array);
+			}
 		}
 		else
-			elog(ERROR, "unexpected number of features for hash (" \
+			elog(ERROR, "[AQO] Unexpected number of features for hash (" \
 						UINT64_FORMAT", %d):\
 						expected %d features, obtained %d",
 						fs, fss, data->cols, DatumGetInt32(values[2]));
@@ -466,13 +481,13 @@ load_fss(uint64 fs, int fss, OkNNrdata *data, List **relnames)
 }
 
 bool
-update_fss_ext(uint64 fs, int fss, OkNNrdata *data, List *relnames,
+update_fss_ext(uint64 fs, int fss, OkNNrdata *data, List *reloids,
 			   bool isTimedOut)
 {
 	if (!isTimedOut)
-		return update_fss(fs, fss, data, relnames);
+		return update_fss(fs, fss, data, reloids);
 	else
-		return lc_update_fss(fs, fss, data, relnames);
+		return lc_update_fss(fs, fss, data, reloids);
 }
 
 /*
@@ -488,7 +503,7 @@ update_fss_ext(uint64 fs, int fss, OkNNrdata *data, List *relnames,
  * Caller guaranteed that no one AQO process insert or update this data row.
  */
 bool
-update_fss(uint64 fs, int fss, OkNNrdata *data, List *relnames)
+update_fss(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 {
 	Relation	hrel;
 	Relation	irel;
@@ -541,10 +556,28 @@ update_fss(uint64 fs, int fss, OkNNrdata *data, List *relnames)
 
 		values[4] = PointerGetDatum(form_vector(data->targets, data->rows));
 
-		/* Form array of relids. Only once. */
-		values[5] = PointerGetDatum(form_strings_vector(relnames));
-		if ((void *) values[5] == NULL)
+		/* Serialize list of reloids. Only once. */
+		if (reloids != NIL)
+		{
+			int nrows = list_length(reloids);
+			ListCell   *lc;
+			Datum	   *elems;
+			ArrayType  *array;
+			int			i = 0;
+
+			elems = palloc(sizeof(*elems) * nrows);
+			foreach (lc, reloids)
+				elems[i++] = ObjectIdGetDatum(lfirst_oid(lc));
+
+			array = construct_array(elems, nrows, OIDOID, sizeof(Oid), true,
+									TYPALIGN_INT);
+			values[5] = PointerGetDatum(array);
+			pfree(elems);
+		}
+		else
+			/* XXX: Is it really possible? */
 			isnull[5] = true;
+
 		values[6] = PointerGetDatum(form_vector(data->rfactors, data->rows));
 		tuple = heap_form_tuple(tupDesc, values, isnull);
 
