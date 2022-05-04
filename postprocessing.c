@@ -81,6 +81,8 @@ static void update_query_stat_row(double *et, int *et_size,
 static void StoreToQueryEnv(QueryDesc *queryDesc);
 static void StorePlanInternals(QueryDesc *queryDesc);
 static bool ExtractFromQueryEnv(QueryDesc *queryDesc);
+static int64 max_timeout_value;
+static int64 growth_rate = 3;
 
 
 /*
@@ -692,14 +694,44 @@ aqo_timeout_handler(void)
 	ctx.learn = query_context.learn_aqo;
 	ctx.isTimedOut = true;
 
-	elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data.");
+	elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data. Timeout is %d",(int) get_timeout_finish_time(timeoutCtl.id));
 	learnOnPlanState(timeoutCtl.queryDesc->planstate, (void *) &ctx);
+}
+
+/*
+ * Function to get the value of a variable with exponential growth
+ */
+static int64
+get_increment()
+{
+	return pow(1 + growth_rate, query_context.count_increase_timeout);
+}
+
+/*
+ * Function to update flexible timeout
+ * with value of STETAMENT_TIMEOUT - 1 nano sec
+ * or lower
+ *
+ */
+void
+increase_flex_timeout(uint64 query_hash, int64 flex_timeout_fin_time)
+{
+	LOCKTAG		tag;
+	flex_timeout_fin_time = (flex_timeout_fin_time + 1) * get_increment();
+
+	init_lock_tag(&tag, query_context.query_hash, 0);
+	LockAcquire(&tag, ExclusiveLock, false, false);
+	if (!update_query_timeout(query_hash, flex_timeout_fin_time, query_context.count_increase_timeout + 1))
+		elog(NOTICE, "timeout is not updated");
+	LockRelease(&tag, ExclusiveLock, false);
 }
 
 static bool
 set_timeout_if_need(QueryDesc *queryDesc)
 {
-	TimestampTz	fin_time;
+	max_timeout_value = Min((int64) get_timeout_finish_time(STATEMENT_TIMEOUT)-1, (int64) aqo_statement_timeout);
+	if (max_timeout_value == 0)
+		max_timeout_value = Min((int64) get_timeout_finish_time(STATEMENT_TIMEOUT)-1, query_context.flex_timeout);
 
 	if (!get_timeout_active(STATEMENT_TIMEOUT) || !aqo_learn_statement_timeout)
 		return false;
@@ -710,6 +742,8 @@ set_timeout_if_need(QueryDesc *queryDesc)
 	if (IsQueryDisabled() || IsParallelWorker() ||
 		!(query_context.use_aqo || query_context.learn_aqo))
 		return false;
+
+	get_flex_timeout(query_context.query_hash, &query_context);
 
 	/*
 	 * Statement timeout exists. AQO should create user timeout right before the
@@ -722,8 +756,8 @@ set_timeout_if_need(QueryDesc *queryDesc)
 	else
 		Assert(!get_timeout_active(timeoutCtl.id));
 
-	fin_time = get_timeout_finish_time(STATEMENT_TIMEOUT);
-	enable_timeout_at(timeoutCtl.id, fin_time - 1);
+
+	enable_timeout_at(timeoutCtl.id, (TimestampTz) max_timeout_value);
 
 	/* Save pointer to queryDesc to use at learning after a timeout interruption. */
 	timeoutCtl.queryDesc = queryDesc;
@@ -822,19 +856,24 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		list_free(ctx.selectivities);
 	}
 
-	if (query_context.collect_stat)
-		stat = get_aqo_stat(query_context.query_hash);
+	stat = get_aqo_stat(query_context.query_hash);
+	if (cardinality_num_objects > 0)
+			cardinality_error = cardinality_sum_errors / cardinality_num_objects;
+		else
+			cardinality_error = -1;
 
+	if (stat && aqo_learn_statement_timeout &&
+		stat->cardinality_error_with_aqo[stat->cardinality_error_with_aqo_size-1] - cardinality_sum_errors/cardinality_num_objects <= 0.1)
+		{
+			increase_flex_timeout(query_context.query_hash, (int64) get_timeout_finish_time(timeoutCtl.id));
+		}
+
+	if (query_context.collect_stat)
 	{
 		/* Calculate execution time. */
 		INSTR_TIME_SET_CURRENT(endtime);
 		INSTR_TIME_SUBTRACT(endtime, query_context.start_execution_time);
 		execution_time = INSTR_TIME_GET_DOUBLE(endtime);
-
-		if (cardinality_num_objects > 0)
-			cardinality_error = cardinality_sum_errors / cardinality_num_objects;
-		else
-			cardinality_error = -1;
 
 		/* Prevent concurrent updates. */
 		init_lock_tag(&tag, query_context.query_hash, query_context.fspace_hash);

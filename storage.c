@@ -95,6 +95,51 @@ cleanup:
 
 }
 
+bool
+get_flex_timeout(uint64 qhash, QueryContextData *query_context)
+{
+	Relation		hrel;
+	Relation		irel;
+	HeapTuple		tuple;
+	TupleTableSlot *slot;
+	bool			shouldFree = true;
+	IndexScanDesc	scan;
+	ScanKeyData		key;
+	SnapshotData	snap;
+	bool			find_ok = false;
+	Datum			values[7];
+	bool			nulls[7] = {false, false, false, false, false, false, false};
+
+	if (!open_aqo_relation("public", "aqo_queries", "aqo_queries_query_hash_idx",
+		AccessShareLock, &hrel, &irel))
+		return false;
+
+	InitDirtySnapshot(snap);
+	scan = index_beginscan(hrel, irel, &snap, 1, 0);
+	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(qhash));
+
+	index_rescan(scan, &key, 1, NULL, 0);
+	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
+	find_ok = index_getnext_slot(scan, ForwardScanDirection, slot);
+
+	if (find_ok)
+	{
+		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
+		Assert(shouldFree != true);
+		heap_deform_tuple(tuple, hrel->rd_att, values, nulls);
+
+		/* Fill query context data */
+		query_context->flex_timeout = DatumGetInt64(values[5]);
+		query_context->count_increase_timeout = DatumGetInt64(values[6]);
+	}
+
+	ExecDropSingleTupleTableSlot(slot);
+	index_endscan(scan);
+	index_close(irel,  AccessShareLock);
+	table_close(hrel,  AccessShareLock);
+	return find_ok;
+}
+
 /*
  * Returns whether the query with given hash is in aqo_queries.
  * If yes, returns the content of the first line with given hash.
@@ -115,8 +160,8 @@ find_query(uint64 qhash, QueryContextData *ctx)
 	ScanKeyData		key;
 	SnapshotData	snap;
 	bool			find_ok = false;
-	Datum			values[5];
-	bool			nulls[5] = {false, false, false, false, false};
+	Datum			values[7];
+	bool			nulls[7] = {false, false, false, false, false, false, false};
 
 	if (!open_aqo_relation("public", "aqo_queries", "aqo_queries_query_hash_idx",
 		AccessShareLock, &hrel, &irel))
@@ -142,6 +187,8 @@ find_query(uint64 qhash, QueryContextData *ctx)
 		ctx->fspace_hash = DatumGetInt64(values[3]);
 		ctx->auto_tuning = DatumGetBool(values[4]);
 		ctx->collect_stat = query_context.auto_tuning;
+		ctx->flex_timeout = DatumGetInt64(values[5]);
+		ctx->count_increase_timeout = DatumGetInt64(values[6]);
 	}
 
 	ExecDropSingleTupleTableSlot(slot);
@@ -149,6 +196,93 @@ find_query(uint64 qhash, QueryContextData *ctx)
 	index_close(irel,  AccessShareLock);
 	table_close(hrel,  AccessShareLock);
 	return find_ok;
+}
+
+/*
+ * Function for update and save flexible statement timeout
+ * for query in aqu_queries table
+ */
+bool
+update_query_timeout(uint64 qhash, int64 flex_timeout, int64 count_increase_timeout)
+{
+	Relation	hrel;
+	Relation	irel;
+	TupleTableSlot *slot;
+	HeapTuple	tuple,
+				nw_tuple;
+	Datum		values[7];
+	bool		isnull[7] = { false, false, false, false, false, false, false };
+	bool		replace[7] = { false, false, false, false, false, true, true };
+	bool		shouldFree;
+	bool		result = true;
+	bool		update_indexes;
+	IndexScanDesc scan;
+	ScanKeyData key;
+	SnapshotData snap;
+
+	/* Couldn't allow to write if xact must be read-only. */
+	if (XactReadOnly)
+		return false;
+
+	if (!open_aqo_relation("public", "aqo_queries", "aqo_queries_query_hash_idx",
+		RowExclusiveLock, &hrel, &irel))
+		return false;
+
+	/*
+	 * Start an index scan. Use dirty snapshot to check concurrent updates that
+	 * can be made before, but still not visible.
+	 */
+	InitDirtySnapshot(snap);
+	scan = index_beginscan(hrel, irel, &snap, 1, 0);
+	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(qhash));
+
+	index_rescan(scan, &key, 1, NULL, 0);
+	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
+	values[0] = Int64GetDatum(qhash);
+	values[5] = Int64GetDatum(flex_timeout);
+	values[6] = Int64GetDatum(count_increase_timeout);
+	if (!index_getnext_slot(scan, ForwardScanDirection, slot))
+	{
+		result = false;
+	}
+	else if (!TransactionIdIsValid(snap.xmin) &&
+			 !TransactionIdIsValid(snap.xmax))
+	{
+		/*
+		 * Update existed data. No one concurrent transaction doesn't update this
+		 * right now.
+		 */
+		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
+		Assert(shouldFree != true);
+		nw_tuple = heap_modify_tuple(tuple, hrel->rd_att, values, isnull, replace);
+
+		if (my_simple_heap_update(hrel, &(nw_tuple->t_self), nw_tuple,
+															&update_indexes))
+		{
+			if (update_indexes)
+				my_index_insert(irel, values, isnull,
+								&(nw_tuple->t_self),
+								hrel, UNIQUE_CHECK_YES);
+			result = true;
+		}
+		else
+			result = false;
+	}
+	else
+	{
+		/*
+		 * Concurrent update was made. To prevent deadlocks refuse to update.
+		 */
+		result = false;
+	}
+
+	ExecDropSingleTupleTableSlot(slot);
+	index_endscan(scan);
+	index_close(irel, RowExclusiveLock);
+	table_close(hrel, RowExclusiveLock);
+
+	CommandCounterIncrement();
+	return result;
 }
 
 /*
@@ -170,9 +304,9 @@ update_query(uint64 qhash, uint64 fhash,
 	TupleTableSlot *slot;
 	HeapTuple	tuple,
 				nw_tuple;
-	Datum		values[5];
-	bool		isnull[5] = { false, false, false, false, false };
-	bool		replace[5] = { false, true, true, true, true };
+	Datum		values[7];
+	bool		isnull[7] = { false, false, false, false, false, false, false };
+	bool		replace[7] = { false, true, true, true, true, false, false };
 	bool		shouldFree;
 	bool		result = true;
 	bool		update_indexes;
@@ -207,6 +341,8 @@ update_query(uint64 qhash, uint64 fhash,
 
 	if (!index_getnext_slot(scan, ForwardScanDirection, slot))
 	{
+		values[5] = TimestampTzGetDatum(aqo_statement_timeout);
+		values[6] = Int8GetDatum(1);
 		/* New tuple for the ML knowledge base */
 		tuple = heap_form_tuple(RelationGetDescr(hrel), values, isnull);
 		simple_heap_insert(hrel, tuple);
@@ -934,10 +1070,12 @@ my_simple_heap_update(Relation relation, ItemPointer otid, HeapTuple tup,
 			return true;
 
 		case TM_Updated:
+			elog(NOTICE, "TM_UPDATE");
 			return false;
 			break;
 
 		case TM_BeingModified:
+			elog(NOTICE, "TM_BeingModified");
 			return false;
 			break;
 

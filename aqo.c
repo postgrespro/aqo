@@ -36,6 +36,7 @@ int		aqo_mode;
 bool	aqo_enabled = false; /* Signals that CREATE EXTENSION have executed and
 								all extension tables is ready for use. */
 bool	force_collect_stat;
+int aqo_statement_timeout;
 
 /*
  * Show special info in EXPLAIN mode.
@@ -49,7 +50,7 @@ bool	force_collect_stat;
  */
 bool	aqo_show_hash;
 bool	aqo_show_details;
-
+bool	change_flex_timeout;
 /* GUC variables */
 static const struct config_enum_entry format_options[] = {
 	{"intelligent", AQO_MODE_INTELLIGENT, false},
@@ -75,7 +76,6 @@ int			auto_tuning_infinite_loop = 8;
 /* The number of nearest neighbors which will be chosen for ML-operations */
 int			aqo_k = 3;
 double		log_selectivity_lower_bound = -30;
-
 /*
  * Currently we use it only to store query_text string which is initialized
  * after a query parsing and is used during the query planning.
@@ -205,6 +205,17 @@ _PG_init(void)
 							&aqo_join_threshold,
 							3,
 							0, INT_MAX / 1000,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+	DefineCustomIntVariable("aqo.statement_timeout",
+							"Time limit on learning.",
+							NULL,
+							&aqo_statement_timeout,
+							0,
+							0, INT_MAX,
 							PGC_USERSET,
 							0,
 							NULL,

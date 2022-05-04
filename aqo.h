@@ -224,7 +224,16 @@ typedef struct QueryContextData
 
 	instr_time	start_execution_time;
 	double		planning_time;
+
+	int64		flex_timeout;
+	int64		count_increase_timeout;
 } QueryContextData;
+
+/*
+ * Indicator for understading update or not
+ * flexible statement timeout for query
+ */
+extern bool change_flex_timeout;
 
 extern double predicted_ppi_rows;
 extern double fss_ppi_hash;
@@ -245,6 +254,7 @@ extern double log_selectivity_lower_bound;
 /* Parameters for current query */
 extern QueryContextData query_context;
 extern int njoins;
+extern int aqo_statement_timeout;
 
 /* Memory context for long-live data */
 extern MemoryContext AQOMemoryContext;
@@ -278,6 +288,7 @@ int get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash);
 
 /* Storage interaction */
 extern bool find_query(uint64 qhash, QueryContextData *ctx);
+extern bool update_query_timeout(uint64 qhash, int64 flex_timeout, int64 count_increase_timeout);
 extern bool update_query(uint64 qhash, uint64 fhash,
 						 bool learn_aqo, bool use_aqo, bool auto_tuning);
 extern bool add_query_text(uint64 query_hash, const char *query_string);
@@ -313,6 +324,7 @@ extern double predict_for_relation(List *restrict_clauses, List *selectivities,
 void aqo_ExecutorStart(QueryDesc *queryDesc, int eflags);
 void aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction,
 					 uint64 count, bool execute_once);
+void increase_flex_timeout(uint64 query_hash, int64 flex_timeout_fin_time);
 void aqo_ExecutorEnd(QueryDesc *queryDesc);
 
 /* Automatic query tuning */
@@ -338,6 +350,8 @@ extern void selectivity_cache_clear(void);
 extern Oid get_aqo_schema(void);
 extern void init_lock_tag(LOCKTAG *tag, uint64 key1, int32 key2);
 extern bool IsQueryDisabled(void);
-
+extern double get_mean(double *elems, int nelems);
 extern List *cur_classes;
+extern bool get_flex_timeout(uint64 qhash, QueryContextData *query_context);
+
 #endif
