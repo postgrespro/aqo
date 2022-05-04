@@ -1,6 +1,5 @@
 -- Check the learning-on-timeout feature
 -- For stabilized reproduction autovacuum must be disabled.
-
 CREATE FUNCTION check_estimated_rows(text) RETURNS TABLE (estimated int)
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -62,3 +61,4 @@ SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
 
 DROP TABLE t;
 DROP EXTENSION aqo;
+DROP FUNCTION check_estimated_rows;

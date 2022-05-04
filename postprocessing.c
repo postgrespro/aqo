@@ -59,12 +59,12 @@ static char *PlanStateInfo = "PlanStateInfo";
 static void atomic_fss_learn_step(uint64 fhash, int fss, OkNNrdata *data,
 								  double *features,
 								  double target, double rfactor,
-								  List *relnames, bool isTimedOut);
+								  List *reloids, bool isTimedOut);
 static bool learnOnPlanState(PlanState *p, void *context);
-static void learn_agg_sample(aqo_obj_stat *ctx, List *relidslist,
+static void learn_agg_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 							 double learned, double rfactor, Plan *plan,
 							 bool notExecuted);
-static void learn_sample(aqo_obj_stat *ctx, List *relidslist,
+static void learn_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 						 double learned, double rfactor,
 						 Plan *plan, bool notExecuted);
 static List *restore_selectivities(List *clauselist,
@@ -91,7 +91,7 @@ static bool ExtractFromQueryEnv(QueryDesc *queryDesc);
 static void
 atomic_fss_learn_step(uint64 fs, int fss, OkNNrdata *data,
 					  double *features, double target, double rfactor,
-					  List *relnames, bool isTimedOut)
+					  List *reloids, bool isTimedOut)
 {
 	LOCKTAG		tag;
 
@@ -102,13 +102,13 @@ atomic_fss_learn_step(uint64 fs, int fss, OkNNrdata *data,
 		data->rows = 0;
 
 	data->rows = OkNNr_learn(data, features, target, rfactor);
-	update_fss_ext(fs, fss, data, relnames, isTimedOut);
+	update_fss_ext(fs, fss, data, reloids, isTimedOut);
 
 	LockRelease(&tag, ExclusiveLock, false);
 }
 
 static void
-learn_agg_sample(aqo_obj_stat *ctx, List *relnames,
+learn_agg_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 			 double learned, double rfactor, Plan *plan, bool notExecuted)
 {
 	AQOPlanNode	   *aqo_node = get_aqo_plan_node(plan, false);
@@ -127,7 +127,7 @@ learn_agg_sample(aqo_obj_stat *ctx, List *relnames,
 		return;
 
 	target = log(learned);
-	child_fss = get_fss_for_object(relnames, ctx->clauselist, NIL, NULL, NULL);
+	child_fss = get_fss_for_object(rels->signatures, ctx->clauselist, NIL, NULL, NULL);
 	fss = get_grouped_exprs_hash(child_fss, aqo_node->grouping_exprs);
 
 	memset(&data, 0, sizeof(OkNNrdata));
@@ -136,7 +136,7 @@ learn_agg_sample(aqo_obj_stat *ctx, List *relnames,
 
 	/* Critical section */
 	atomic_fss_learn_step(fhash, fss, &data, NULL,
-						  target, rfactor, relnames, ctx->isTimedOut);
+						  target, rfactor, rels->hrels, ctx->isTimedOut);
 	/* End of critical section */
 }
 
@@ -145,7 +145,7 @@ learn_agg_sample(aqo_obj_stat *ctx, List *relnames,
  * true cardinalities) performs learning procedure.
  */
 static void
-learn_sample(aqo_obj_stat *ctx, List *relnames,
+learn_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 			 double learned, double rfactor, Plan *plan, bool notExecuted)
 {
 	AQOPlanNode	   *aqo_node = get_aqo_plan_node(plan, false);
@@ -158,7 +158,7 @@ learn_sample(aqo_obj_stat *ctx, List *relnames,
 
 	memset(&data, 0, sizeof(OkNNrdata));
 	target = log(learned);
-	fss = get_fss_for_object(relnames, ctx->clauselist,
+	fss = get_fss_for_object(rels->signatures, ctx->clauselist,
 							 ctx->selectivities, &data.cols, &features);
 
 	/* Only Agg nodes can have non-empty a grouping expressions list. */
@@ -177,7 +177,7 @@ learn_sample(aqo_obj_stat *ctx, List *relnames,
 
 	/* Critical section */
 	atomic_fss_learn_step(fs, fss, &data, features, target, rfactor,
-						  relnames, ctx->isTimedOut);
+						  rels->hrels, ctx->isTimedOut);
 	/* End of critical section */
 
 	if (data.cols > 0)
@@ -510,7 +510,7 @@ learnOnPlanState(PlanState *p, void *context)
 		List *cur_selectivities;
 
 		cur_selectivities = restore_selectivities(aqo_node->clauses,
-												  aqo_node->relids,
+												  aqo_node->rels->hrels,
 												  aqo_node->jointype,
 												  aqo_node->was_parametrized);
 		SubplanCtx.selectivities = list_concat(SubplanCtx.selectivities,
@@ -518,14 +518,14 @@ learnOnPlanState(PlanState *p, void *context)
 		SubplanCtx.clauselist = list_concat(SubplanCtx.clauselist,
 											list_copy(aqo_node->clauses));
 
-		if (aqo_node->relids != NIL)
+		if (aqo_node->rels->hrels != NIL)
 		{
 			/*
 			 * This plan can be stored as a cached plan. In the case we will have
 			 * bogus path_relids field (changed by list_concat routine) at the
 			 * next usage (and aqo-learn) of this plan.
 			 */
-			ctx->relidslist = list_copy(aqo_node->relids);
+			ctx->relidslist = list_copy(aqo_node->rels->hrels);
 
 			if (p->instrument)
 			{
@@ -537,12 +537,12 @@ learnOnPlanState(PlanState *p, void *context)
 				{
 					if (IsA(p, AggState))
 						learn_agg_sample(&SubplanCtx,
-										 aqo_node->relids, learn_rows, rfactor,
+										 aqo_node->rels, learn_rows, rfactor,
 										 p->plan, notExecuted);
 
 					else
 						learn_sample(&SubplanCtx,
-									 aqo_node->relids, learn_rows, rfactor,
+									 aqo_node->rels, learn_rows, rfactor,
 									 p->plan, notExecuted);
 				}
 			}
