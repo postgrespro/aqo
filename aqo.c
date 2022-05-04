@@ -134,6 +134,12 @@ _PG_init(void)
 				 errmsg("AQO module could be loaded only on startup."),
 				 errdetail("Add 'aqo' into the shared_preload_libraries list.")));
 
+	/*
+	 * Inform the postmaster that we want to enable query_id calculation if
+	 * compute_query_id is set to auto.
+	 */
+	EnableQueryId();
+
 	DefineCustomEnumVariable("aqo.mode",
 							 "Mode of aqo usage.",
 							 NULL,

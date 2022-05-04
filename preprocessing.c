@@ -207,10 +207,18 @@ aqo_planner(Query *parse,
 	}
 
 	selectivity_cache_clear();
-	query_context.query_hash = get_query_hash(parse, query_string);
+	
+	/* Check unlucky case (get a hash of zero) */
+	if (parse->queryId == UINT64CONST(0))
+		JumbleQuery(parse, query_string);
+
+	Assert(parse->utilityStmt == NULL);
+	Assert(parse->queryId != UINT64CONST(0));
+
+	query_context.query_hash = parse->queryId;
 
 	if (query_is_deactivated(query_context.query_hash) ||
-		list_member_uint64(cur_classes,query_context.query_hash))
+		list_member_uint64(cur_classes, query_context.query_hash))
 	{
 		/*
 		 * Disable AQO for deactivated query or for query belonged to a

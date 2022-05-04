@@ -182,7 +182,7 @@ lc_load_fss(uint64 fs, int fss, OkNNrdata *data, List **relnames)
 	Assert(fss_htab && aqo_learn_statement_timeout);
 
 	if (aqo_show_details)
-		elog(NOTICE, "[AQO] Load ML data for fs %lu, fss %d from the cache",
+		elog(NOTICE, "[AQO] Load ML data for fs "UINT64_FORMAT", fss %d from the cache",
 			 fs, fss);
 
 	LWLockAcquire(&aqo_state->lock, LW_SHARED);
