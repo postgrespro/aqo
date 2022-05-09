@@ -381,7 +381,7 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
            ->  Aggregate (actual rows=1 loops=1000)
                  AQO not used
                  ->  Seq Scan on t t0 (actual rows=50 loops=1000)
-                       AQO not used
+                       AQO: rows=50, error=0%
                        Filter: (x = t.x)
                        Rows Removed by Filter: 950
          SubPlan 2
