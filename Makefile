@@ -26,7 +26,8 @@ REGRESS =	aqo_disabled \
 			statement_timeout \
 			temp_tables \
 			top_queries \
-			relocatable
+			relocatable\
+			look_a_like
 
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw
 stat_srcdir = $(top_srcdir)/contrib/pg_stat_statements

@@ -25,5 +25,7 @@ typedef struct OkNNrdata
 extern double OkNNr_predict(OkNNrdata *data, double *features);
 extern int OkNNr_learn(OkNNrdata *data,
 					   double *features, double target, double rfactor);
+extern int get_avg_over_neibours(OkNNrdata *data,
+					   double *features);
 
 #endif /* MACHINE_LEARNING_H */
