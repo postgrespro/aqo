@@ -50,3 +50,5 @@ CREATE FUNCTION invalidate_deactivated_queries_cache() RETURNS trigger
 CREATE TRIGGER aqo_queries_invalidate AFTER UPDATE OR DELETE OR TRUNCATE
 	ON public.aqo_queries FOR EACH STATEMENT
 	EXECUTE PROCEDURE invalidate_deactivated_queries_cache();
+CREATE INDEX aqo_fss_idx
+	on public.aqo_data (fsspace_hash);

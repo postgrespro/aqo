@@ -91,7 +91,10 @@ predict_for_relation(List *clauses, List *selectivities, List *relsigns,
 		 * small part of paths was used for AQO learning and fetch into the AQO
 		 * knowledge base.
 		 */
-		result = -1;
+		if (!load_fss(query_context.fspace_hash, *fss, &data, NULL, false))
+			result = -1;
+		else
+			result = OkNNr_predict(&data, features);
 	}
 #ifdef AQO_DEBUG_PRINT
 	predict_debug_output(clauses, selectivities, relsigns, *fss, result);

@@ -380,7 +380,7 @@ bool
 load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids, bool isSafe)
 {
 	if (isSafe && (!aqo_learn_statement_timeout || !lc_has_fss(fs, fss)))
-		return load_fss(fs, fss, data, reloids);
+		return load_fss(fs, fss, data, reloids, true);
 	else
 	{
 		Assert(aqo_learn_statement_timeout);
@@ -403,30 +403,39 @@ load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids, bool isSafe)
  *			objects in the given feature space
  */
 bool
-load_fss(uint64 fs, int fss, OkNNrdata *data, List **reloids)
+load_fss(uint64 fs, int fss, OkNNrdata *data, List **reloids, bool use_idx_fss)
 {
 	Relation	hrel;
 	Relation	irel;
 	HeapTuple	tuple;
 	TupleTableSlot *slot;
-	bool		shouldFree;
-	bool		find_ok = false;
-	IndexScanDesc scan;
-	ScanKeyData	key[2];
-	Datum		values[AQO_DATA_COLUMNS];
-	bool		isnull[AQO_DATA_COLUMNS];
-	bool		success = true;
+	bool			shouldFree;
+	bool			find_ok = false;
+	IndexScanDesc	scan;
+	Datum			values[AQO_DATA_COLUMNS];
+	bool			isnull[AQO_DATA_COLUMNS];
+	bool			success = true;
+	ScanKeyData		key[2];
 
 	if (!open_aqo_relation(NULL, "aqo_data",
 						   "aqo_fss_access_idx",
 						   AccessShareLock, &hrel, &irel))
-		return false;
+			return false;
 
-	scan = index_beginscan(hrel, irel, SnapshotSelf, 2, 0);
-	ScanKeyInit(&key[0], 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(fs));
-	ScanKeyInit(&key[1], 2, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fss));
+	if (use_idx_fss)
+	{
+		scan = index_beginscan(hrel, irel, SnapshotSelf, 2, 0);
+		ScanKeyInit(&key[0], 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(fs));
+		ScanKeyInit(&key[1], 2, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fss));
+	}
+	else
+	{
+		scan = index_beginscan(hrel, irel, SnapshotSelf, 2, 0);
+		ScanKeyInit(&key[0],  1, BTLessEqualStrategyNumber, F_INT8LE, Int64GetDatum(0));
+		ScanKeyInit(&key[1],  2, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fss));
+	}
+
 	index_rescan(scan, key, 2, NULL, 0);
-
 	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
 	find_ok = index_getnext_slot(scan, ForwardScanDirection, slot);
 
@@ -478,6 +487,14 @@ load_fss(uint64 fs, int fss, OkNNrdata *data, List **reloids)
 	table_close(hrel, AccessShareLock);
 
 	return success;
+}
+
+PG_FUNCTION_INFO_V1(xxx);
+Datum xxx(PG_FUNCTION_ARGS)
+{
+	elog(NOTICE, "xxx called");
+	load_fss(5, 2027816329,NULL, NULL, false);
+	PG_RETURN_VOID();
 }
 
 bool
@@ -610,6 +627,7 @@ update_fss(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 			if (update_indexes)
 				my_index_insert(irel, values, isnull, &(nw_tuple->t_self),
 								hrel, UNIQUE_CHECK_YES);
+
 			result = true;
 		}
 		else
