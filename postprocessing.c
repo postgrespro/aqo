@@ -437,7 +437,7 @@ learnOnPlanState(PlanState *p, void *context)
 	/* Exclude "not executed" nodes from error calculation to reduce fluctuations. */
 	if (!notExecuted)
 	{
-		cardinality_sum_errors += fabs(predicted - learn_rows);
+		cardinality_sum_errors += fabs(log(predicted) - log(learn_rows));
 		cardinality_num_objects += 1;
 	}
 
