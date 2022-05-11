@@ -16,7 +16,7 @@ $node->append_conf('postgresql.conf', qq{
 					});
 
 # Test constants. Default values.
-my $TRANSACTIONS = 1000;
+my $TRANSACTIONS = 1;
 my $CLIENTS = 10;
 my $THREADS = 10;
 

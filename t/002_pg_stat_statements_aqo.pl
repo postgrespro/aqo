@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use PostgreSQL::Test::Cluster;
 use PostgreSQL::Test::Utils;
-use Test::More tests => 3;
+use Test::More tests => 4;
 print "start";
 my $node = PostgreSQL::Test::Cluster->new('profiling');
 $node->init;
@@ -24,20 +24,19 @@ my $query_id;
 # General purpose variables.
 my $res;
 my $total_classes;
+
+# Check: allow to load the libraries only on startup
 $node->start();
- # ERROR: AQO allow to load library only on startup
-print "create extantion aqo";
 $node->psql('postgres', "CREATE EXTENSION aqo");
 $node->psql('postgres', "CREATE EXTENSION pg_stat_statements");
-print "create preload libraries";
-$node->append_conf('postgresql.conf', qq{shared_preload_libraries = 'aqo, pg_stat_statements'});
+
+$node->append_conf('postgresql.conf', qq{
+	shared_preload_libraries = 'aqo, pg_stat_statements'
+	aqo.mode = 'learn' # unconditional learning
+});
 $node->restart();
 $node->psql('postgres', "CREATE EXTENSION aqo");
 $node->psql('postgres', "CREATE EXTENSION pg_stat_statements");
-$node->psql('postgres', "
-	ALTER SYSTEM SET aqo.profile_enable = 'true';
-	SELECT pg_reload_conf();
-");
 
 $node->psql('postgres', "CREATE TABLE aqo_test0(a int, b int, c int, d int);
 WITH RECURSIVE t(a, b, c, d)
@@ -48,18 +47,47 @@ AS (
 ) INSERT INTO aqo_test0 (SELECT * FROM t);
 CREATE INDEX aqo_test0_idx_a ON aqo_test0 (a);
 ANALYZE aqo_test0;");
-$node->psql('postgres', "
-	ALTER SYSTEM SET aqo.mode = 'controlled';
-");
+
 $res = $node->safe_psql('postgres', "SELECT * FROM aqo_test0");
 $res = $node->safe_psql('postgres', "SELECT count(*) FROM pg_stat_statements where query = 'SELECT * FROM aqo_test0'");
-is($res, 1); # The same query add in pg_stat_statements
-$res = $node->safe_psql('postgres', "SELECT count(*) from aqo_query_texts where query_text = 'SELECT * FROM aqo_test0'");
-is($res, 0); # The same query isn't add in aqo_query_texts
-$query_id = $node->safe_psql('postgres', "SELECT queryid FROM pg_stat_statements where query = 'SELECT * FROM aqo_test0'");
-$res = $node->safe_psql('postgres', "insert into aqo_queries values ($query_id,'f','f',$query_id,'f')");
-# Add query in aqo_query_texts
-$res = $node->safe_psql('postgres', "insert into aqo_query_texts values ($query_id,'SELECT * FROM aqo_test0')");
-$res = $node->safe_psql('postgres', "SELECT count(*) from aqo_query_texts where query_text = 'SELECT * FROM aqo_test0'"); # The same query is in aqo_query_texts
+
+# Check number of queries which logged in both extensions.
+$res = $node->safe_psql('postgres', "
+	SELECT count(*) FROM aqo_query_texts aqt, pg_stat_statements pgss
+	WHERE aqt.query_hash = pgss.queryid
+");
+is($res, 3);
+
+# TODO: Maybe AQO should parameterize query text too?
+$res = $node->safe_psql('postgres', "
+	SELECT count(*) FROM aqo_query_texts aqt, pg_stat_statements pgss
+	WHERE aqt.query_hash = pgss.queryid AND aqt.query_text = pgss.query
+");
 is($res, 1);
+
+# Just fix a number of differences
+$res = $node->safe_psql('postgres', "
+	SELECT count(*) FROM aqo_query_texts
+	WHERE query_hash NOT IN (SELECT queryid FROM pg_stat_statements)
+");
+is($res, 1);
+
+$res = $node->safe_psql('postgres', "
+	SELECT query_text FROM aqo_query_texts
+	WHERE query_hash NOT IN (SELECT queryid FROM pg_stat_statements)
+");
+note($res); # Just see differences
+
+$res = $node->safe_psql('postgres', "
+	SELECT count(*) FROM pg_stat_statements
+	WHERE queryid NOT IN (SELECT query_hash FROM aqo_query_texts)
+");
+is($res, 8);
+
+$res = $node->safe_psql('postgres', "
+	SELECT query FROM pg_stat_statements
+	WHERE queryid NOT IN (SELECT query_hash FROM aqo_query_texts)
+");
+note($res); # Just see differences
+
 $node->stop();
