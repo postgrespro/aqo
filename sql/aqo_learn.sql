@@ -204,6 +204,101 @@ SELECT * FROM check_estimated_rows('
    WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
 ');
 
+-- Test limit on number of joins
+SET aqo.mode = 'learn';
+
+SELECT * FROM aqo_drop_class(0);
+SELECT * FROM aqo_drop_class(42);
+
+-- Remove all data from ML knowledge base
+SELECT count(*) FROM (
+SELECT aqo_drop_class(q1.id::bigint) FROM (
+    SELECT query_hash AS id
+    FROM aqo_queries WHERE query_hash <> 0) AS q1
+) AS q2;
+SELECT count(*) FROM aqo_data;
+
+SET aqo.join_threshold = 3;
+SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1;');
+SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1 AS t1, aqo_test1 AS t2 WHERE t1.a = t2.b');
+SELECT count(*) FROM aqo_data; -- Return 0 - do not learn on the queries above
+
+SELECT * FROM check_estimated_rows('
+   SELECT *
+   FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
+   WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
+');
+SELECT count(*) FROM -- Learn on the query
+  (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
+;
+SELECT query_text FROM aqo_query_texts WHERE query_hash <> 0; -- Check query
+
+SET aqo.join_threshold = 1;
+SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1;');
+SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1 AS t1, aqo_test1 AS t2 WHERE t1.a = t2.b');
+SELECT count(*) FROM
+  (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
+; -- Learn on a query with one join
+
+SET aqo.join_threshold = 0;
+SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1;');
+SELECT count(*) FROM
+  (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
+; -- Learn on the query without any joins now
+
+SET aqo.join_threshold = 1;
+SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1 t1 JOIN aqo_test1 AS t2 USING (a)');
+SELECT count(*) FROM
+  (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
+; -- See one more query in the AQO knowledge base
+
+SELECT * FROM check_estimated_rows('WITH selected AS (SELECT * FROM aqo_test1 t1) SELECT count(*) FROM selected');
+SELECT * FROM check_estimated_rows('
+  WITH selected AS (
+    SELECT * FROM aqo_test1 t1 JOIN aqo_test1 AS t2 USING (a)
+  ) SELECT count(*) FROM selected')
+;
+SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+
+-- InitPlan
+SELECT * FROM check_estimated_rows('
+  SELECT * FROM aqo_test1 AS t1 WHERE t1.a IN (
+    SELECT t2.a FROM aqo_test1 AS t2 JOIN aqo_test1 AS t3 ON (t2.b = t3.a)
+  )');
+SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+
+-- SubPlan
+SELECT * FROM check_estimated_rows('
+  SELECT (
+    SELECT avg(t2.a) FROM aqo_test1 AS t2 JOIN aqo_test1 AS t3 ON (t2.b = t3.a) AND (t2.a = t1.a)
+  ) FROM aqo_test1 AS t1;
+');
+SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+
+-- Subquery
+SET aqo.join_threshold = 3;
+SELECT * FROM check_estimated_rows('
+  SELECT * FROM aqo_test1 AS t1,
+    (SELECT t2.a FROM aqo_test1 AS t2 JOIN aqo_test1 AS t3 ON (t2.b = t3.a)) q1
+  WHERE q1.a*t1.a = t1.a + 15;
+'); -- Two JOINs, ignore it
+SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+SET aqo.join_threshold = 2;
+SELECT * FROM check_estimated_rows('
+  SELECT * FROM aqo_test1 AS t1,
+    (SELECT t2.a FROM aqo_test1 AS t2 JOIN aqo_test1 AS t3 ON (t2.b = t3.a)) q1
+  WHERE q1.a*t1.a = t1.a + 15;
+'); -- One JOIN from subquery, another one from the query
+SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+
+SELECT * FROM check_estimated_rows('
+  WITH selected AS (
+    SELECT t2.a FROM aqo_test1 t1 JOIN aqo_test1 AS t2 USING (a)
+  ) SELECT count(*) FROM aqo_test1 t3, selected WHERE selected.a = t3.a')
+; -- One JOIN extracted from CTE, another - from a FROM part of the query
+SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+
+RESET aqo.join_threshold;
 DROP INDEX aqo_test0_idx_a;
 DROP TABLE aqo_test0;
 DROP INDEX aqo_test1_idx_a;

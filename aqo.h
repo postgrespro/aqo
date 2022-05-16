@@ -173,6 +173,7 @@ extern bool	aqo_enabled;
 extern bool	force_collect_stat;
 extern bool aqo_show_hash;
 extern bool aqo_show_details;
+extern int aqo_join_threshold;
 
 /*
  * It is mostly needed for auto tuning of query. with auto tuning mode aqo
