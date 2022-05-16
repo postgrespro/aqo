@@ -12,10 +12,18 @@ CREATE TEMP TABLE ttt AS SELECT count(*) AS cnt FROM generate_series(1,10);
 CREATE TABLE ttp AS SELECT count(*) AS cnt FROM generate_series(1,10);
 SELECT count(*) AS cnt FROM ttt WHERE cnt % 100 = 0;
 SELECT count(*) AS cnt FROM ttp WHERE cnt % 100 = 0;
-SELECT num FROM top_time_queries(3);
+SELECT num FROM show_execution_time(true); -- Just for checking, return zero.
+SELECT num FROM show_execution_time(false);
+
+-- Without the AQO control queries with and without temp tables are logged.
+SELECT query_text,nexecs
+FROM show_execution_time(false) ce, aqo_query_texts aqt
+WHERE ce.id = aqt.query_hash
+ORDER BY (md5(query_text));
 
 --
--- num of query uses table t2 should be bigger than num of query uses table t1 and be the first
+-- num of query which uses the table t2 should be bigger than num of query which
+-- uses the table t1 and must be the first
 --
 CREATE TABLE t1 AS SELECT mod(gs,10) AS x, mod(gs+1,10) AS y
 	FROM generate_series(1,1000) AS gs;
@@ -35,3 +43,9 @@ WHERE te.fshash = (
 
 -- Should return zero
 SELECT count(*) FROM show_cardinality_errors(true);
+
+-- Fix list of logged queries
+SELECT query_text,nexecs
+FROM show_cardinality_errors(false) ce, aqo_query_texts aqt
+WHERE ce.id = aqt.query_hash
+ORDER BY (md5(query_text));
