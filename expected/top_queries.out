@@ -21,16 +21,32 @@ SELECT count(*) AS cnt FROM ttp WHERE cnt % 100 = 0;
    0
 (1 row)
 
-SELECT num FROM top_time_queries(3);
-NOTICE:  Top 3 execution time queries
+SELECT num FROM show_execution_time(true); -- Just for checking, return zero.
+ num 
+-----
+(0 rows)
+
+SELECT num FROM show_execution_time(false);
  num 
 -----
    1
    2
 (2 rows)
 
+-- Without the AQO control queries with and without temp tables are logged.
+SELECT query_text,nexecs
+FROM show_execution_time(false) ce, aqo_query_texts aqt
+WHERE ce.id = aqt.query_hash
+ORDER BY (md5(query_text));
+                      query_text                      | nexecs 
+------------------------------------------------------+--------
+ SELECT count(*) AS cnt FROM ttt WHERE cnt % 100 = 0; |      1
+ SELECT count(*) AS cnt FROM ttp WHERE cnt % 100 = 0; |      1
+(2 rows)
+
 --
--- num of query uses table t2 should be bigger than num of query uses table t1 and be the first
+-- num of query which uses the table t2 should be bigger than num of query which
+-- uses the table t1 and must be the first
 --
 CREATE TABLE t1 AS SELECT mod(gs,10) AS x, mod(gs+1,10) AS y
 	FROM generate_series(1,1000) AS gs;
@@ -67,4 +83,17 @@ SELECT count(*) FROM show_cardinality_errors(true);
 -------
      0
 (1 row)
+
+-- Fix list of logged queries
+SELECT query_text,nexecs
+FROM show_cardinality_errors(false) ce, aqo_query_texts aqt
+WHERE ce.id = aqt.query_hash
+ORDER BY (md5(query_text));
+                                           query_text                                           | nexecs 
+------------------------------------------------------------------------------------------------+--------
+ SELECT count(*) FROM (SELECT x, y FROM t2 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1; |      1
+ SELECT count(*) AS cnt FROM ttt WHERE cnt % 100 = 0;                                           |      1
+ SELECT count(*) AS cnt FROM ttp WHERE cnt % 100 = 0;                                           |      1
+ SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1; |      1
+(4 rows)
 

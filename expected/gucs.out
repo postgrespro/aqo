@@ -35,4 +35,24 @@ SELECT obj_description('public.show_cardinality_errors'::regproc::oid);
  Get cardinality error of queries the last time they were executed. Order queries according to an error value.
 (1 row)
 
+SELECT obj_description('public.show_execution_time'::regproc::oid);
+                                                                                                             obj_description                                                                                                              
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Get execution time of queries. If controlled = true (AQO could advise cardinality estimations), show time of last execution attempt. Another case (AQO not used), return an average value of execution time across all known executions.
+(1 row)
+
+\df show_cardinality_errors
+                                                                 List of functions
+ Schema |          Name           |                                  Result data type                                  | Argument data types | Type 
+--------+-------------------------+------------------------------------------------------------------------------------+---------------------+------
+ public | show_cardinality_errors | TABLE(num bigint, id bigint, fshash bigint, error double precision, nexecs bigint) | controlled boolean  | func
+(1 row)
+
+\df show_execution_time
+                                                                 List of functions
+ Schema |        Name         |                                    Result data type                                    | Argument data types | Type 
+--------+---------------------+----------------------------------------------------------------------------------------+---------------------+------
+ public | show_execution_time | TABLE(num bigint, id bigint, fshash bigint, exec_time double precision, nexecs bigint) | controlled boolean  | func
+(1 row)
+
 DROP EXTENSION aqo;
