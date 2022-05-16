@@ -546,9 +546,9 @@ WHERE aqt.query_hash = cef.id
 ORDER BY (md5(query_text),error) DESC;
    error   |                                           query_text                                           
 -----------+------------------------------------------------------------------------------------------------
-  3.00e+01 | SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,y)) AS q1;
-  1.33e+00 | SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
-  1.15e+02 | SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
+  7.68e-01 | SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,y)) AS q1;
+  7.04e-02 | SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
+  1.42e+00 | SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
   0.00e+00 | SELECT * FROM                                                                                 +
            |         (SELECT * FROM t WHERE x < 0) AS t0                                                   +
            |                 JOIN                                                                          +
@@ -559,14 +559,14 @@ ORDER BY (md5(query_text),error) DESC;
            |         SELECT count(*) FROM t WHERE                                                          +
            |                 x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21) OR                        +
            |                 x IN (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21);
-  3.00e+01 | SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;
+  4.54e-01 | SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;
   0.00e+00 | SELECT count(*) FROM (                                                                        +
            |         SELECT count(*) AS x FROM (                                                           +
            |                 SELECT count(*) FROM t1 GROUP BY (x,y)                                        +
            |         ) AS q1                                                                               +
            | ) AS q2                                                                                       +
            | WHERE q2.x > 1;
-  3.00e+01 | SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,x*y)) AS q1;
+  7.68e-01 | SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,x*y)) AS q1;
   0.00e+00 | SELECT count(*) FROM t WHERE x = (SELECT avg(x) FROM t WHERE x = 1);
   0.00e+00 | EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)                                         +
            |         SELECT count(*) FROM t WHERE (SELECT avg(x) FROM t t0 WHERE t0.x = t.x) =             +

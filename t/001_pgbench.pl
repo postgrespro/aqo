@@ -147,9 +147,12 @@ $res = $node->safe_psql('postgres',
 						JOIN aqo_query_texts t ON (t.query_hash = v.id)
 						WHERE v.error > 0.");
 note("\n Queries: \n $res \n");
+$res = $node->safe_psql('postgres', "SELECT * FROM  public.show_execution_time(false) v");
+note("\n TIMES: \n $res \n");
+
 $res = $node->safe_psql('postgres',
-						"SELECT count(*) FROM top_time_queries(10) v
-						WHERE v.execution_time > 0.");
+						"SELECT count(*) FROM public.show_execution_time(false) v
+						WHERE v.exec_time > 0.");
 is($res, 3);
 
 # ##############################################################################
