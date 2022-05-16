@@ -1,9 +1,48 @@
 CREATE EXTENSION aqo;
+-- Check interface variables and their default values. Detect, if default value
+-- of a GUC is changed.
+SHOW aqo.join_threshold;
+ aqo.join_threshold 
+--------------------
+ 0
+(1 row)
+
+SHOW aqo.learn_statement_timeout;
+ aqo.learn_statement_timeout 
+-----------------------------
+ off
+(1 row)
+
+SHOW aqo.show_hash;
+ aqo.show_hash 
+---------------
+ off
+(1 row)
+
+SHOW  aqo.show_details;
+ aqo.show_details 
+------------------
+ off
+(1 row)
+
+SHOW aqo.force_collect_stat;
+ aqo.force_collect_stat 
+------------------------
+ off
+(1 row)
+
+SHOW  aqo.mode;
+  aqo.mode  
+------------
+ controlled
+(1 row)
+
 SET aqo.mode = 'learn';
 SET aqo.show_details = true;
 CREATE TABLE t(x int);
 INSERT INTO t (x) (SELECT * FROM generate_series(1, 100) AS gs);
 ANALYZE t;
+-- Check AQO addons to explain (the only stable data)
 EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 	SELECT x FROM t;
                    QUERY PLAN                   
@@ -41,6 +80,12 @@ SELECT obj_description('public.show_execution_time'::regproc::oid);
  Get execution time of queries. If controlled = true (AQO could advise cardinality estimations), show time of last execution attempt. Another case (AQO not used), return an average value of execution time across all known executions.
 (1 row)
 
+SELECT obj_description('public.aqo_drop_class'::regproc::oid);
+                       obj_description                        
+--------------------------------------------------------------
+ Remove info about an query class from AQO ML knowledge base.
+(1 row)
+
 \df show_cardinality_errors
                                                                  List of functions
  Schema |          Name           |                                  Result data type                                  | Argument data types | Type 
@@ -53,6 +98,13 @@ SELECT obj_description('public.show_execution_time'::regproc::oid);
  Schema |        Name         |                                    Result data type                                    | Argument data types | Type 
 --------+---------------------+----------------------------------------------------------------------------------------+---------------------+------
  public | show_execution_time | TABLE(num bigint, id bigint, fshash bigint, exec_time double precision, nexecs bigint) | controlled boolean  | func
+(1 row)
+
+\df aqo_drop_class
+                            List of functions
+ Schema |      Name      | Result data type | Argument data types | Type 
+--------+----------------+------------------+---------------------+------
+ public | aqo_drop_class | integer          | id bigint           | func
 (1 row)
 
 DROP EXTENSION aqo;

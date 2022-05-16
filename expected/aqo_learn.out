@@ -500,6 +500,240 @@ SELECT * FROM check_estimated_rows('
         17 |     17
 (1 row)
 
+-- Test limit on number of joins
+SET aqo.mode = 'learn';
+SELECT * FROM aqo_drop_class(0);
+ERROR:  [AQO] Cannot remove basic class 0.
+CONTEXT:  PL/pgSQL function aqo_drop_class(bigint) line 7 at RAISE
+SELECT * FROM aqo_drop_class(42);
+WARNING:  [AQO] Nothing to remove for the class 42.
+ aqo_drop_class 
+----------------
+              0
+(1 row)
+
+-- Remove all data from ML knowledge base
+SELECT count(*) FROM (
+SELECT aqo_drop_class(q1.id::bigint) FROM (
+    SELECT query_hash AS id
+    FROM aqo_queries WHERE query_hash <> 0) AS q1
+) AS q2;
+ count 
+-------
+     7
+(1 row)
+
+SELECT count(*) FROM aqo_data;
+ count 
+-------
+     0
+(1 row)
+
+SET aqo.join_threshold = 3;
+SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1;');
+ estimated | actual 
+-----------+--------
+        20 |     20
+(1 row)
+
+SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1 AS t1, aqo_test1 AS t2 WHERE t1.a = t2.b');
+ estimated | actual 
+-----------+--------
+        20 |     19
+(1 row)
+
+SELECT count(*) FROM aqo_data; -- Return 0 - do not learn on the queries above
+ count 
+-------
+     0
+(1 row)
+
+SELECT * FROM check_estimated_rows('
+   SELECT *
+   FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
+   WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
+');
+ estimated | actual 
+-----------+--------
+        20 |     17
+(1 row)
+
+SELECT count(*) FROM -- Learn on the query
+  (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
+;
+ count 
+-------
+     1
+(1 row)
+
+SELECT query_text FROM aqo_query_texts WHERE query_hash <> 0; -- Check query
+                                 query_text                                 
+----------------------------------------------------------------------------
+ explain analyze                                                           +
+    SELECT *                                                               +
+    FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4+
+    WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;                     +
+ 
+(1 row)
+
+SET aqo.join_threshold = 1;
+SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1;');
+ estimated | actual 
+-----------+--------
+        20 |     20
+(1 row)
+
+SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1 AS t1, aqo_test1 AS t2 WHERE t1.a = t2.b');
+ estimated | actual 
+-----------+--------
+        20 |     19
+(1 row)
+
+SELECT count(*) FROM
+  (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
+; -- Learn on a query with one join
+ count 
+-------
+     2
+(1 row)
+
+SET aqo.join_threshold = 0;
+SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1;');
+ estimated | actual 
+-----------+--------
+        20 |     20
+(1 row)
+
+SELECT count(*) FROM
+  (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
+; -- Learn on the query without any joins now
+ count 
+-------
+     3
+(1 row)
+
+SET aqo.join_threshold = 1;
+SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1 t1 JOIN aqo_test1 AS t2 USING (a)');
+ estimated | actual 
+-----------+--------
+        20 |     20
+(1 row)
+
+SELECT count(*) FROM
+  (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
+; -- See one more query in the AQO knowledge base
+ count 
+-------
+     4
+(1 row)
+
+SELECT * FROM check_estimated_rows('WITH selected AS (SELECT * FROM aqo_test1 t1) SELECT count(*) FROM selected');
+ estimated | actual 
+-----------+--------
+         1 |      1
+(1 row)
+
+SELECT * FROM check_estimated_rows('
+  WITH selected AS (
+    SELECT * FROM aqo_test1 t1 JOIN aqo_test1 AS t2 USING (a)
+  ) SELECT count(*) FROM selected')
+;
+ estimated | actual 
+-----------+--------
+         1 |      1
+(1 row)
+
+SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+ count 
+-------
+     5
+(1 row)
+
+-- InitPlan
+SELECT * FROM check_estimated_rows('
+  SELECT * FROM aqo_test1 AS t1 WHERE t1.a IN (
+    SELECT t2.a FROM aqo_test1 AS t2 JOIN aqo_test1 AS t3 ON (t2.b = t3.a)
+  )');
+ estimated | actual 
+-----------+--------
+        20 |     19
+(1 row)
+
+SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+ count 
+-------
+     6
+(1 row)
+
+-- SubPlan
+SELECT * FROM check_estimated_rows('
+  SELECT (
+    SELECT avg(t2.a) FROM aqo_test1 AS t2 JOIN aqo_test1 AS t3 ON (t2.b = t3.a) AND (t2.a = t1.a)
+  ) FROM aqo_test1 AS t1;
+');
+ estimated | actual 
+-----------+--------
+        20 |     20
+(1 row)
+
+SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+ count 
+-------
+     7
+(1 row)
+
+-- Subquery
+SET aqo.join_threshold = 3;
+SELECT * FROM check_estimated_rows('
+  SELECT * FROM aqo_test1 AS t1,
+    (SELECT t2.a FROM aqo_test1 AS t2 JOIN aqo_test1 AS t3 ON (t2.b = t3.a)) q1
+  WHERE q1.a*t1.a = t1.a + 15;
+'); -- Two JOINs, ignore it
+ estimated | actual 
+-----------+--------
+         2 |      4
+(1 row)
+
+SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+ count 
+-------
+     7
+(1 row)
+
+SET aqo.join_threshold = 2;
+SELECT * FROM check_estimated_rows('
+  SELECT * FROM aqo_test1 AS t1,
+    (SELECT t2.a FROM aqo_test1 AS t2 JOIN aqo_test1 AS t3 ON (t2.b = t3.a)) q1
+  WHERE q1.a*t1.a = t1.a + 15;
+'); -- One JOIN from subquery, another one from the query
+ estimated | actual 
+-----------+--------
+         2 |      4
+(1 row)
+
+SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+ count 
+-------
+     8
+(1 row)
+
+SELECT * FROM check_estimated_rows('
+  WITH selected AS (
+    SELECT t2.a FROM aqo_test1 t1 JOIN aqo_test1 AS t2 USING (a)
+  ) SELECT count(*) FROM aqo_test1 t3, selected WHERE selected.a = t3.a')
+; -- One JOIN extracted from CTE, another - from a FROM part of the query
+ estimated | actual 
+-----------+--------
+         1 |      1
+(1 row)
+
+SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+ count 
+-------
+     9
+(1 row)
+
+RESET aqo.join_threshold;
 DROP INDEX aqo_test0_idx_a;
 DROP TABLE aqo_test0;
 DROP INDEX aqo_test1_idx_a;

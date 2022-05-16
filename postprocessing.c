@@ -875,7 +875,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 				automatical_query_tuning(query_context.query_hash, stat);
 
 			/* Write AQO statistics to the aqo_query_stat table */
-			update_aqo_stat(query_context.fspace_hash, stat);
+			update_aqo_stat(query_context.query_hash, stat);
 			pfree_query_stat(stat);
 		}
 

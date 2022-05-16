@@ -112,7 +112,8 @@ $fs_samples_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_query
 $stat_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_query_texts");
 # This constants looks like magic numbers. But query set of the pgbench test
 # is fixed for a long time.
-is( (($fs_count == 7) and ($fs_samples_count == 6) and ($stat_count == 7)), 1);
+note("fs: $fs_count, $fs_samples_count, $stat_count");
+is( (($fs_count == 6) and ($fs_samples_count == 5) and ($stat_count == 6)), 1);
 
 my $analytics = File::Temp->new();
 append_to_file($analytics, q{

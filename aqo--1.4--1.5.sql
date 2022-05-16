@@ -77,6 +77,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP FUNCTION public.top_time_queries;
+DROP FUNCTION public.aqo_drop;
 
 --
 -- Show execution time of queries, for which AQO has statistics.
@@ -131,3 +132,38 @@ $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION public.show_execution_time(boolean) IS
 'Get execution time of queries. If controlled = true (AQO could advise cardinality estimations), show time of last execution attempt. Another case (AQO not used), return an average value of execution time across all known executions.';
+
+CREATE OR REPLACE FUNCTION public.aqo_drop_class(id bigint)
+RETURNS integer AS $$
+DECLARE
+  fs bigint;
+  num integer;
+BEGIN
+  IF (id = 0) THEN
+    raise EXCEPTION '[AQO] Cannot remove basic class %.', id;
+  END IF;
+
+  SELECT fspace_hash FROM public.aqo_queries WHERE (query_hash = id) INTO fs;
+
+  IF (fs IS NULL) THEN
+    raise WARNING '[AQO] Nothing to remove for the class %.', id;
+    RETURN 0;
+  END IF;
+
+  IF (fs <> id) THEN
+    raise WARNING '[AQO] Removing query class has non-generic feature space value: id = %, fs = %.', id, fs;
+  END IF;
+
+  SELECT count(*) FROM public.aqo_data WHERE fspace_hash = fs INTO num;
+
+  /*
+   * Remove the only from aqo_queries table. All other data will be removed by
+   * CASCADE deletion.
+   */
+  DELETE FROM public.aqo_queries WHERE query_hash = id;
+  RETURN num;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION public.aqo_drop_class(bigint) IS
+'Remove info about an query class from AQO ML knowledge base.';

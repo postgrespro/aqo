@@ -215,6 +215,18 @@ _PG_init(void)
 							 NULL
 	);
 
+	DefineCustomIntVariable("aqo.join_threshold",
+							"Sets the threshold of number of JOINs in query beyond which AQO is used.",
+							NULL,
+							&aqo_join_threshold,
+							0,
+							0, INT_MAX / 1000,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
 	prev_shmem_startup_hook						= shmem_startup_hook;
 	shmem_startup_hook							= aqo_init_shmem;
 	prev_planner_hook							= planner_hook;

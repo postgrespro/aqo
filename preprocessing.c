@@ -109,6 +109,8 @@ CleanQuerytext(const char *query, int *location, int *len)
 /* List of feature spaces, that are processing in this backend. */
 List *cur_classes = NIL;
 
+int aqo_join_threshold = 0;
+
 static bool isQueryUsingSystemRelation(Query *query);
 static bool isQueryUsingSystemRelation_walker(Node *node, void *context);
 
@@ -405,6 +407,12 @@ disable_aqo_for_query(void)
 	query_context.planning_time = -1.;
 }
 
+typedef struct AQOPreWalkerCtx
+{
+	bool	trivQuery;
+	int		njoins;
+} AQOPreWalkerCtx;
+
 /*
  * Examine a fully-parsed query, and return TRUE iff any relation underlying
  * the query is a system relation or no one relation touched by the query.
@@ -412,12 +420,14 @@ disable_aqo_for_query(void)
 static bool
 isQueryUsingSystemRelation(Query *query)
 {
-	bool trivQuery = true;
+	AQOPreWalkerCtx ctx;
 	bool result;
 
-	result = isQueryUsingSystemRelation_walker((Node *) query, &trivQuery);
+	ctx.trivQuery = true;
+	ctx.njoins = 0;
+	result = isQueryUsingSystemRelation_walker((Node *) query, &ctx);
 
-	if (result || trivQuery)
+	if (result || ctx.trivQuery || ctx.njoins < aqo_join_threshold)
 		return true;
 	return false;
 }
@@ -438,16 +448,53 @@ IsAQORelation(Relation rel)
 	return false;
 }
 
+/*
+ * Walk through jointree and calculate number of potential joins
+ */
+static void
+jointree_walker(Node *jtnode, void *context)
+{
+	AQOPreWalkerCtx   *ctx = (AQOPreWalkerCtx *) context;
+
+	if (jtnode == NULL || IsA(jtnode, RangeTblRef))
+		return;
+	else if (IsA(jtnode, FromExpr))
+	{
+		FromExpr   *f = (FromExpr *) jtnode;
+		ListCell   *l;
+
+		/* Count number of potential joins by number of sources in FROM list */
+		ctx->njoins += list_length(f->fromlist) - 1;
+
+		foreach(l, f->fromlist)
+			jointree_walker(lfirst(l), context);
+	}
+	else if (IsA(jtnode, JoinExpr))
+	{
+		JoinExpr   *j = (JoinExpr *) jtnode;
+
+		/* Don't forget about explicit JOIN statement */
+		ctx->njoins++;
+		jointree_walker(j->larg, context);
+		jointree_walker(j->rarg, context);
+	}
+	else
+		elog(ERROR, "unrecognized node type: %d", (int) nodeTag(jtnode));
+	return;
+}
+
 static bool
 isQueryUsingSystemRelation_walker(Node *node, void *context)
 {
+	AQOPreWalkerCtx   *ctx = (AQOPreWalkerCtx *) context;
+
 	if (node == NULL)
 		return false;
 
 	if (IsA(node, Query))
 	{
-		Query	   *query = (Query *) node;
-		ListCell   *rtable;
+		Query			  *query = (Query *) node;
+		ListCell		  *rtable;
 
 		foreach(rtable, query->rtable)
 		{
@@ -458,13 +505,12 @@ isQueryUsingSystemRelation_walker(Node *node, void *context)
 				Relation	rel = table_open(rte->relid, AccessShareLock);
 				bool		is_catalog = IsCatalogRelation(rel);
 				bool		is_aqo_rel = IsAQORelation(rel);
-				bool	   *trivQuery = (bool *) context;
 
 				table_close(rel, AccessShareLock);
 				if (is_catalog || is_aqo_rel)
 					return true;
 
-				*trivQuery = false;
+				ctx->trivQuery = false;
 			}
 			else if (rte->rtekind == RTE_FUNCTION)
 			{
@@ -474,6 +520,9 @@ isQueryUsingSystemRelation_walker(Node *node, void *context)
 			}
 		}
 
+		jointree_walker((Node *) query->jointree, context);
+
+		/* Recursively plunge into subqueries and CTEs */
 		return query_tree_walker(query,
 								 isQueryUsingSystemRelation_walker,
 								 context,
