@@ -26,9 +26,11 @@ EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 SELECT obj_description('public.show_cardinality_errors'::regproc::oid);
 SELECT obj_description('public.show_execution_time'::regproc::oid);
 SELECT obj_description('public.aqo_drop_class'::regproc::oid);
+SELECT obj_description('public.aqo_cleanup'::regproc::oid);
 
 \df show_cardinality_errors
 \df show_execution_time
 \df aqo_drop_class
+\df aqo_cleanup
 
 DROP EXTENSION aqo;

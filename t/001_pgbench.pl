@@ -272,7 +272,7 @@ $node->safe_psql('postgres', "
 				pgbench_history CASCADE;");
 
 # Clean unneeded AQO knowledge
-$node->safe_psql('postgres', "SELECT clean_aqo_data()");
+$node->safe_psql('postgres', "SELECT public.aqo_cleanup()");
 
 # Calculate total number of rows in AQO-related tables.
 my $new_fs_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_queries;");

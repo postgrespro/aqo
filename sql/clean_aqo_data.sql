@@ -6,7 +6,7 @@ DROP TABLE IF EXISTS b;
 CREATE TABLE a();
 SELECT * FROM a;
 SELECT 'a'::regclass::oid AS a_oid \gset
-SELECT clean_aqo_data();
+SELECT aqo_cleanup();
 
 /*
  * lines with a_oid in aqo_data,
@@ -26,7 +26,7 @@ SELECT count(*) FROM aqo_query_stat WHERE
         aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)));
 
 DROP TABLE a;
-SELECT clean_aqo_data();
+SELECT aqo_cleanup();
 
 /*
  * lines with a_oid in aqo_data,
@@ -54,7 +54,7 @@ SELECT 'a'::regclass::oid AS a_oid \gset
 -- add manually line with different fspace_hash and query_hash to aqo_queries
 INSERT INTO aqo_queries VALUES (:a_oid + 1, 't', 't', :a_oid, 'f');
 DROP TABLE a;
-SELECT clean_aqo_data();
+SELECT aqo_cleanup();
 -- this line should remain
 SELECT count(*) FROM aqo_queries WHERE (fspace_hash = :a_oid AND query_hash = :a_oid + 1);
 
@@ -88,7 +88,7 @@ SELECT count(*) FROM aqo_query_stat WHERE
         aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :b_oid=ANY(oids)));
 
 DROP TABLE a;
-SELECT clean_aqo_data();
+SELECT aqo_cleanup();
 
 /*
  * lines corresponding to a_oid and both a_oid's fspace_hash deleted in aqo_data,
@@ -124,7 +124,7 @@ SELECT count(*) FROM aqo_query_stat WHERE
             aqo_queries.fspace_hash = aqo_queries.query_hash);
 
 DROP TABLE b;
-SELECT clean_aqo_data();
+SELECT aqo_cleanup();
 
 -- lines corresponding to b_oid in theese tables deleted
 SELECT count(*) FROM aqo_data WHERE :b_oid=ANY(oids);

@@ -16,10 +16,10 @@ SELECT count(*) FROM pt AS pt1, tt AS tt1, tt AS tt2, pt AS pt2;
 SELECT count(*) FROM aqo_data;
 
 DROP TABLE tt;
-SELECT clean_aqo_data();
+SELECT aqo_cleanup();
 SELECT count(*) FROM aqo_data; -- Should be the same as above
 DROP TABLE pt;
-SELECT clean_aqo_data();
+SELECT aqo_cleanup();
 SELECT count(*) FROM aqo_data; -- Should be 0
 SELECT query_text FROM aqo_queries aq LEFT JOIN aqo_query_texts aqt
 ON aq.query_hash = aqt.query_hash
@@ -66,7 +66,7 @@ SELECT * FROM check_estimated_rows('
 
 SET aqo.mode = 'forced'; -- Now we use all fss records for each query
 DROP TABLE pt;
-SELECT clean_aqo_data();
+SELECT aqo_cleanup();
 CREATE TABLE pt AS SELECT x AS x, (x % 10) AS y FROM generate_series(1,100) AS x;
 CREATE TEMP TABLE ttd1 AS
   SELECT -(x*3) AS x, (x % 9) AS y1 FROM generate_series(1,100) AS x;
