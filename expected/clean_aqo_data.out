@@ -10,10 +10,10 @@ SELECT * FROM a;
 (0 rows)
 
 SELECT 'a'::regclass::oid AS a_oid \gset
-SELECT clean_aqo_data();
- clean_aqo_data 
-----------------
- 
+SELECT aqo_cleanup();
+ aqo_cleanup 
+-------------
+ (0,0)
 (1 row)
 
 /*
@@ -53,10 +53,10 @@ SELECT count(*) FROM aqo_query_stat WHERE
 (1 row)
 
 DROP TABLE a;
-SELECT clean_aqo_data();
- clean_aqo_data 
-----------------
- 
+SELECT aqo_cleanup();
+ aqo_cleanup 
+-------------
+ (1,1)
 (1 row)
 
 /*
@@ -107,10 +107,10 @@ SELECT 'a'::regclass::oid AS a_oid \gset
 -- add manually line with different fspace_hash and query_hash to aqo_queries
 INSERT INTO aqo_queries VALUES (:a_oid + 1, 't', 't', :a_oid, 'f');
 DROP TABLE a;
-SELECT clean_aqo_data();
- clean_aqo_data 
-----------------
- 
+SELECT aqo_cleanup();
+ aqo_cleanup 
+-------------
+ (1,1)
 (1 row)
 
 -- this line should remain
@@ -196,10 +196,10 @@ SELECT count(*) FROM aqo_query_stat WHERE
 (1 row)
 
 DROP TABLE a;
-SELECT clean_aqo_data();
- clean_aqo_data 
-----------------
- 
+SELECT aqo_cleanup();
+ aqo_cleanup 
+-------------
+ (2,4)
 (1 row)
 
 /*
@@ -274,10 +274,10 @@ SELECT count(*) FROM aqo_query_stat WHERE
 (1 row)
 
 DROP TABLE b;
-SELECT clean_aqo_data();
- clean_aqo_data 
-----------------
- 
+SELECT aqo_cleanup();
+ aqo_cleanup 
+-------------
+ (1,1)
 (1 row)
 
 -- lines corresponding to b_oid in theese tables deleted

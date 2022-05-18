@@ -86,6 +86,12 @@ SELECT obj_description('public.aqo_drop_class'::regproc::oid);
  Remove info about an query class from AQO ML knowledge base.
 (1 row)
 
+SELECT obj_description('public.aqo_cleanup'::regproc::oid);
+               obj_description                
+----------------------------------------------
+ Remove unneeded rows from the AQO ML storage
+(1 row)
+
 \df show_cardinality_errors
                                                                  List of functions
  Schema |          Name           |                                  Result data type                                  | Argument data types | Type 
@@ -105,6 +111,13 @@ SELECT obj_description('public.aqo_drop_class'::regproc::oid);
  Schema |      Name      | Result data type | Argument data types | Type 
 --------+----------------+------------------+---------------------+------
  public | aqo_drop_class | integer          | id bigint           | func
+(1 row)
+
+\df aqo_cleanup
+                                 List of functions
+ Schema |    Name     | Result data type |        Argument data types        | Type 
+--------+-------------+------------------+-----------------------------------+------
+ public | aqo_cleanup | record           | OUT nfs integer, OUT nfss integer | func
 (1 row)
 
 DROP EXTENSION aqo;

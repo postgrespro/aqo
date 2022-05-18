@@ -601,10 +601,10 @@ ORDER BY (md5(query_text),error) DESC;
 (13 rows)
 
 DROP TABLE t,t1 CASCADE;
-SELECT public.clean_aqo_data();
- clean_aqo_data 
-----------------
- 
+SELECT public.aqo_cleanup();
+ aqo_cleanup 
+-------------
+ (12,42)
 (1 row)
 
 -- Look for any remaining queries in the ML storage.
