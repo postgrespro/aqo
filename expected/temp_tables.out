@@ -46,10 +46,10 @@ SELECT count(*) FROM aqo_data;
 (1 row)
 
 DROP TABLE tt;
-SELECT clean_aqo_data();
- clean_aqo_data 
-----------------
- 
+SELECT aqo_cleanup();
+ aqo_cleanup 
+-------------
+ (0,0)
 (1 row)
 
 SELECT count(*) FROM aqo_data; -- Should be the same as above
@@ -59,10 +59,10 @@ SELECT count(*) FROM aqo_data; -- Should be the same as above
 (1 row)
 
 DROP TABLE pt;
-SELECT clean_aqo_data();
- clean_aqo_data 
-----------------
- 
+SELECT aqo_cleanup();
+ aqo_cleanup 
+-------------
+ (3,10)
 (1 row)
 
 SELECT count(*) FROM aqo_data; -- Should be 0
@@ -133,10 +133,10 @@ SELECT * FROM check_estimated_rows('
 
 SET aqo.mode = 'forced'; -- Now we use all fss records for each query
 DROP TABLE pt;
-SELECT clean_aqo_data();
- clean_aqo_data 
-----------------
- 
+SELECT aqo_cleanup();
+ aqo_cleanup 
+-------------
+ (2,6)
 (1 row)
 
 CREATE TABLE pt AS SELECT x AS x, (x % 10) AS y FROM generate_series(1,100) AS x;

@@ -163,7 +163,7 @@ ORDER BY (md5(query_text),error) DESC;
 
 DROP TABLE t,t1 CASCADE;
 
-SELECT public.clean_aqo_data();
+SELECT public.aqo_cleanup();
 
 -- Look for any remaining queries in the ML storage.
 SELECT to_char(error, '9.99EEEE')::text AS error, query_text

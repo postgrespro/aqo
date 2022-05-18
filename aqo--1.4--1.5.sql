@@ -78,6 +78,7 @@ $$ LANGUAGE plpgsql;
 
 DROP FUNCTION public.top_time_queries;
 DROP FUNCTION public.aqo_drop;
+DROP FUNCTION public.clean_aqo_data;
 
 --
 -- Show execution time of queries, for which AQO has statistics.
@@ -167,3 +168,44 @@ $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION public.aqo_drop_class(bigint) IS
 'Remove info about an query class from AQO ML knowledge base.';
+
+--
+-- Remove unneeded rows from the AQO ML storage.
+-- For common feature space, remove rows from aqo_data only.
+-- For custom feature space - remove all rows related to the space from all AQO
+-- tables even if only one oid for one feature subspace of the space is illegal.
+-- Returns number of deleted rows from aqo_queries and aqo_data tables.
+--
+CREATE OR REPLACE FUNCTION public.aqo_cleanup(OUT nfs integer, OUT nfss integer)
+AS $$
+DECLARE
+    fs bigint;
+    fss integer;
+BEGIN
+  -- Save current number of rows
+  SELECT count(*) FROM aqo_queries INTO nfs;
+  SELECT count(*) FROM aqo_data INTO nfss;
+
+  FOR fs,fss IN SELECT q1.fs,q1.fss FROM (
+                     SELECT fspace_hash fs, fsspace_hash fss, unnest(oids) AS reloid
+                     FROM aqo_data) AS q1
+                     WHERE q1.reloid NOT IN (SELECT oid FROM pg_class)
+                     GROUP BY (q1.fs,q1.fss)
+  LOOP
+    IF (fs = 0) THEN
+      DELETE FROM aqo_data WHERE fsspace_hash = fss;
+      continue;
+    END IF;
+
+    -- Remove ALL feature space if one of oids isn't exists
+    DELETE FROM aqo_queries WHERE fspace_hash = fs;
+  END LOOP;
+
+  -- Calculate difference with previous state of knowledge base
+  nfs := nfs - (SELECT count(*) FROM aqo_queries);
+  nfss := nfss - (SELECT count(*) FROM aqo_data);
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION public.aqo_cleanup() IS
+'Remove unneeded rows from the AQO ML storage';
