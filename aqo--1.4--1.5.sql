@@ -10,13 +10,13 @@
 --
 DROP TABLE public.aqo_data CASCADE;
 CREATE TABLE public.aqo_data (
-	fspace_hash		bigint NOT NULL REFERENCES public.aqo_queries ON DELETE CASCADE,
-	fsspace_hash	int NOT NULL,
-	nfeatures		  int NOT NULL,
-	features		  double precision[][],
-	targets			  double precision[],
-	oids			    oid [] DEFAULT NULL,
-	reliability		double precision []
+	fspace_hash	 bigint NOT NULL REFERENCES public.aqo_queries ON DELETE CASCADE,
+	fsspace_hash int NOT NULL,
+	nfeatures	 int NOT NULL,
+	features	 double precision[][],
+	targets		 double precision[],
+	oids		 oid [] DEFAULT NULL,
+	reliability	 double precision []
 );
 CREATE UNIQUE INDEX aqo_fss_access_idx ON public.aqo_data (fspace_hash, fsspace_hash);
 
@@ -79,6 +79,11 @@ $$ LANGUAGE plpgsql;
 DROP FUNCTION public.top_time_queries;
 DROP FUNCTION public.aqo_drop;
 DROP FUNCTION public.clean_aqo_data;
+DROP FUNCTION public.show_cardinality_errors;
+DROP FUNCTION array_mse;
+DROP FUNCTION array_avg;
+DROP FUNCTION public.aqo_ne_queries; -- Not needed anymore due to changing in the logic
+DROP FUNCTION public.aqo_clear_hist; -- Should be renamed and reworked
 
 --
 -- Show execution time of queries, for which AQO has statistics.
@@ -86,7 +91,7 @@ DROP FUNCTION public.clean_aqo_data;
 -- estimations, or not used (controlled = false).
 -- Last case is possible in disabled mode with aqo.force_collect_stat = 'on'.
 --
-CREATE OR REPLACE FUNCTION public.show_execution_time(controlled boolean)
+CREATE OR REPLACE FUNCTION public.aqo_execution_time(controlled boolean)
 RETURNS TABLE(num bigint, id bigint, fshash bigint, exec_time float, nexecs bigint)
 AS $$
 BEGIN
@@ -120,7 +125,7 @@ ELSE
       SELECT
         aq.query_hash AS queryid,
         aq.fspace_hash AS fs_hash,
-        array_avg(execution_time_without_aqo) AS exectime,
+        (SELECT AVG(t) FROM unnest(execution_time_without_aqo) t) AS exectime,
         executions_without_aqo AS execs
       FROM public.aqo_queries aq JOIN public.aqo_query_stat aqs
       ON aq.query_hash = aqs.query_hash
@@ -131,28 +136,31 @@ END IF;
 END;
 $$ LANGUAGE plpgsql;
 
-COMMENT ON FUNCTION public.show_execution_time(boolean) IS
+COMMENT ON FUNCTION public.aqo_execution_time(boolean) IS
 'Get execution time of queries. If controlled = true (AQO could advise cardinality estimations), show time of last execution attempt. Another case (AQO not used), return an average value of execution time across all known executions.';
 
-CREATE OR REPLACE FUNCTION public.aqo_drop_class(id bigint)
+--
+-- Remove all information about a query class from AQO storage.
+--
+CREATE OR REPLACE FUNCTION public.aqo_drop_class(queryid bigint)
 RETURNS integer AS $$
 DECLARE
   fs bigint;
   num integer;
 BEGIN
-  IF (id = 0) THEN
-    raise EXCEPTION '[AQO] Cannot remove basic class %.', id;
+  IF (queryid = 0) THEN
+    raise EXCEPTION '[AQO] Cannot remove basic class %.', queryid;
   END IF;
 
-  SELECT fspace_hash FROM public.aqo_queries WHERE (query_hash = id) INTO fs;
+  SELECT fspace_hash FROM public.aqo_queries WHERE (query_hash = queryid) INTO fs;
 
   IF (fs IS NULL) THEN
-    raise WARNING '[AQO] Nothing to remove for the class %.', id;
+    raise WARNING '[AQO] Nothing to remove for the class %.', queryid;
     RETURN 0;
   END IF;
 
-  IF (fs <> id) THEN
-    raise WARNING '[AQO] Removing query class has non-generic feature space value: id = %, fs = %.', id, fs;
+  IF (fs <> queryid) THEN
+    raise WARNING '[AQO] Removing query class has non-generic feature space value: id = %, fs = %.', queryid, fs;
   END IF;
 
   SELECT count(*) FROM public.aqo_data WHERE fspace_hash = fs INTO num;
@@ -161,7 +169,7 @@ BEGIN
    * Remove the only from aqo_queries table. All other data will be removed by
    * CASCADE deletion.
    */
-  DELETE FROM public.aqo_queries WHERE query_hash = id;
+  DELETE FROM public.aqo_queries WHERE query_hash = queryid;
   RETURN num;
 END;
 $$ LANGUAGE plpgsql;
@@ -179,8 +187,8 @@ COMMENT ON FUNCTION public.aqo_drop_class(bigint) IS
 CREATE OR REPLACE FUNCTION public.aqo_cleanup(OUT nfs integer, OUT nfss integer)
 AS $$
 DECLARE
-    fs bigint;
-    fss integer;
+  fs bigint;
+  fss integer;
 BEGIN
   -- Save current number of rows
   SELECT count(*) FROM aqo_queries INTO nfs;
@@ -209,3 +217,86 @@ $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION public.aqo_cleanup() IS
 'Remove unneeded rows from the AQO ML storage';
+
+--
+-- Get cardinality error of queries the last time they were executed.
+-- IN:
+-- controlled - show queries executed under a control of AQO (true);
+-- executed without an AQO control, but AQO has a stat on the query (false).
+--
+-- OUT:
+-- num - sequental number. Smaller number corresponds to higher error.
+-- id - ID of a query.
+-- fshash - feature space. Usually equal to zero or ID.
+-- error - AQO error that calculated on plan nodes of the query.
+-- nexecs - number of executions of queries associated with this ID.
+--
+CREATE OR REPLACE FUNCTION public.aqo_cardinality_error(controlled boolean)
+RETURNS TABLE(num bigint, id bigint, fshash bigint, error float, nexecs bigint)
+AS $$
+BEGIN
+IF (controlled) THEN
+  RETURN QUERY
+    SELECT
+      row_number() OVER (ORDER BY (cerror, query_id, fs_hash) DESC) AS nn,
+      query_id, fs_hash, cerror, execs
+    FROM (
+    SELECT
+      aq.query_hash AS query_id,
+      aq.fspace_hash AS fs_hash,
+      cardinality_error_with_aqo[array_length(cardinality_error_with_aqo, 1)] AS cerror,
+      executions_with_aqo AS execs
+    FROM public.aqo_queries aq JOIN public.aqo_query_stat aqs
+    ON aq.query_hash = aqs.query_hash
+    WHERE TRUE = ANY (SELECT unnest(cardinality_error_with_aqo) IS NOT NULL)
+    ) AS q1
+    ORDER BY nn ASC;
+ELSE
+  RETURN QUERY
+    SELECT
+      row_number() OVER (ORDER BY (cerror, query_id, fs_hash) DESC) AS nn,
+      query_id, fs_hash, cerror, execs
+    FROM (
+      SELECT
+        aq.query_hash AS query_id,
+        aq.fspace_hash AS fs_hash,
+		(SELECT AVG(t) FROM unnest(cardinality_error_without_aqo) t) AS cerror,
+        executions_without_aqo AS execs
+      FROM public.aqo_queries aq JOIN public.aqo_query_stat aqs
+      ON aq.query_hash = aqs.query_hash
+      WHERE TRUE = ANY (SELECT unnest(cardinality_error_without_aqo) IS NOT NULL)
+      ) AS q1
+    ORDER BY (nn) ASC;
+END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION public.aqo_cardinality_error(boolean) IS
+'Get cardinality error of queries the last time they were executed. Order queries according to an error value.';
+
+--
+-- Remove all learning data for query with given ID.
+-- Can be used in the case when user don't want to drop preferences and
+-- accumulated statistics on a query class, but tries to re-learn AQO on this
+-- class.
+-- Returns a number of deleted rows in the aqo_data table.
+--
+CREATE OR REPLACE FUNCTION public.aqo_reset_query(queryid bigint)
+RETURNS integer AS $$
+DECLARE
+  num integer;
+  fs  bigint;
+BEGIN
+  IF (queryid = 0) THEN
+    raise WARNING '[AQO] Reset common feature space.'
+  END IF;
+
+  SELECT fspace_hash FROM public.aqo_queries WHERE query_hash = queryid INTO fs;
+  SELECT count(*) FROM public.aqo_data WHERE fspace_hash = fs INTO num;
+  DELETE FROM public.aqo_data WHERE fspace_hash = fs;
+  RETURN num;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION public.aqo_reset_query(bigint) IS
+'Remove from AQO storage only learning data for given QueryId.';

@@ -5,9 +5,9 @@ CREATE EXTENSION aqo;
 SHOW aqo.join_threshold;
 SHOW aqo.learn_statement_timeout;
 SHOW aqo.show_hash;
-SHOW  aqo.show_details;
+SHOW aqo.show_details;
 SHOW aqo.force_collect_stat;
-SHOW  aqo.mode;
+SHOW aqo.mode;
 
 SET aqo.mode = 'learn';
 SET aqo.show_details = true;
@@ -23,14 +23,16 @@ EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 	SELECT x FROM t;
 
 -- Check existence of the interface functions.
-SELECT obj_description('public.show_cardinality_errors'::regproc::oid);
-SELECT obj_description('public.show_execution_time'::regproc::oid);
+SELECT obj_description('public.aqo_cardinality_error'::regproc::oid);
+SELECT obj_description('public.aqo_execution_time'::regproc::oid);
 SELECT obj_description('public.aqo_drop_class'::regproc::oid);
 SELECT obj_description('public.aqo_cleanup'::regproc::oid);
+SELECT obj_description('public.aqo_reset_query'::regproc::oid);
 
-\df show_cardinality_errors
-\df show_execution_time
+\df aqo_cardinality_error
+\df aqo_execution_time
 \df aqo_drop_class
 \df aqo_cleanup
+\df aqo_reset_query
 
 DROP EXTENSION aqo;
