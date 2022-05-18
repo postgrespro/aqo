@@ -126,7 +126,7 @@ SELECT * FROM
 	(SELECT * FROM t WHERE x > 20) AS t1
 		USING(x);
 
--- AQO need to predict total fetched tuples in a table.
+-- AQO needs to predict total fetched tuples in a table.
 --
 -- At a non-leaf node we have prediction about input tuples - is a number of
 -- predicted output rows in underlying node. But for Scan nodes we don't have
@@ -157,7 +157,7 @@ EXPLAIN (COSTS OFF)
 -- XXX: Do we stuck into an unstable behavior of an error value?
 -- Live with this variant of the test for some time.
 SELECT to_char(error, '9.99EEEE')::text AS error, query_text
-FROM public.show_cardinality_errors(true) cef, aqo_query_texts aqt
+FROM public.aqo_cardinality_error(true) cef, aqo_query_texts aqt
 WHERE aqt.query_hash = cef.id
 ORDER BY (md5(query_text),error) DESC;
 
@@ -167,7 +167,7 @@ SELECT public.aqo_cleanup();
 
 -- Look for any remaining queries in the ML storage.
 SELECT to_char(error, '9.99EEEE')::text AS error, query_text
-FROM public.show_cardinality_errors(true) cef, aqo_query_texts aqt
+FROM public.aqo_cardinality_error(true) cef, aqo_query_texts aqt
 WHERE aqt.query_hash = cef.id
 ORDER BY (md5(query_text),error) DESC;
 

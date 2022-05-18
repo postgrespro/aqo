@@ -12,12 +12,12 @@ CREATE TEMP TABLE ttt AS SELECT count(*) AS cnt FROM generate_series(1,10);
 CREATE TABLE ttp AS SELECT count(*) AS cnt FROM generate_series(1,10);
 SELECT count(*) AS cnt FROM ttt WHERE cnt % 100 = 0;
 SELECT count(*) AS cnt FROM ttp WHERE cnt % 100 = 0;
-SELECT num FROM show_execution_time(true); -- Just for checking, return zero.
-SELECT num FROM show_execution_time(false);
+SELECT num FROM aqo_execution_time(true); -- Just for checking, return zero.
+SELECT num FROM aqo_execution_time(false);
 
 -- Without the AQO control queries with and without temp tables are logged.
 SELECT query_text,nexecs
-FROM show_execution_time(false) ce, aqo_query_texts aqt
+FROM aqo_execution_time(false) ce, aqo_query_texts aqt
 WHERE ce.id = aqt.query_hash
 ORDER BY (md5(query_text));
 
@@ -32,7 +32,7 @@ CREATE TABLE t2 AS SELECT mod(gs,10) AS x, mod(gs+1,10) AS y
 SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;
 SELECT count(*) FROM (SELECT x, y FROM t2 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;
 
-SELECT num, to_char(error, '9.99EEEE') FROM show_cardinality_errors(false) AS te
+SELECT num, to_char(error, '9.99EEEE') FROM aqo_cardinality_error(false) AS te
 WHERE te.fshash = (
   SELECT fspace_hash FROM aqo_queries
   WHERE aqo_queries.query_hash = (
@@ -42,10 +42,10 @@ WHERE te.fshash = (
 );
 
 -- Should return zero
-SELECT count(*) FROM show_cardinality_errors(true);
+SELECT count(*) FROM aqo_cardinality_error(true);
 
 -- Fix list of logged queries
 SELECT query_text,nexecs
-FROM show_cardinality_errors(false) ce, aqo_query_texts aqt
+FROM aqo_cardinality_error(false) ce, aqo_query_texts aqt
 WHERE ce.id = aqt.query_hash
 ORDER BY (md5(query_text));
