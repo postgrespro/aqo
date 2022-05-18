@@ -172,6 +172,9 @@ aqo_planner(Query *parse,
 	selectivity_cache_clear();
 	query_context.query_hash = get_query_hash(parse, query_string);
 
+	/* By default, they should be equal */
+	query_context.fspace_hash = query_context.query_hash;
+
 	if (query_is_deactivated(query_context.query_hash) ||
 		list_member_uint64(cur_classes,query_context.query_hash))
 	{
@@ -211,7 +214,6 @@ aqo_planner(Query *parse,
 				query_context.adding_query = true;
 				query_context.learn_aqo = true;
 				query_context.use_aqo = false;
-				query_context.fspace_hash = query_context.query_hash;
 				query_context.auto_tuning = true;
 				query_context.collect_stat = true;
 				break;
@@ -220,7 +222,7 @@ aqo_planner(Query *parse,
 				query_context.learn_aqo = true;
 				query_context.use_aqo = true;
 				query_context.auto_tuning = false;
-				query_context.fspace_hash = 0;
+				query_context.fspace_hash = 0; /* Use common feature space */
 				query_context.collect_stat = false;
 				break;
 			case AQO_MODE_CONTROLLED:
@@ -239,7 +241,6 @@ aqo_planner(Query *parse,
 				query_context.adding_query = true;
 				query_context.learn_aqo = true;
 				query_context.use_aqo = true;
-				query_context.fspace_hash = query_context.query_hash;
 				query_context.auto_tuning = false;
 				query_context.collect_stat = true;
 				break;
@@ -287,7 +288,6 @@ aqo_planner(Query *parse,
 			 * suppressed manually) and collect stats.
 			 */
 			query_context.collect_stat = true;
-			query_context.fspace_hash = query_context.query_hash;
 			break;
 
 		case AQO_MODE_INTELLIGENT:
@@ -331,14 +331,11 @@ ignore_query_settings:
 	}
 
 	if (force_collect_stat)
-	{
 		/*
 		 * If this GUC is set, AQO will analyze query results and collect
 		 * query execution statistics in any mode.
 		 */
 		query_context.collect_stat = true;
-		query_context.fspace_hash = query_context.query_hash;
-	}
 
 	if (!IsQueryDisabled())
 		/* It's good place to set timestamp of start of a planning process. */
