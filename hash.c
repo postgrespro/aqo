@@ -98,6 +98,29 @@ list_member_uint64(const List *list, uint64 datum)
 	return false;
 }
 
+/*
+ * Deep copy of uint64 list.
+ * Each element here is dynamically allocated in some memory context.
+ * If we copy the list in another memctx we should allocate memory for new
+ * elements too.
+ */
+List *
+list_copy_uint64(List *list)
+{
+	ListCell *lc;
+	List	 *nlist = NIL;
+
+	foreach(lc, list)
+	{
+		uint64 *val = palloc(sizeof(uint64));
+
+		*val = *(uint64 *) lfirst(lc);
+		nlist = lappend(nlist, (void *) val);
+	}
+
+	return nlist;
+}
+
 List *
 lappend_uint64(List *list, uint64 datum)
 {
