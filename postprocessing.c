@@ -913,11 +913,20 @@ StoreToQueryEnv(QueryDesc *queryDesc)
 	MemoryContext	oldCxt;
 	bool newentry = false;
 
-	oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc->plannedstmt));
+	/*
+	 * Choose memory context for AQO parameters. Use pre-existed context if
+	 * someone earlier created queryEnv (usually, SPI), or base on the queryDesc
+	 * memory context.
+	 */
+	if (queryDesc->queryEnv != NULL)
+		oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc->queryEnv));
+	else
+	{
+		oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc));
+		queryDesc->queryEnv = create_queryEnv();
+	}
 
-	if (queryDesc->queryEnv == NULL)
-			queryDesc->queryEnv = create_queryEnv();
-
+	Assert(queryDesc->queryEnv);
 	enr = get_ENR(queryDesc->queryEnv, AQOPrivateData);
 	if (enr == NULL)
 	{
@@ -965,11 +974,20 @@ StorePlanInternals(QueryDesc *queryDesc)
 	njoins = 0;
 	planstate_tree_walker(queryDesc->planstate, calculateJoinNum, &njoins);
 
-	oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc->plannedstmt));
+	/*
+	 * Choose memory context for AQO parameters. Use pre-existed context if
+	 * someone earlier created queryEnv (usually, SPI), or base on the queryDesc
+	 * memory context.
+	 */
+	if (queryDesc->queryEnv != NULL)
+		oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc->queryEnv));
+	else
+	{
+		oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc));
+		queryDesc->queryEnv = create_queryEnv();
+	}
 
-	if (queryDesc->queryEnv == NULL)
-			queryDesc->queryEnv = create_queryEnv();
-
+	Assert(queryDesc->queryEnv);
 	enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
 	if (enr == NULL)
 	{
