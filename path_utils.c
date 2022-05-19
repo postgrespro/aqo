@@ -578,7 +578,7 @@ AQOnodeCopy(struct ExtensibleNode *enew, const struct ExtensibleNode *eold)
 	/* These lists couldn't contain AQO nodes. Use basic machinery */
 	new->rels = palloc(sizeof(RelSortOut));
 	new->rels->hrels = list_copy(old->rels->hrels);
-	new->rels->signatures = list_copy(old->rels->signatures);
+	new->rels->signatures = list_copy_uint64(old->rels->signatures);
 
 	new->clauses = copyObject(old->clauses);
 	new->grouping_exprs = copyObject(old->grouping_exprs);
