@@ -203,7 +203,7 @@ _PG_init(void)
 							"Sets the threshold of number of JOINs in query beyond which AQO is used.",
 							NULL,
 							&aqo_join_threshold,
-							0,
+							3,
 							0, INT_MAX / 1000,
 							PGC_USERSET,
 							0,

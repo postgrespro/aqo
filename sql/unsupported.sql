@@ -1,4 +1,5 @@
 CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
 

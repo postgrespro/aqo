@@ -1,5 +1,6 @@
 \set citizens	1000
 
+SET aqo.join_threshold = 0;
 SET aqo.mode = 'disabled';
 SET aqo.force_collect_stat = 'on';
 

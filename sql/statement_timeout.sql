@@ -23,6 +23,7 @@ ANALYZE t;
 DELETE FROM t WHERE x > 5; -- Force optimizer to make overestimated prediction.
 
 CREATE EXTENSION IF NOT EXISTS aqo;
+SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'off';
 SET aqo.learn_statement_timeout = 'on';

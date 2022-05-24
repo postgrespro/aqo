@@ -1,13 +1,5 @@
 CREATE EXTENSION aqo;
-
--- Check interface variables and their default values. Detect, if default value
--- of a GUC is changed.
-SHOW aqo.join_threshold;
-SHOW aqo.learn_statement_timeout;
-SHOW aqo.show_hash;
-SHOW aqo.show_details;
-SHOW aqo.force_collect_stat;
-SHOW aqo.mode;
+SET aqo.join_threshold = 0;
 
 SET aqo.mode = 'learn';
 SET aqo.show_details = true;
