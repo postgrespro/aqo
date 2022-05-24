@@ -15,6 +15,7 @@ $node->append_conf('postgresql.conf', qq{
 						aqo.profile_enable = 'true'
 						aqo.force_collect_stat = 'false'
 						log_statement = 'ddl' # reduce size of logs.
+						aqo.join_threshold = 0
 					});
 # Test constants.
 my $TRANSACTIONS = 100;

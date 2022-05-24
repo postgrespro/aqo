@@ -29,6 +29,7 @@ CREATE INDEX aqo_test2_idx_a ON aqo_test2 (a);
 ANALYZE aqo_test2;
 
 CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
 
 SET aqo.mode = 'controlled';
 

@@ -1,5 +1,6 @@
 -- Tests on interaction of AQO with cached plans.
 CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
 SET aqo.mode = 'intelligent';
 SET aqo.show_details = 'on';
 SET aqo.show_hash = 'off';

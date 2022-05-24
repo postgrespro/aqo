@@ -40,6 +40,7 @@ CREATE INDEX aqo_test1_idx_a ON aqo_test1 (a);
 ANALYZE aqo_test1;
 
 CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
 
 SET aqo.mode = 'intelligent';
 

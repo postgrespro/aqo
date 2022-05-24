@@ -1,4 +1,5 @@
 CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 DROP TABLE IF EXISTS a;
 NOTICE:  table "a" does not exist, skipping

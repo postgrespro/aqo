@@ -11,6 +11,7 @@ CREATE EXTENSION aqo;  -- fail
 CREATE SCHEMA IF NOT EXISTS test1;
 SET search_path TO test1, public;
 CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
 SET aqo.mode = 'intelligent';
 
 CREATE TABLE test (id SERIAL, data TEXT);
