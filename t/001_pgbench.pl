@@ -13,6 +13,7 @@ $node->append_conf('postgresql.conf', qq{
 						shared_preload_libraries = 'aqo'
 						aqo.mode = 'intelligent'
 						log_statement = 'ddl'
+						aqo.join_threshold = 0
 					});
 
 # Test constants. Default values.
