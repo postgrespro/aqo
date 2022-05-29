@@ -31,31 +31,31 @@ EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 (6 rows)
 
 -- Check existence of the interface functions.
-SELECT obj_description('public.aqo_cardinality_error'::regproc::oid);
+SELECT obj_description('aqo_cardinality_error'::regproc::oid);
                                                 obj_description                                                
 ---------------------------------------------------------------------------------------------------------------
  Get cardinality error of queries the last time they were executed. Order queries according to an error value.
 (1 row)
 
-SELECT obj_description('public.aqo_execution_time'::regproc::oid);
+SELECT obj_description('aqo_execution_time'::regproc::oid);
                                                                                                              obj_description                                                                                                              
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Get execution time of queries. If controlled = true (AQO could advise cardinality estimations), show time of last execution attempt. Another case (AQO not used), return an average value of execution time across all known executions.
 (1 row)
 
-SELECT obj_description('public.aqo_drop_class'::regproc::oid);
+SELECT obj_description('aqo_drop_class'::regproc::oid);
                        obj_description                        
 --------------------------------------------------------------
  Remove info about an query class from AQO ML knowledge base.
 (1 row)
 
-SELECT obj_description('public.aqo_cleanup'::regproc::oid);
+SELECT obj_description('aqo_cleanup'::regproc::oid);
                obj_description                
 ----------------------------------------------
  Remove unneeded rows from the AQO ML storage
 (1 row)
 
-SELECT obj_description('public.aqo_reset_query'::regproc::oid);
+SELECT obj_description('aqo_reset_query'::regproc::oid);
                         obj_description                        
 ---------------------------------------------------------------
  Remove from AQO storage only learning data for given QueryId.
