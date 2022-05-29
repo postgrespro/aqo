@@ -162,17 +162,17 @@ EXPLAIN (COSTS OFF)
 -- XXX: Do we stuck into an unstable behavior of an error value?
 -- Live with this variant of the test for some time.
 SELECT to_char(error, '9.99EEEE')::text AS error, query_text
-FROM public.aqo_cardinality_error(true) cef, aqo_query_texts aqt
+FROM aqo_cardinality_error(true) cef, aqo_query_texts aqt
 WHERE aqt.query_hash = cef.id
 ORDER BY (md5(query_text),error) DESC;
 
 DROP TABLE t,t1 CASCADE;
 
-SELECT public.aqo_cleanup();
+SELECT aqo_cleanup();
 
 -- Look for any remaining queries in the ML storage.
 SELECT to_char(error, '9.99EEEE')::text AS error, query_text
-FROM public.aqo_cardinality_error(true) cef, aqo_query_texts aqt
+FROM aqo_cardinality_error(true) cef, aqo_query_texts aqt
 WHERE aqt.query_hash = cef.id
 ORDER BY (md5(query_text),error) DESC;
 

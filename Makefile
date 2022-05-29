@@ -25,7 +25,8 @@ REGRESS =	aqo_disabled \
 			plancache	\
 			statement_timeout \
 			temp_tables \
-			top_queries
+			top_queries \
+			relocatable
 
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw
 stat_srcdir = $(top_srcdir)/contrib/pg_stat_statements

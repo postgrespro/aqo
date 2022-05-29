@@ -1,0 +1,85 @@
+DROP EXTENSION IF EXISTS aqo CASCADE;
+DROP SCHEMA IF EXISTS test CASCADE;
+NOTICE:  schema "test" does not exist, skipping
+CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
+SET aqo.mode = 'intelligent';
+CREATE TABLE test (id SERIAL, data TEXT);
+INSERT INTO test (data) VALUES ('string');
+SELECT * FROM test;
+ id |  data  
+----+--------
+  1 | string
+(1 row)
+
+SELECT query_text FROM aqo_query_texts;
+              query_text               
+---------------------------------------
+ COMMON feature space (do not delete!)
+ SELECT * FROM test;
+(2 rows)
+
+SELECT learn_aqo, use_aqo, auto_tuning FROM aqo_queries;
+ learn_aqo | use_aqo | auto_tuning 
+-----------+---------+-------------
+ f         | f       | f
+ t         | f       | t
+(2 rows)
+
+CREATE SCHEMA IF NOT EXISTS test;
+ALTER EXTENSION aqo SET SCHEMA test;
+SET aqo.mode = 'intelligent';
+CREATE TABLE test1 (id SERIAL, data TEXT);
+INSERT INTO test1 (data) VALUES ('string');
+SELECT * FROM test1;
+ id |  data  
+----+--------
+  1 | string
+(1 row)
+
+SELECT query_text FROM test.aqo_query_texts;
+              query_text               
+---------------------------------------
+ COMMON feature space (do not delete!)
+ SELECT * FROM test;
+(2 rows)
+
+SELECT learn_aqo, use_aqo, auto_tuning FROM test.aqo_queries;
+ learn_aqo | use_aqo | auto_tuning 
+-----------+---------+-------------
+ f         | f       | f
+ t         | f       | t
+(2 rows)
+
+SET search_path TO test;
+CREATE TABLE test2 (id SERIAL, data TEXT);
+INSERT INTO test2 (data) VALUES ('string');
+SELECT * FROM test2;
+ id |  data  
+----+--------
+  1 | string
+(1 row)
+
+SELECT query_text FROM aqo_query_texts;
+              query_text               
+---------------------------------------
+ COMMON feature space (do not delete!)
+ SELECT * FROM test;
+ SELECT * FROM test2;
+(3 rows)
+
+SELECT learn_aqo, use_aqo, auto_tuning FROM aqo_queries;
+ learn_aqo | use_aqo | auto_tuning 
+-----------+---------+-------------
+ f         | f       | f
+ t         | f       | t
+ t         | f       | t
+(3 rows)
+
+DROP SCHEMA IF EXISTS test CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to extension aqo
+drop cascades to table test2
+DROP EXTENSION IF EXISTS aqo CASCADE;
+NOTICE:  extension "aqo" does not exist, skipping
+SET search_path TO public;
