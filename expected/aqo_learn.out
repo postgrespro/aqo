@@ -236,7 +236,7 @@ SELECT count(*) FROM tmp1;
 (1 row)
 
 -- Remove data on some unneeded instances of tmp1 table.
-SELECT public.aqo_cleanup();
+SELECT aqo_cleanup();
  aqo_cleanup 
 -------------
  (9,18)

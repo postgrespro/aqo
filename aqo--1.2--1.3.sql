@@ -1,9 +1,9 @@
-ALTER TABLE public.aqo_data ADD COLUMN oids text [] DEFAULT NULL;
+ALTER TABLE aqo_data ADD COLUMN oids text [] DEFAULT NULL;
 
 --
 -- Remove data, related to previously dropped tables, from the AQO tables.
 --
-CREATE OR REPLACE FUNCTION public.clean_aqo_data() RETURNS void AS $$
+CREATE OR REPLACE FUNCTION clean_aqo_data() RETURNS void AS $$
 DECLARE
     aqo_data_row aqo_data%ROWTYPE;
     aqo_queries_row aqo_queries%ROWTYPE;
@@ -29,7 +29,7 @@ BEGIN
       END LOOP;
     END IF;
 
-    FOR aqo_queries_row IN (SELECT * FROM public.aqo_queries)
+    FOR aqo_queries_row IN (SELECT * FROM aqo_queries)
     LOOP
       IF (delete_row = true AND fspace_hash_var <> 0 AND
           fspace_hash_var = aqo_queries_row.fspace_hash AND
@@ -87,7 +87,7 @@ $$ LANGUAGE plpgsql;
 --
 --  Top of queries with the highest value of execution time.
 --
-CREATE OR REPLACE FUNCTION public.top_time_queries(n int)
+CREATE OR REPLACE FUNCTION top_time_queries(n int)
   RETURNS TABLE(num bigint,
                 fspace_hash bigint,
                 query_hash bigint,
@@ -103,7 +103,7 @@ BEGIN
            aqo_queries.query_hash,
            to_char(array_avg(execution_time_without_aqo), '9.99EEEE')::float,
            to_char(array_mse(execution_time_without_aqo), '9.99EEEE')::float
-    FROM public.aqo_queries INNER JOIN aqo_query_stat
+    FROM aqo_queries INNER JOIN aqo_query_stat
     ON aqo_queries.query_hash = aqo_query_stat.query_hash
     GROUP BY (execution_time_without_aqo, aqo_queries.fspace_hash, aqo_queries.query_hash)
     ORDER BY execution_time DESC LIMIT n;
@@ -113,7 +113,7 @@ $$ LANGUAGE plpgsql;
 --
 --  Top of queries with largest value of total cardinality error.
 --
-CREATE OR REPLACE FUNCTION public.top_error_queries(n int)
+CREATE OR REPLACE FUNCTION top_error_queries(n int)
   RETURNS TABLE(num bigint,
                 fspace_hash bigint,
                 query_hash bigint,
@@ -129,7 +129,7 @@ BEGIN
            aqo_queries.query_hash,
            to_char(array_avg(cardinality_error_without_aqo), '9.99EEEE')::float,
            to_char(array_mse(cardinality_error_without_aqo), '9.99EEEE')::float
-    FROM public.aqo_queries INNER JOIN aqo_query_stat
+    FROM aqo_queries INNER JOIN aqo_query_stat
     ON aqo_queries.query_hash = aqo_query_stat.query_hash
     GROUP BY (cardinality_error_without_aqo, aqo_queries.fspace_hash, aqo_queries.query_hash)
     ORDER BY error DESC LIMIT n;
