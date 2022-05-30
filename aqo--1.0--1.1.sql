@@ -1,13 +1,13 @@
-ALTER TABLE aqo_query_texts ALTER COLUMN query_text TYPE text;
+ALTER TABLE public.aqo_query_texts ALTER COLUMN query_text TYPE text;
 
 
-DROP INDEX aqo_queries_query_hash_idx CASCADE;
-DROP INDEX aqo_query_texts_query_hash_idx CASCADE;
-DROP INDEX aqo_query_stat_idx CASCADE;
-DROP INDEX aqo_fss_access_idx CASCADE;
+DROP INDEX public.aqo_queries_query_hash_idx CASCADE;
+DROP INDEX public.aqo_query_texts_query_hash_idx CASCADE;
+DROP INDEX public.aqo_query_stat_idx CASCADE;
+DROP INDEX public.aqo_fss_access_idx CASCADE;
 
 CREATE UNIQUE INDEX aqo_fss_access_idx
-	ON aqo_data (fspace_hash, fsspace_hash);
+	ON public.aqo_data (fspace_hash, fsspace_hash);
 
 
 CREATE OR REPLACE FUNCTION aqo_migrate_to_1_1_get_pk(rel regclass) RETURNS regclass AS $$
@@ -28,15 +28,15 @@ $$ LANGUAGE plpgsql;
 DO $$
 BEGIN
 	EXECUTE pg_catalog.format('ALTER TABLE %s RENAME to %s',
-				   aqo_migrate_to_1_1_get_pk('aqo_queries'),
+				   aqo_migrate_to_1_1_get_pk('public.aqo_queries'),
 				   'aqo_queries_query_hash_idx');
 
 	EXECUTE pg_catalog.format('ALTER TABLE %s RENAME to %s',
-				   aqo_migrate_to_1_1_get_pk('aqo_query_texts'),
+				   aqo_migrate_to_1_1_get_pk('public.aqo_query_texts'),
 				   'aqo_query_texts_query_hash_idx');
 
 	EXECUTE pg_catalog.format('ALTER TABLE %s RENAME to %s',
-				   aqo_migrate_to_1_1_get_pk('aqo_query_stat'),
+				   aqo_migrate_to_1_1_get_pk('public.aqo_query_stat'),
 				   'aqo_query_stat_idx');
 END
 $$;
