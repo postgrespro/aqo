@@ -3,10 +3,23 @@
 -- complain if script is sourced in psql, rather than via CREATE EXTENSION
 \echo Use "ALTER EXTENSION aqo UPDATE TO '1.5'" to load this file. \quit
 
---
--- Re-create the aqo_queries table.
---
+DROP FUNCTION array_mse;
+DROP FUNCTION array_avg;
+DROP FUNCTION public.aqo_clear_hist; -- Should be renamed and reworked
+DROP FUNCTION public.aqo_disable_query;
+DROP FUNCTION public.aqo_drop;
+DROP FUNCTION public.aqo_enable_query;
+DROP FUNCTION public.aqo_ne_queries; -- Not needed anymore due to changing in the logic
+DROP FUNCTION public.aqo_status;
+DROP FUNCTION public.clean_aqo_data;
+DROP FUNCTION public.show_cardinality_errors;
+DROP FUNCTION public.top_time_queries;
+
+DROP TABLE public.aqo_data CASCADE;
 DROP TABLE public.aqo_queries CASCADE;
+DROP TABLE public.aqo_query_texts CASCADE;
+DROP TABLE public.aqo_query_stat CASCADE;
+
 CREATE TABLE aqo_queries (
 	query_hash		bigint CONSTRAINT aqo_queries_query_hash_idx PRIMARY KEY,
 	learn_aqo		boolean NOT NULL,
@@ -15,19 +28,11 @@ CREATE TABLE aqo_queries (
 	auto_tuning		boolean NOT NULL
 );
 
---
--- Re-create the aqo_query_texts table.
---
-DROP TABLE public.aqo_query_texts CASCADE;
 CREATE TABLE aqo_query_texts (
 	query_hash		bigint CONSTRAINT aqo_query_texts_query_hash_idx PRIMARY KEY REFERENCES aqo_queries ON DELETE CASCADE,
 	query_text		text NOT NULL
 );
 
---
--- Re-create the aqo_query_stat table.
---
-DROP TABLE public.aqo_query_stat CASCADE;
 CREATE TABLE aqo_query_stat (
 	query_hash		bigint CONSTRAINT aqo_query_stat_idx PRIMARY KEY REFERENCES aqo_queries ON DELETE CASCADE,
 	execution_time_with_aqo					double precision[],
@@ -41,18 +46,21 @@ CREATE TABLE aqo_query_stat (
 );
 
 --
--- Re-create the aqo_data table. Do so to keep the columns order.
+-- Re-create the aqo_data table.
 -- The oids array contains oids of permanent tables only. It is used for cleanup
 -- ML knowledge base from queries that refer to removed tables.
 --
-DROP TABLE public.aqo_data CASCADE;
 CREATE TABLE aqo_data (
 	fspace_hash	 bigint NOT NULL REFERENCES aqo_queries ON DELETE CASCADE,
 	fsspace_hash int NOT NULL,
 	nfeatures	 int NOT NULL,
 	features	 double precision[][],
 	targets		 double precision[],
+
+	-- oids of permanent tables only. It is used for cleanup
+	-- ML knowledge base from queries that refer to removed tables.
 	oids		 oid [] DEFAULT NULL,
+
 	reliability	 double precision []
 );
 CREATE UNIQUE INDEX aqo_fss_access_idx ON aqo_data (fspace_hash, fsspace_hash);
@@ -64,15 +72,6 @@ INSERT INTO aqo_query_texts VALUES (0, 'COMMON feature space (do not delete!)');
 CREATE TRIGGER aqo_queries_invalidate AFTER UPDATE OR DELETE OR TRUNCATE
 	ON aqo_queries FOR EACH STATEMENT
 	EXECUTE PROCEDURE invalidate_deactivated_queries_cache();
-
-DROP FUNCTION public.top_time_queries;
-DROP FUNCTION public.aqo_drop;
-DROP FUNCTION public.clean_aqo_data;
-DROP FUNCTION public.show_cardinality_errors;
-DROP FUNCTION array_mse;
-DROP FUNCTION array_avg;
-DROP FUNCTION public.aqo_ne_queries; -- Not needed anymore due to changing in the logic
-DROP FUNCTION public.aqo_clear_hist; -- Should be renamed and reworked
 
 --
 -- Show execution time of queries, for which AQO has statistics.
@@ -290,7 +289,6 @@ $$ LANGUAGE plpgsql;
 COMMENT ON FUNCTION aqo_reset_query(bigint) IS
 'Remove from AQO storage only learning data for given QueryId.';
 
-DROP FUNCTION public.aqo_status;
 CREATE FUNCTION aqo_status(hash bigint)
 RETURNS TABLE (
 	"learn"			BOOL,
@@ -303,8 +301,7 @@ RETURNS TABLE (
 	"t_aqo"			TEXT,
 	"err_aqo"		TEXT,
 	"iters_aqo"		BIGINT
-)
-AS $func$
+) AS $$
 SELECT	learn_aqo,use_aqo,auto_tuning,fspace_hash,
 		to_char(execution_time_without_aqo[n4],'9.99EEEE'),
 		to_char(cardinality_error_without_aqo[n2],'9.99EEEE'),
@@ -324,26 +321,21 @@ FROM aqo_queries aq, aqo_query_stat aqs,
 			aqs.query_hash = $1) AS al) AS q
 WHERE (aqs.query_hash = aq.query_hash) AND
 	aqs.query_hash = $1;
-$func$ LANGUAGE SQL;
+$$ LANGUAGE SQL;
 
-DROP FUNCTION public.aqo_enable_query;
 CREATE FUNCTION aqo_enable_query(hash bigint)
-RETURNS VOID
-AS $func$
+RETURNS VOID AS $$
 UPDATE aqo_queries SET
 	learn_aqo = 'true',
 	use_aqo = 'true'
 	WHERE query_hash = $1;
-$func$ LANGUAGE SQL;
+$$ LANGUAGE SQL;
 
-DROP FUNCTION public.aqo_disable_query;
 CREATE FUNCTION aqo_disable_query(hash bigint)
-RETURNS VOID
-AS $func$
+RETURNS VOID AS $$
 UPDATE aqo_queries SET
 	learn_aqo = 'false',
 	use_aqo = 'false',
 	auto_tuning = 'false'
 	WHERE query_hash = $1;
-$func$ LANGUAGE SQL;
-
+$$ LANGUAGE SQL;

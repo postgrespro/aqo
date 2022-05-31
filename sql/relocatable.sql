@@ -1,38 +1,50 @@
-DROP EXTENSION IF EXISTS aqo CASCADE;
-DROP SCHEMA IF EXISTS test CASCADE;
-
+DROP EXTENSION aqo CASCADE;
 CREATE EXTENSION aqo;
 SET aqo.join_threshold = 0;
-SET aqo.mode = 'intelligent';
+SET aqo.mode = 'learn'; -- use this mode for unconditional learning
 
-CREATE TABLE test (id SERIAL, data TEXT);
-INSERT INTO test (data) VALUES ('string');
-SELECT * FROM test;
+CREATE TABLE test AS (SELECT id, 'payload' || id FROM generate_series(1,100) id);
+ANALYZE test;
 
-SELECT query_text FROM aqo_query_texts;
-SELECT learn_aqo, use_aqo, auto_tuning FROM aqo_queries;
+-- Learn on a query
+SELECT count(*) FROM test;
+SELECT query_text,learn_aqo, use_aqo, auto_tuning
+FROM aqo_query_texts JOIN aqo_queries USING (query_hash)
+; -- Check result. TODO: use aqo_status()
 
+-- Create a schema and move AQO into it.
 CREATE SCHEMA IF NOT EXISTS test;
 ALTER EXTENSION aqo SET SCHEMA test;
 
-SET aqo.mode = 'intelligent';
+-- Do something to be confident that AQO works
+SELECT count(*) FROM test;
+SELECT count(*) FROM test WHERE id < 10;
 
-CREATE TABLE test1 (id SERIAL, data TEXT);
-INSERT INTO test1 (data) VALUES ('string');
-SELECT * FROM test1;
+SELECT query_text,learn_aqo, use_aqo, auto_tuning
+FROM test.aqo_query_texts JOIN test.aqo_queries USING (query_hash)
+; -- Check result. TODO: We want to find here both queries executed above
 
-SELECT query_text FROM test.aqo_query_texts;
+-- Add schema which contains AQO to the end of search_path
+SELECT set_config('search_path', current_setting('search_path') || ', test', false);
+
+SELECT count(*) FROM test;
+SELECT count(*) FROM test WHERE id < 10;
+
+SELECT query_text,learn_aqo, use_aqo, auto_tuning
+FROM test.aqo_query_texts JOIN test.aqo_queries USING (query_hash)
+; -- Check result.
+
+/*
+ * Below, we should check each UI function
+ */
+SELECT aqo_disable_query(id) FROM (
+  SELECT query_hash AS id FROM aqo_queries WHERE query_hash <> 0) AS q1;
+SELECT learn_aqo, use_aqo, auto_tuning FROM test.aqo_queries;
+SELECT aqo_enable_query(id) FROM (
+  SELECT query_hash AS id FROM aqo_queries WHERE query_hash <> 0) AS q1;
 SELECT learn_aqo, use_aqo, auto_tuning FROM test.aqo_queries;
 
-SET search_path TO test;
-
-CREATE TABLE test2 (id SERIAL, data TEXT);
-INSERT INTO test2 (data) VALUES ('string');
-SELECT * FROM test2;
-
-SELECT query_text FROM aqo_query_texts;
-SELECT learn_aqo, use_aqo, auto_tuning FROM aqo_queries;
+RESET search_path;
+DROP TABLE test CASCADE;
 DROP SCHEMA IF EXISTS test CASCADE;
 DROP EXTENSION IF EXISTS aqo CASCADE;
-
-SET search_path TO public;
