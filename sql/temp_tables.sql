@@ -63,11 +63,11 @@ SELECT * FROM check_estimated_rows('
 '); -- Should use AQO estimation
 SELECT * FROM check_estimated_rows('
 	SELECT pt.x, avg(pt.y) FROM pt,ttd  WHERE pt.x = ttd.x GROUP BY (pt.x);
-'); -- TODO: Should use AQO estimation with another temp table of the same structure
+'); -- Should use AQO estimation with another temp table of the same structure
 
 SET aqo.mode = 'forced'; -- Now we use all fss records for each query
 DROP TABLE pt;
-SELECT aqo_cleanup();
+SELECT * FROM aqo_cleanup();
 CREATE TABLE pt AS SELECT x AS x, (x % 10) AS y FROM generate_series(1,100) AS x;
 CREATE TEMP TABLE ttd1 AS
   SELECT -(x*3) AS x, (x % 9) AS y1 FROM generate_series(1,100) AS x;

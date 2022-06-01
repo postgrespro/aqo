@@ -284,7 +284,8 @@ extern bool update_query(uint64 qhash, uint64 fhash,
 extern bool add_query_text(uint64 query_hash, const char *query_string);
 extern bool load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 						 bool isSafe);
-extern bool load_fss(uint64 fs, int fss, OkNNrdata *data, List **reloids, bool use_idx_fss);
+extern bool load_fss(uint64 fs, int fss, OkNNrdata *data, List **reloids,
+					 bool wideSearch);
 extern bool update_fss_ext(uint64 fs, int fss, OkNNrdata *data,
 						   List *reloids, bool isTimedOut);
 extern bool update_fss(uint64 fs, int fss, OkNNrdata *data, List *reloids);

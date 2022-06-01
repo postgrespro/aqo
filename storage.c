@@ -29,12 +29,11 @@
 #include "preprocessing.h"
 #include "learn_cache.h"
 
-
 #define AQO_DATA_COLUMNS	(7)
 HTAB *deactivated_queries = NULL;
 
 static ArrayType *form_matrix(double **matrix, int nrows, int ncols);
-static void deform_matrix(Datum datum, double **matrix);
+static int deform_matrix(Datum datum, double **matrix);
 
 static ArrayType *form_vector(double *vector, int nrows);
 static void deform_vector(Datum datum, double *vector, int *nelems);
@@ -389,97 +388,177 @@ load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids, bool isSafe)
 }
 
 /*
- * Loads feature subspace (fss) from table aqo_data into memory.
- * The last column of the returned matrix is for target values of objects.
- * Returns false if the operation failed, true otherwise.
+ * Return list of reloids on which
+ */
+static void
+build_knn_matrix(Datum *values, bool *nulls, OkNNrdata *data)
+{
+	int nrows;
+
+	Assert(DatumGetInt32(values[2]) == data->cols);
+
+	if (data->rows >= 0)
+		/* trivial strategy - use first suitable record and ignore others */
+		return;
+
+	if (data->cols > 0)
+		/*
+		 * The case than an object hasn't any filters and selectivities
+		 */
+		data->rows = deform_matrix(values[3], data->matrix);
+
+	deform_vector(values[4], data->targets, &nrows);
+	Assert(data->rows < 0 || data->rows == nrows);
+	data->rows = nrows;
+
+	deform_vector(values[6], data->rfactors, &nrows);
+	Assert(data->rows == nrows);
+}
+
+/*
+ * Loads KNN matrix for the feature subspace (fss) from table aqo_data.
+ * If wideSearch is true, search row by an unique value of (fs, fss)
+ * If wideSearch is false - search rows across all fs values and try to build a
+ * KNN matrix by merging of existed matrixes with some algorithm.
+ * In the case of successful search, initializes the data variable and list of
+ * reloids.
  *
- * 'fss_hash' is the hash of feature subspace which is supposed to be loaded
- * 'ncols' is the number of clauses in the feature subspace
- * 'matrix' is an allocated memory for matrix with the size of aqo_K rows
- *			and nhashes columns
- * 'targets' is an allocated memory with size aqo_K for target values
- *			of the objects
- * 'rows' is the pointer in which the function stores actual number of
- *			objects in the given feature space
+ * Returns false if any data not found, true otherwise.
  */
 bool
-load_fss(uint64 fs, int fss, OkNNrdata *data, List **reloids, bool use_idx_fss)
+load_fss(uint64 fs, int fss, OkNNrdata *data, List **reloids, bool wideSearch)
 {
-	Relation	hrel;
-	Relation	irel;
-	HeapTuple	tuple;
+	Relation		hrel;
+	Relation		irel;
+	HeapTuple		tuple;
 	TupleTableSlot *slot;
 	bool			shouldFree;
-	bool			find_ok = false;
 	IndexScanDesc	scan;
+	ScanKeyData		key[2];
 	Datum			values[AQO_DATA_COLUMNS];
 	bool			isnull[AQO_DATA_COLUMNS];
-	bool			success = true;
-	ScanKeyData		key[2];
+	bool			success = false;
+	int				keycount = 0;
+	List		   *oids = NIL;
 
-	if (!open_aqo_relation(NULL, "aqo_data",
-						   "aqo_fss_access_idx",
+	if (!open_aqo_relation(NULL, "aqo_data", "aqo_fss_access_idx",
 						   AccessShareLock, &hrel, &irel))
-			return false;
+		return false;
 
-	if (use_idx_fss)
+	if (wideSearch)
 	{
-		scan = index_beginscan(hrel, irel, SnapshotSelf, 2, 0);
-		ScanKeyInit(&key[0], 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(fs));
-		ScanKeyInit(&key[1], 2, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fss));
+		/* Full scan key. Only one row wanted */
+		ScanKeyInit(&key[keycount++], 1, BTEqualStrategyNumber, F_INT8EQ,
+					Int64GetDatum(fs));
+		ScanKeyInit(&key[keycount++], 2, BTEqualStrategyNumber, F_INT4EQ,
+					Int32GetDatum(fss));
 	}
 	else
-	{
-		scan = index_beginscan(hrel, irel, SnapshotSelf, 2, 0);
-		ScanKeyInit(&key[0],  1, BTLessEqualStrategyNumber, F_INT8LE, Int64GetDatum(0));
-		ScanKeyInit(&key[1],  2, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fss));
-	}
+		/* Pass along the index and get all tuples with the same fss */
+		ScanKeyInit(&key[keycount++],  2, BTEqualStrategyNumber, F_INT4EQ,
+					Int32GetDatum(fss));
 
-	index_rescan(scan, key, 2, NULL, 0);
+	scan = index_beginscan(hrel, irel, SnapshotSelf, keycount, 0);
+	index_rescan(scan, key, keycount, NULL, 0);
 	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
-	find_ok = index_getnext_slot(scan, ForwardScanDirection, slot);
+	data->rows = -1; /* Attention! Use as a sign of nonentity */
 
-	if (find_ok)
+	/*
+	 * Iterate along all tuples found and prepare knn model
+	 */
+	while (index_getnext_slot(scan, ForwardScanDirection, slot))
 	{
+		ArrayType  *array;
+		Datum	   *vals;
+		int			nrows;
+		int			i;
+		bool		should_skip = false;
+		List 	   *temp_oids = NIL;
+
 		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
 		Assert(shouldFree != true);
 		heap_deform_tuple(tuple, hrel->rd_att, values, isnull);
 
-		if (DatumGetInt32(values[2]) == data->cols)
+		/* Filter obviously unfamiliar tuples */
+
+		if (DatumGetInt32(values[2]) != data->cols)
 		{
-			if (data->cols > 0)
-				/*
-				 * The case than an object has not any filters and selectivities
-				 */
-				deform_matrix(values[3], data->matrix);
-
-			deform_vector(values[4], data->targets, &(data->rows));
-			deform_vector(values[6], data->rfactors, &(data->rows));
-
-			if (reloids != NULL)
+			if (wideSearch)
 			{
-				ArrayType  *array = DatumGetArrayTypePCopy(PG_DETOAST_DATUM(values[5]));
-				Datum	   *values;
-				int			nrows;
-				int			i;
-
-				deconstruct_array(array, OIDOID, sizeof(Oid), true,
-								  TYPALIGN_INT, &values, NULL, &nrows);
-				for (i = 0; i < nrows; ++i)
-					*reloids = lappend_oid(*reloids, DatumGetObjectId(values[i]));
-
-				pfree(values);
-				pfree(array);
+				/*
+				 * Looks like a hash collision, but it is so unlikely in a single
+				 * fs, that we will LOG this fact and return immediately.
+				 */
+				elog(LOG, "[AQO] Unexpected number of features for hash (" \
+					 UINT64_FORMAT", %d):\
+					 expected %d features, obtained %d",
+					 fs, fss, data->cols, DatumGetInt32(values[2]));
+				Assert(success == false);
+				break;
 			}
+			else
+				/* Go to the next tuple */
+				continue;
+		}
+
+		/* Decompose list of oids which the data depend on */
+		array = DatumGetArrayTypePCopy(PG_DETOAST_DATUM(values[5]));
+		deconstruct_array(array, OIDOID, sizeof(Oid), true,
+						  TYPALIGN_INT, &vals, NULL, &nrows);
+
+		if (data->rows >= 0 && list_length(oids) != nrows)
+		{
+			/* Dubious case. So log it and skip these data */
+			elog(LOG,
+				 "[AQO] different number depended oids for the same fss %d: "
+				 "%d and %d correspondingly.",
+				 fss, list_length(oids), nrows);
+			should_skip = true;
 		}
 		else
-			elog(ERROR, "[AQO] Unexpected number of features for hash (" \
-						UINT64_FORMAT", %d):\
-						expected %d features, obtained %d",
-						fs, fss, data->cols, DatumGetInt32(values[2]));
+		{
+			for (i = 0; i < nrows; i++)
+			{
+				Oid reloid = DatumGetObjectId(vals[i]);
+
+				if (!OidIsValid(reloid))
+					elog(ERROR, "[AQO] Impossible OID in the knowledge base.");
+
+				if (data->rows >= 0 && !list_member_oid(oids, reloid))
+				{
+					elog(LOG,
+						 "[AQO] Oid set for two records with equal fss %d don't match.",
+						 fss);
+					should_skip = true;
+					break;
+				}
+				temp_oids = lappend_oid(temp_oids, reloid);
+			}
+		}
+		pfree(vals);
+		pfree(array);
+
+		if (!should_skip)
+		{
+			if (data->rows < 0)
+				oids = copyObject(temp_oids);
+			build_knn_matrix(values, isnull, data);
+		}
+
+		if (temp_oids != NIL)
+		 	pfree(temp_oids);
+
+		/*
+		 * It's OK, guess, because if something happened during merge of
+		 * matrixes an ERROR will be thrown.
+		 */
+		if (data->rows > 0)
+			success = true;
 	}
-	else
-		success = false;
+
+	if (success && reloids != NULL)
+		/* return list of reloids, if needed */
+		*reloids = oids;
 
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(scan);
@@ -487,14 +566,6 @@ load_fss(uint64 fs, int fss, OkNNrdata *data, List **reloids, bool use_idx_fss)
 	table_close(hrel, AccessShareLock);
 
 	return success;
-}
-
-PG_FUNCTION_INFO_V1(xxx);
-Datum xxx(PG_FUNCTION_ARGS)
-{
-	elog(NOTICE, "xxx called");
-	load_fss(5, 2027816329,NULL, NULL, false);
-	PG_RETURN_VOID();
 }
 
 bool
@@ -627,7 +698,6 @@ update_fss(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 			if (update_indexes)
 				my_index_insert(irel, values, isnull, &(nw_tuple->t_self),
 								hrel, UNIQUE_CHECK_YES);
-
 			result = true;
 		}
 		else
@@ -823,13 +893,13 @@ update_aqo_stat(uint64 qhash, QueryStat *stat)
 /*
  * Expands matrix from storage into simple C-array.
  */
-void
+int
 deform_matrix(Datum datum, double **matrix)
 {
 	ArrayType  *array = DatumGetArrayTypePCopy(PG_DETOAST_DATUM(datum));
 	int			nelems;
 	Datum	   *values;
-	int			rows;
+	int			rows = 0;
 	int			cols;
 	int			i,
 				j;
@@ -847,6 +917,7 @@ deform_matrix(Datum datum, double **matrix)
 	}
 	pfree(values);
 	pfree(array);
+	return rows;
 }
 
 /*

@@ -141,7 +141,7 @@ SELECT 'b'::regclass::oid AS b_oid \gset
 SELECT count(*) FROM aqo_data WHERE :a_oid=ANY(oids);
  count 
 -------
-     3
+     2
 (1 row)
 
 SELECT count(*) FROM aqo_queries WHERE
@@ -200,7 +200,7 @@ DROP TABLE a;
 SELECT aqo_cleanup();
  aqo_cleanup 
 -------------
- (2,4)
+ (2,3)
 (1 row)
 
 /*

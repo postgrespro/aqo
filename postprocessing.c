@@ -94,32 +94,14 @@ atomic_fss_learn_step(uint64 fs, int fss, OkNNrdata *data,
 					  List *reloids, bool isTimedOut)
 {
 	LOCKTAG		tag;
-	int j;
 
 	init_lock_tag(&tag, fs, fss);
 	LockAcquire(&tag, ExclusiveLock, false, false);
 
 	if (!load_fss_ext(fs, fss, data, NULL, !isTimedOut))
+		data->rows = 0;
 
-		/*
-		* Add a new object in aqo_data table with predicted target value
-		*/
-		if (load_fss(fs, fss, data, NULL, false))
-			{
-				for (j = 0; j < data->cols; ++j)
-					data->matrix[data->rows][j] = features[j];
-				data->targets[data->rows] = OkNNr_predict(data, features);
-				data->rfactors[data->rows] = rfactor;
-				data->rows += 1;
-			}
-		else
-		{
-			data->rows = 0;
-			data->rows = OkNNr_learn(data, features, target, rfactor);
-		}
-	else
-		data->rows = OkNNr_learn(data, features, target, rfactor);
-
+	data->rows = OkNNr_learn(data, features, target, rfactor);
 	update_fss_ext(fs, fss, data, reloids, isTimedOut);
 
 	LockRelease(&tag, ExclusiveLock, false);
