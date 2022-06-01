@@ -221,25 +221,27 @@ SELECT count(*) FROM aqo_data;
 
 SET aqo.join_threshold = 3;
 SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1;');
-SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1 AS t1, aqo_test1 AS t2 WHERE t1.a = t2.b');
+SELECT * FROM check_estimated_rows('
+  SELECT * FROM aqo_test1 AS t1, aqo_test1 AS t2 WHERE t1.a = t2.b');
 SELECT count(*) FROM aqo_data; -- Return 0 - do not learn on the queries above
 
 SELECT * FROM check_estimated_rows('
    SELECT *
    FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
    WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
-');
-SELECT count(*) FROM -- Learn on the query
+'); -- Learn on the query
+SELECT count(*) FROM
   (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
 ;
 SELECT query_text FROM aqo_query_texts WHERE query_hash <> 0; -- Check query
 
 SET aqo.join_threshold = 1;
 SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1;');
-SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1 AS t1, aqo_test1 AS t2 WHERE t1.a = t2.b');
+SELECT * FROM check_estimated_rows(
+  'SELECT * FROM aqo_test1 AS t1, aqo_test1 AS t2 WHERE t1.a = t2.b');
 SELECT count(*) FROM
   (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
-; -- Learn on a query with one join
+; -- Learn on a new query with one join (cardinality of this join AQO extracted from previous 3-join query)
 
 SET aqo.join_threshold = 0;
 SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1;');

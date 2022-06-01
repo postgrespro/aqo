@@ -1,4 +1,4 @@
-CREATE IF NOT EXISTS EXTENSION aqo;
+CREATE EXTENSION aqo;
 SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
@@ -68,3 +68,5 @@ SELECT str AS result
 FROM expln('
 SELECT x,y FROM A,B WHERE x < 10 and y > 10 AND A.x = B.y;') AS str
 WHERE str NOT LIKE 'Query Identifier%';
+
+DROP EXTENSION aqo CASCADE;

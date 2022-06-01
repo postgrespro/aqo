@@ -98,3 +98,4 @@ ORDER BY (md5(query_text));
  SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1; |      1
 (4 rows)
 
+DROP EXTENSION aqo CASCADE;

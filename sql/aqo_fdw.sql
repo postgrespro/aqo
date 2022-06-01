@@ -52,11 +52,13 @@ SELECT x FROM frgn WHERE x < -10; -- AQO ignores constants
 
 -- Trivial JOIN push-down.
 SELECT str FROM expln('
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
-SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+  SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
 ') AS str WHERE str NOT LIKE '%Sort Method%';
+
+-- TODO: Should learn on postgres_fdw nodes
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
-SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
+  SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
 
 -- TODO: Non-mergejoinable join condition.
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
