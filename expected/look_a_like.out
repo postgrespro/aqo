@@ -1,7 +1,4 @@
-CREATE IF NOT EXISTS EXTENSION aqo;
-ERROR:  syntax error at or near "IF"
-LINE 1: CREATE IF NOT EXISTS EXTENSION aqo;
-               ^
+CREATE EXTENSION aqo;
 SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
@@ -238,3 +235,4 @@ WHERE str NOT LIKE 'Query Identifier%';
  JOINS: 0
 (20 rows)
 
+DROP EXTENSION aqo CASCADE;

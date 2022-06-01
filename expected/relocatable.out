@@ -1,4 +1,3 @@
-DROP EXTENSION aqo CASCADE;
 CREATE EXTENSION aqo;
 SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn'; -- use this mode for unconditional learning
