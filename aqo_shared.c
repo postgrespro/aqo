@@ -4,9 +4,12 @@
 
 #include "postgres.h"
 
+#include "lib/dshash.h"
+#include "miscadmin.h"
 #include "storage/shmem.h"
 
 #include "aqo_shared.h"
+#include "storage.h"
 
 
 typedef struct
@@ -23,11 +26,13 @@ shmem_startup_hook_type prev_shmem_startup_hook = NULL;
 AQOSharedState *aqo_state = NULL;
 HTAB *fss_htab = NULL;
 static int aqo_htab_max_items = 1000;
+static int fs_max_items = 1000; /* Max number of different feature spaces in ML model */
 static uint32 temp_storage_size = 1024 * 1024 * 10; /* Storage size, in bytes */
 static dsm_segment *seg = NULL;
 
 
 static void aqo_detach_shmem(int code, Datum arg);
+static void on_shmem_shutdown(int code, Datum arg);
 
 
 void *
@@ -169,16 +174,23 @@ aqo_init_shmem(void)
 	bool		found;
 	HASHCTL		info;
 
+	if (prev_shmem_startup_hook)
+		prev_shmem_startup_hook();
+
 	aqo_state = NULL;
 	fss_htab = NULL;
+	stat_htab = NULL;
 
 	LWLockAcquire(AddinShmemInitLock, LW_EXCLUSIVE);
 	aqo_state = ShmemInitStruct("aqo", sizeof(AQOSharedState), &found);
 	if (!found)
 	{
 		/* First time through ... */
+
 		LWLockInitialize(&aqo_state->lock, LWLockNewTrancheId());
 		aqo_state->dsm_handler = DSM_HANDLE_INVALID;
+
+		LWLockInitialize(&aqo_state->stat_lock, LWLockNewTrancheId());
 	}
 
 	info.keysize = sizeof(htab_key);
@@ -188,8 +200,31 @@ aqo_init_shmem(void)
 							  &info,
 							  HASH_ELEM | HASH_BLOBS);
 
+	info.keysize = sizeof(((StatEntry *) 0)->queryid);
+	info.entrysize = sizeof(StatEntry);
+	stat_htab = ShmemInitHash("aqo stat hash",
+							  fs_max_items, fs_max_items,
+							  &info,
+							  HASH_ELEM | HASH_BLOBS);
+
 	LWLockRelease(AddinShmemInitLock);
 	LWLockRegisterTranche(aqo_state->lock.tranche, "aqo");
+	LWLockRegisterTranche(aqo_state->stat_lock.tranche, "aqo stat storage");
+
+	if (!IsUnderPostmaster)
+	{
+		on_shmem_exit(on_shmem_shutdown, (Datum) 0);
+		aqo_stat_load();
+	}
+}
+
+/*
+ * Main idea here is to store all ML data in temp files on postmaster shutdown.
+ */
+static void
+on_shmem_shutdown(int code, Datum arg)
+{
+	aqo_stat_flush();
 }
 
 Size
@@ -199,6 +234,7 @@ aqo_memsize(void)
 
 	size = MAXALIGN(sizeof(AQOSharedState));
 	size = add_size(size, hash_estimate_size(aqo_htab_max_items, sizeof(htab_entry)));
+	size = add_size(size, hash_estimate_size(fs_max_items, sizeof(AQOSharedState)));
 
 	return size;
 }

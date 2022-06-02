@@ -23,7 +23,7 @@ SELECT count(*) FROM aqo_query_texts WHERE
     aqo_query_texts.query_hash = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
         aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)));
 SELECT count(*) FROM aqo_query_stat WHERE
-    aqo_query_stat.query_hash = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
+    aqo_query_stat.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
         aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)));
 
 DROP TABLE a;
@@ -45,7 +45,7 @@ SELECT count(*) FROM aqo_query_texts WHERE
         aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)) AND
             aqo_queries.fspace_hash = aqo_queries.query_hash);
 SELECT count(*) FROM aqo_query_stat WHERE
-    aqo_query_stat.query_hash = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
+    aqo_query_stat.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
         aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)) AND
             aqo_queries.fspace_hash = aqo_queries.query_hash);
 
@@ -75,7 +75,7 @@ SELECT count(*) FROM aqo_query_texts WHERE
     aqo_query_texts.query_hash = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
         aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)));
 SELECT count(*) FROM aqo_query_stat WHERE
-    aqo_query_stat.query_hash = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
+    aqo_query_stat.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
         aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)));
 
 SELECT count(*) FROM aqo_data WHERE :b_oid=ANY(oids);
@@ -85,7 +85,7 @@ SELECT count(*) FROM aqo_query_texts WHERE
     aqo_query_texts.query_hash = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
         aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :b_oid=ANY(oids)));
 SELECT count(*) FROM aqo_query_stat WHERE
-    aqo_query_stat.query_hash = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
+    aqo_query_stat.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
         aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :b_oid=ANY(oids)));
 
 DROP TABLE a;
@@ -106,7 +106,7 @@ SELECT count(*) FROM aqo_query_texts WHERE
         aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)) AND
             aqo_queries.fspace_hash = aqo_queries.query_hash);
 SELECT count(*) FROM aqo_query_stat WHERE
-    aqo_query_stat.query_hash = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
+    aqo_query_stat.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
         aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)) AND
             aqo_queries.fspace_hash = aqo_queries.query_hash);
 
@@ -120,7 +120,7 @@ SELECT count(*) FROM aqo_query_texts WHERE
         aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :b_oid=ANY(oids)) AND
             aqo_queries.fspace_hash = aqo_queries.query_hash);
 SELECT count(*) FROM aqo_query_stat WHERE
-    aqo_query_stat.query_hash = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
+    aqo_query_stat.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
         aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :b_oid=ANY(oids)) AND
             aqo_queries.fspace_hash = aqo_queries.query_hash);
 
@@ -137,7 +137,7 @@ SELECT count(*) FROM aqo_query_texts WHERE
         aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :b_oid=ANY(oids)) AND
             aqo_queries.fspace_hash = aqo_queries.query_hash);
 SELECT count(*) FROM aqo_query_stat WHERE
-    aqo_query_stat.query_hash = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
+    aqo_query_stat.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
         aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :b_oid=ANY(oids)) AND
             aqo_queries.fspace_hash = aqo_queries.query_hash);
 

@@ -33,7 +33,7 @@ BEGIN
   RETURN QUERY SELECT executions_without_aqo nnex,
   					  executions_with_aqo nex,
   					  planning_time_with_aqo pt
-    FROM  aqo_query_stat WHERE query_hash = qhash;
+    FROM  aqo_query_stat WHERE queryid = qhash;
 END $$ LANGUAGE 'plpgsql';
 
 -- The function shows 6 executions without an AQO support (nnex) and
