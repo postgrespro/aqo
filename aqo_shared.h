@@ -5,6 +5,8 @@
 #include "storage/dsm.h"
 #include "storage/ipc.h"
 #include "storage/lwlock.h"
+#include "utils/dsa.h"
+#include "lib/dshash.h"
 
 #define AQO_SHARED_MAGIC	0x053163
 
@@ -25,6 +27,9 @@ typedef struct AQOSharedState
 {
 	LWLock		lock;			/* mutual exclusion */
 	dsm_handle	dsm_handler;
+
+	/* Storage fields */
+	LWLock		stat_lock; /* lock for access to stat storage */
 } AQOSharedState;
 
 

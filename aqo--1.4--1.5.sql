@@ -33,17 +33,38 @@ CREATE TABLE aqo_query_texts (
 	query_text		text NOT NULL
 );
 
-CREATE TABLE aqo_query_stat (
-	query_hash		bigint CONSTRAINT aqo_query_stat_idx PRIMARY KEY REFERENCES aqo_queries ON DELETE CASCADE,
-	execution_time_with_aqo					double precision[],
-	execution_time_without_aqo				double precision[],
-	planning_time_with_aqo					double precision[],
-	planning_time_without_aqo				double precision[],
-	cardinality_error_with_aqo				double precision[],
-	cardinality_error_without_aqo			double precision[],
-	executions_with_aqo						bigint,
-	executions_without_aqo					bigint
-);
+/* Now redefine */
+CREATE FUNCTION aqo_query_stat(
+  OUT queryid						bigint,
+  OUT execution_time_with_aqo		double precision[],
+  OUT execution_time_without_aqo	double precision[],
+  OUT planning_time_with_aqo		double precision[],
+  OUT planning_time_without_aqo		double precision[],
+  OUT cardinality_error_with_aqo	double precision[],
+  OUT cardinality_error_without_aqo	double precision[],
+  OUT executions_with_aqo			bigint,
+  OUT executions_without_aqo		bigint
+)
+RETURNS SETOF record
+AS 'MODULE_PATHNAME', 'aqo_query_stat'
+LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
+
+CREATE VIEW aqo_query_stat AS SELECT * FROM aqo_query_stat();
+
+--
+-- Remove all records in the AQO statistics.
+-- Return number of rows removed.
+--
+CREATE FUNCTION aqo_stat_reset() RETURNS bigint
+AS 'MODULE_PATHNAME'
+LANGUAGE C PARALLEL SAFE;
+
+COMMENT ON FUNCTION aqo_stat_reset() IS
+'Reset query statistics gathered by AQO';
+
+CREATE FUNCTION aqo_stat_remove(fs bigint) RETURNS bool
+AS 'MODULE_PATHNAME'
+LANGUAGE C STRICT PARALLEL SAFE;
 
 --
 -- Re-create the aqo_data table.
@@ -97,7 +118,7 @@ IF (controlled) THEN
       execution_time_with_aqo[array_length(execution_time_with_aqo, 1)] AS exectime,
       executions_with_aqo AS execs
     FROM aqo_queries aq JOIN aqo_query_stat aqs
-    ON aq.query_hash = aqs.query_hash
+    ON aq.query_hash = aqs.queryid
     WHERE TRUE = ANY (SELECT unnest(execution_time_with_aqo) IS NOT NULL)
     ) AS q1
     ORDER BY nn ASC;
@@ -116,7 +137,7 @@ ELSE
         (SELECT AVG(t) FROM unnest(execution_time_without_aqo) t) AS exectime,
         executions_without_aqo AS execs
       FROM aqo_queries aq JOIN aqo_query_stat aqs
-      ON aq.query_hash = aqs.query_hash
+      ON aq.query_hash = aqs.queryid
       WHERE TRUE = ANY (SELECT unnest(execution_time_without_aqo) IS NOT NULL)
       ) AS q1
     ORDER BY (nn) ASC;
@@ -195,6 +216,7 @@ BEGIN
 
     -- Remove ALL feature space if one of oids isn't exists
     DELETE FROM aqo_queries WHERE fspace_hash = fs;
+	PERFORM * FROM aqo_stat_remove(fs);
   END LOOP;
 
   -- Calculate difference with previous state of knowledge base
@@ -235,7 +257,7 @@ IF (controlled) THEN
       cardinality_error_with_aqo[array_length(cardinality_error_with_aqo, 1)] AS cerror,
       executions_with_aqo AS execs
     FROM aqo_queries aq JOIN aqo_query_stat aqs
-    ON aq.query_hash = aqs.query_hash
+    ON aq.query_hash = aqs.queryid
     WHERE TRUE = ANY (SELECT unnest(cardinality_error_with_aqo) IS NOT NULL)
     ) AS q1
     ORDER BY nn ASC;
@@ -251,7 +273,7 @@ ELSE
 		(SELECT AVG(t) FROM unnest(cardinality_error_without_aqo) t) AS cerror,
         executions_without_aqo AS execs
       FROM aqo_queries aq JOIN aqo_query_stat aqs
-      ON aq.query_hash = aqs.query_hash
+      ON aq.query_hash = aqs.queryid
       WHERE TRUE = ANY (SELECT unnest(cardinality_error_without_aqo) IS NOT NULL)
       ) AS q1
     ORDER BY (nn) ASC;

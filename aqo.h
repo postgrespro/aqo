@@ -135,7 +135,6 @@
 #include "optimizer/cost.h"
 #include "parser/analyze.h"
 #include "parser/parsetree.h"
-#include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/guc.h"
 #include "utils/hsearch.h"
@@ -145,6 +144,7 @@
 #include "utils/snapmgr.h"
 
 #include "machine_learning.h"
+#include "storage.h"
 
 /* Check PostgreSQL version (9.6.0 contains important changes in planner) */
 #if PG_VERSION_NUM < 90600
@@ -174,32 +174,6 @@ extern bool	force_collect_stat;
 extern bool aqo_show_hash;
 extern bool aqo_show_details;
 extern int aqo_join_threshold;
-
-/*
- * It is mostly needed for auto tuning of query. with auto tuning mode aqo
- * checks stability of last executions of the query, bad influence of strong
- * cardinality estimation on query execution (planner bug?) and so on.
- * It can induce aqo to suppress machine learning for this query.
- */
-typedef struct
-{
-	double	   *execution_time_with_aqo;
-	double	   *execution_time_without_aqo;
-	double	   *planning_time_with_aqo;
-	double	   *planning_time_without_aqo;
-	double	   *cardinality_error_with_aqo;
-	double	   *cardinality_error_without_aqo;
-
-	int			execution_time_with_aqo_size;
-	int			execution_time_without_aqo_size;
-	int			planning_time_with_aqo_size;
-	int			planning_time_without_aqo_size;
-	int			cardinality_error_with_aqo_size;
-	int			cardinality_error_without_aqo_size;
-
-	int64		executions_with_aqo;
-	int64		executions_without_aqo;
-}	QueryStat;
 
 /* Parameters for current query */
 typedef struct QueryContextData
@@ -289,8 +263,6 @@ extern bool load_fss(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 extern bool update_fss_ext(uint64 fs, int fss, OkNNrdata *data,
 						   List *reloids, bool isTimedOut);
 extern bool update_fss(uint64 fs, int fss, OkNNrdata *data, List *reloids);
-QueryStat *get_aqo_stat(uint64 query_hash);
-void update_aqo_stat(uint64 query_hash, QueryStat * stat);
 extern bool my_index_insert(Relation indexRelation,	Datum *values, bool *isnull,
 							ItemPointer heap_t_ctid, Relation heapRelation,
 							IndexUniqueCheck checkUnique);
@@ -318,7 +290,7 @@ void aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction,
 void aqo_ExecutorEnd(QueryDesc *queryDesc);
 
 /* Automatic query tuning */
-extern void automatical_query_tuning(uint64 query_hash, QueryStat * stat);
+extern void automatical_query_tuning(uint64 query_hash, StatEntry *stat);
 
 /* Utilities */
 extern int int64_compare(const void *a, const void *b);
@@ -327,8 +299,6 @@ extern int double_cmp(const void *a, const void *b);
 extern int *argsort(void *a, int n, size_t es,
 					int (*cmp) (const void *, const void *));
 extern int *inverse_permutation(int *a, int n);
-extern QueryStat *palloc_query_stat(void);
-extern void pfree_query_stat(QueryStat *stat);
 
 /* Selectivity cache for parametrized baserels */
 extern void cache_selectivity(int clause_hash, int relid, int global_relid,
