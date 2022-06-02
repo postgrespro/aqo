@@ -78,6 +78,7 @@ $node->safe_psql('postgres', "CREATE EXTENSION aqo");
 $node->safe_psql('postgres', "
 	ALTER SYSTEM SET aqo.mode = 'disabled';
 	SELECT pg_reload_conf();
+	SELECT * FROM aqo_stat_reset(); -- Remove old data
 ");
 $node->command_ok([ 'pgbench', '-t',
 					"$TRANSACTIONS", '-c', "$CLIENTS", '-j', "$THREADS" ],
@@ -89,6 +90,7 @@ $fss_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_data;");
 $fs_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_queries;");
 $fs_samples_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_query_texts;");
 $stat_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_query_stat;");
+note("counter: $fss_count, $fs_count, $fs_samples_count, $stat_count");
 is( (($fss_count == 0) and ($fs_count == 1) and ($fs_samples_count == 1) and ($stat_count == 0)), 1);
 
 # Check: no problems with stats collection in highly concurrent environment.
@@ -127,7 +129,7 @@ append_to_file($analytics, q{
 });
 
 # Avoid problems with an error fluctuations during the test above.
-$node->safe_psql('postgres', "TRUNCATE aqo_query_stat");
+$node->safe_psql('postgres', "SELECT aqo_stat_reset()");
 
 # Look for top of problematic queries.
 $node->command_ok([ 'pgbench', '-t', "10", '-c', "$CLIENTS", '-j', "$THREADS",
@@ -208,7 +210,8 @@ $node->safe_psql('postgres', "
 
 # New queries won't add rows into AQO knowledge base.
 $node->safe_psql('postgres', "ALTER SYSTEM SET aqo.mode = 'disabled'");
-$node->restart();
+$node->safe_psql('postgres', "SELECT pg_reload_conf()");
+$node->restart(); # AQO data storage should survive after a restart
 $res = $node->safe_psql('postgres', "SHOW aqo.mode");
 is($res, 'disabled');
 
@@ -326,7 +329,7 @@ append_to_file($bank, q{
 $node->safe_psql('postgres', "
 	CREATE EXTENSION aqo;
 	ALTER SYSTEM SET aqo.mode = 'intelligent';
-	ALTER SYSTEM SET log_statement = 'all';
+	ALTER SYSTEM SET log_statement = 'ddl';
 	SELECT pg_reload_conf();
 ");
 $node->restart();

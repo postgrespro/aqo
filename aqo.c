@@ -63,7 +63,7 @@ static const struct config_enum_entry format_options[] = {
 };
 
 /* Parameters of autotuning */
-int			aqo_stat_size = 20;
+int			aqo_stat_size = STAT_SAMPLE_SIZE;
 int			auto_tuning_window_size = 5;
 double		auto_tuning_exploration = 0.1;
 int			auto_tuning_max_iterations = 50;
@@ -205,7 +205,7 @@ _PG_init(void)
 							 "Used for smooth transition from table storage",
 							 NULL,
 							 &aqo_use_file_storage,
-							 false,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,

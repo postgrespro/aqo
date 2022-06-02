@@ -72,13 +72,6 @@ static List *restore_selectivities(List *clauselist,
 								   List *relidslist,
 								   JoinType join_type,
 								   bool was_parametrized);
-static void update_query_stat_row(double *et, int *et_size,
-								  double *pt, int *pt_size,
-								  double *ce, int *ce_size,
-								  double planning_time,
-								  double execution_time,
-								  double cardinality_error,
-								  int64 *n_exec);
 static void StoreToQueryEnv(QueryDesc *queryDesc);
 static void StorePlanInternals(QueryDesc *queryDesc);
 static bool ExtractFromQueryEnv(QueryDesc *queryDesc);
@@ -556,50 +549,6 @@ learnOnPlanState(PlanState *p, void *context)
 	return false;
 }
 
-/*
- * Updates given row of query statistics:
- * et - execution time
- * pt - planning time
- * ce - cardinality error
- */
-void
-update_query_stat_row(double *et, int *et_size,
-					  double *pt, int *pt_size,
-					  double *ce, int *ce_size,
-					  double planning_time,
-					  double execution_time,
-					  double cardinality_error,
-					  int64 *n_exec)
-{
-	int i;
-
-	/*
-	 * If plan contains one or more "never visited" nodes, cardinality_error
-	 * have -1 value and will be written to the knowledge base. User can use it
-	 * as a sign that AQO ignores this query.
-	 */
-	if (*ce_size >= aqo_stat_size)
-			for (i = 1; i < aqo_stat_size; ++i)
-				ce[i - 1] = ce[i];
-		*ce_size = (*ce_size >= aqo_stat_size) ? aqo_stat_size : (*ce_size + 1);
-		ce[*ce_size - 1] = cardinality_error;
-
-	if (*et_size >= aqo_stat_size)
-		for (i = 1; i < aqo_stat_size; ++i)
-			et[i - 1] = et[i];
-
-	*et_size = (*et_size >= aqo_stat_size) ? aqo_stat_size : (*et_size + 1);
-	et[*et_size - 1] = execution_time;
-
-	if (*pt_size >= aqo_stat_size)
-		for (i = 1; i < aqo_stat_size; ++i)
-			pt[i - 1] = pt[i];
-
-	*pt_size = (*pt_size >= aqo_stat_size) ? aqo_stat_size : (*pt_size + 1);
-	pt[*pt_size - 1] = planning_time; /* Just remember: planning time can be negative. */
-	(*n_exec)++;
-}
-
 /*****************************************************************************
  *
  *	QUERY EXECUTION STATISTICS COLLECTING HOOKS
@@ -774,12 +723,12 @@ aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count,
 void
 aqo_ExecutorEnd(QueryDesc *queryDesc)
 {
-	double execution_time;
-	double cardinality_error;
-	QueryStat *stat = NULL;
-	instr_time endtime;
-	EphemeralNamedRelation enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
-	LOCKTAG tag;
+	double					execution_time;
+	double					cardinality_error;
+	StatEntry			   *stat;
+	instr_time				endtime;
+	EphemeralNamedRelation	enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
+	LOCKTAG					tag;
 
 	cardinality_sum_errors = 0.;
 	cardinality_num_objects = 0;
@@ -823,72 +772,40 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		list_free(ctx.selectivities);
 	}
 
+	/* Calculate execution time. */
+	INSTR_TIME_SET_CURRENT(endtime);
+	INSTR_TIME_SUBTRACT(endtime, query_context.start_execution_time);
+	execution_time = INSTR_TIME_GET_DOUBLE(endtime);
+
+	if (cardinality_num_objects > 0)
+		cardinality_error = cardinality_sum_errors / cardinality_num_objects;
+	else
+		cardinality_error = -1;
+
+	/* Prevent concurrent updates. */
+	init_lock_tag(&tag, query_context.query_hash, query_context.fspace_hash);
+	LockAcquire(&tag, ExclusiveLock, false, false);
+
 	if (query_context.collect_stat)
 	{
-		if (!aqo_use_file_storage)
-			stat = get_aqo_stat(query_context.query_hash);
-		else
-			stat = aqo_load_stat(query_context.query_hash);
-	}
-
-	{
-		/* Calculate execution time. */
-		INSTR_TIME_SET_CURRENT(endtime);
-		INSTR_TIME_SUBTRACT(endtime, query_context.start_execution_time);
-		execution_time = INSTR_TIME_GET_DOUBLE(endtime);
-
-		if (cardinality_num_objects > 0)
-			cardinality_error = cardinality_sum_errors / cardinality_num_objects;
-		else
-			cardinality_error = -1;
-
-		/* Prevent concurrent updates. */
-		init_lock_tag(&tag, query_context.query_hash, query_context.fspace_hash);
-		LockAcquire(&tag, ExclusiveLock, false, false);
+		/* Write AQO statistics to the aqo_query_stat table */
+		stat = aqo_stat_store(query_context.query_hash,
+							  query_context.use_aqo,
+							  query_context.planning_time, execution_time,
+							  cardinality_error);
 
 		if (stat != NULL)
 		{
-			/* Calculate AQO statistics. */
-			if (query_context.use_aqo)
-				/* For the case, when query executed with AQO predictions. */
-				update_query_stat_row(stat->execution_time_with_aqo,
-									 &stat->execution_time_with_aqo_size,
-									 stat->planning_time_with_aqo,
-									 &stat->planning_time_with_aqo_size,
-									 stat->cardinality_error_with_aqo,
-									 &stat->cardinality_error_with_aqo_size,
-									 query_context.planning_time,
-									 execution_time,
-									 cardinality_error,
-									 &stat->executions_with_aqo);
-			else
-				/* For the case, when query executed without AQO predictions. */
-				update_query_stat_row(stat->execution_time_without_aqo,
-									 &stat->execution_time_without_aqo_size,
-									 stat->planning_time_without_aqo,
-									 &stat->planning_time_without_aqo_size,
-									 stat->cardinality_error_without_aqo,
-									 &stat->cardinality_error_without_aqo_size,
-									 query_context.planning_time,
-									 execution_time,
-									 cardinality_error,
-									 &stat->executions_without_aqo);
-
 			/* Store all learn data into the AQO service relations. */
 			if (!query_context.adding_query && query_context.auto_tuning)
 				automatical_query_tuning(query_context.query_hash, stat);
 
-			/* Write AQO statistics to the aqo_query_stat table */
-			if (!aqo_use_file_storage)
-				update_aqo_stat(query_context.query_hash, stat);
-			else
-				aqo_store_stat(query_context.query_hash, stat);
-			pfree_query_stat(stat);
+			pfree(stat);
 		}
-
-		/* Allow concurrent queries to update this feature space. */
-		LockRelease(&tag, ExclusiveLock, false);
 	}
+
+	/* Allow concurrent queries to update this feature space. */
+	LockRelease(&tag, ExclusiveLock, false);
 
 	selectivity_cache_clear();
 	cur_classes = ldelete_uint64(cur_classes, query_context.query_hash);

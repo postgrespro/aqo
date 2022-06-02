@@ -18,6 +18,7 @@
 #include "postgres.h"
 
 #include "aqo.h"
+#include "storage.h"
 
 /*
  * Auto tuning criteria criteria of an query convergence by overall cardinality
@@ -35,7 +36,7 @@ static bool is_in_infinite_loop_cq(double *elems, int nelems);
 /*
  * Returns mean value of the array of doubles.
  */
-double
+static double
 get_mean(double *elems, int nelems)
 {
 	double	sum = 0;
@@ -52,7 +53,7 @@ get_mean(double *elems, int nelems)
  * Having a time series it tries to predict its next value.
  * Now it do simple window averaging.
  */
-double
+static double
 get_estimation(double *elems, int nelems)
 {
 	int start;
@@ -70,7 +71,7 @@ get_estimation(double *elems, int nelems)
 /*
  * Checks whether the series is stable with absolute or relative error.
  */
-bool
+static bool
 is_stable(double *elems, int nelems)
 {
 	double	est,
@@ -91,7 +92,7 @@ is_stable(double *elems, int nelems)
  * Now it checks whether the cardinality quality stopped decreasing with
  * absolute or relative error.
  */
-bool
+static bool
 converged_cq(double *elems, int nelems)
 {
 	if (nelems < auto_tuning_window_size + 2)
@@ -107,7 +108,7 @@ converged_cq(double *elems, int nelems)
  * Now it checks whether the cardinality quality stopped decreasing with
  * absolute or relative error 0.1.
  */
-bool
+static bool
 is_in_infinite_loop_cq(double *elems, int nelems)
 {
 	if (nelems - auto_tuning_infinite_loop < auto_tuning_window_size + 2)
@@ -144,7 +145,7 @@ is_in_infinite_loop_cq(double *elems, int nelems)
  * this query to false.
  */
 void
-automatical_query_tuning(uint64 qhash, QueryStat * stat)
+automatical_query_tuning(uint64 qhash, StatEntry *stat)
 {
 	double		unstability = auto_tuning_exploration;
 	double		t_aqo,
@@ -152,14 +153,13 @@ automatical_query_tuning(uint64 qhash, QueryStat * stat)
 	double		p_use = -1;
 	int64		num_iterations;
 
-	num_iterations = stat->executions_with_aqo + stat->executions_without_aqo;
+	num_iterations = stat->execs_with_aqo + stat->execs_without_aqo;
 	query_context.learn_aqo = true;
-	if (stat->executions_without_aqo < auto_tuning_window_size + 1)
+	if (stat->execs_without_aqo < auto_tuning_window_size + 1)
 		query_context.use_aqo = false;
-	else if (!converged_cq(stat->cardinality_error_with_aqo,
-						   stat->cardinality_error_with_aqo_size) &&
-			 !is_in_infinite_loop_cq(stat->cardinality_error_with_aqo,
-									 stat->cardinality_error_with_aqo_size))
+	else if (!converged_cq(stat->est_error_aqo, stat->cur_stat_slot_aqo) &&
+			 !is_in_infinite_loop_cq(stat->est_error_aqo,
+									 stat->cur_stat_slot_aqo))
 		query_context.use_aqo = true;
 	else
 	{
@@ -168,15 +168,11 @@ automatical_query_tuning(uint64 qhash, QueryStat * stat)
 		 * by execution time. It is volatile, probabilistic part of code.
 		 * XXX: this logic of auto tuning may be reworked later.
 		 */
-		t_aqo = get_estimation(stat->execution_time_with_aqo,
-							   stat->execution_time_with_aqo_size) +
-			get_estimation(stat->planning_time_with_aqo,
-						   stat->planning_time_with_aqo_size);
+		t_aqo = get_estimation(stat->exec_time_aqo, stat->cur_stat_slot_aqo) +
+				get_estimation(stat->plan_time_aqo, stat->cur_stat_slot_aqo);
 
-		t_not_aqo = get_estimation(stat->execution_time_without_aqo,
-								   stat->execution_time_without_aqo_size) +
-			get_estimation(stat->planning_time_without_aqo,
-						   stat->planning_time_without_aqo_size);
+		t_not_aqo = get_estimation(stat->exec_time, stat->cur_stat_slot) +
+					get_estimation(stat->plan_time, stat->cur_stat_slot);
 
 		p_use = t_not_aqo / (t_not_aqo + t_aqo);
 

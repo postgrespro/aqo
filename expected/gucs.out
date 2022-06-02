@@ -5,6 +5,12 @@ SET aqo.show_details = true;
 CREATE TABLE t(x int);
 INSERT INTO t (x) (SELECT * FROM generate_series(1, 100) AS gs);
 ANALYZE t;
+SELECT * FROM aqo_stat_reset(); -- Remember! DROP EXTENSION doesn't remove any AQO data gathered.
+ aqo_stat_reset 
+----------------
+             61
+(1 row)
+
 -- Check AQO addons to explain (the only stable data)
 EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 	SELECT x FROM t;
@@ -30,6 +36,7 @@ EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
  JOINS: 0
 (6 rows)
 
+SET aqo.mode = 'disabled';
 -- Check existence of the interface functions.
 SELECT obj_description('aqo_cardinality_error'::regproc::oid);
                                                 obj_description                                                
@@ -59,6 +66,12 @@ SELECT obj_description('aqo_reset_query'::regproc::oid);
                         obj_description                        
 ---------------------------------------------------------------
  Remove from AQO storage only learning data for given QueryId.
+(1 row)
+
+SELECT obj_description('aqo_stat_reset'::regproc::oid);
+            obj_description             
+----------------------------------------
+ Reset query statistics gathered by AQO
 (1 row)
 
 \df aqo_cardinality_error
@@ -94,6 +107,32 @@ SELECT obj_description('aqo_reset_query'::regproc::oid);
  Schema |      Name       | Result data type | Argument data types | Type 
 --------+-----------------+------------------+---------------------+------
  public | aqo_reset_query | integer          | queryid bigint      | func
+(1 row)
+
+\df aqo_stat_reset
+                            List of functions
+ Schema |      Name      | Result data type | Argument data types | Type 
+--------+----------------+------------------+---------------------+------
+ public | aqo_stat_reset | bigint           |                     | func
+(1 row)
+
+-- Check stat reset
+SELECT count(*) FROM aqo_query_stat;
+ count 
+-------
+     1
+(1 row)
+
+SELECT * FROM aqo_stat_reset(); -- Remove one record
+ aqo_stat_reset 
+----------------
+              1
+(1 row)
+
+SELECT count(*) FROM aqo_query_stat;
+ count 
+-------
+     0
 (1 row)
 
 DROP EXTENSION aqo;

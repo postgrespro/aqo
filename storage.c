@@ -17,14 +17,16 @@
 
 #include "postgres.h"
 
-#include "nodes/value.h"
-#include "postgres.h"
+#include <unistd.h>
 
 #include "access/heapam.h"
 #include "access/table.h"
 #include "access/tableam.h"
+#include "miscadmin.h"
+#include "pgstat.h"
 
 #include "aqo.h"
+#include "aqo_shared.h"
 #include "machine_learning.h"
 #include "preprocessing.h"
 #include "learn_cache.h"
@@ -36,7 +38,6 @@ HTAB *deactivated_queries = NULL;
 static ArrayType *form_matrix(double **matrix, int nrows, int ncols);
 static int deform_matrix(Datum datum, double **matrix);
 
-static ArrayType *form_vector(double *vector, int nrows);
 static void deform_vector(Datum datum, double *vector, int *nelems);
 
 #define FormVectorSz(v_name)			(form_vector((v_name), (v_name ## _size)))
@@ -731,167 +732,6 @@ update_fss(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 }
 
 /*
- * Returns QueryStat for the given query_hash. Returns empty QueryStat if
- * no statistics is stored for the given query_hash in table aqo_query_stat.
- * Returns NULL and executes disable_aqo_for_query if aqo_query_stat
- * is not found.
- */
-QueryStat *
-get_aqo_stat(uint64 qhash)
-{
-	Relation	hrel;
-	Relation	irel;
-	TupleTableSlot *slot;
-	IndexScanDesc scan;
-	ScanKeyData key;
-	QueryStat  *stat = palloc_query_stat();
-	bool		shouldFree;
-
-
-	if (!open_aqo_relation(NULL, "aqo_query_stat",
-						   "aqo_query_stat_idx",
-						   AccessShareLock, &hrel, &irel))
-		return false;
-
-	scan = index_beginscan(hrel, irel, SnapshotSelf, 1, 0);
-	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(qhash));
-	index_rescan(scan, &key, 1, NULL, 0);
-	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
-
-	if (index_getnext_slot(scan, ForwardScanDirection, slot))
-	{
-		HeapTuple	tuple;
-		Datum		values[9];
-		bool		nulls[9];
-
-		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
-		Assert(shouldFree != true);
-		heap_deform_tuple(tuple, hrel->rd_att, values, nulls);
-
-		DeformVectorSz(values[1], stat->execution_time_with_aqo);
-		DeformVectorSz(values[2], stat->execution_time_without_aqo);
-		DeformVectorSz(values[3], stat->planning_time_with_aqo);
-		DeformVectorSz(values[4], stat->planning_time_without_aqo);
-		DeformVectorSz(values[5], stat->cardinality_error_with_aqo);
-		DeformVectorSz(values[6], stat->cardinality_error_without_aqo);
-
-		stat->executions_with_aqo = DatumGetInt64(values[7]);
-		stat->executions_without_aqo = DatumGetInt64(values[8]);
-	}
-
-	ExecDropSingleTupleTableSlot(slot);
-	index_endscan(scan);
-	index_close(irel, AccessShareLock);
-	table_close(hrel, AccessShareLock);
-	return stat;
-}
-
-/*
- * Saves given QueryStat for the given query_hash.
- * Executes disable_aqo_for_query if aqo_query_stat is not found.
- */
-void
-update_aqo_stat(uint64 qhash, QueryStat *stat)
-{
-	Relation	hrel;
-	Relation	irel;
-	SnapshotData snap;
-	TupleTableSlot *slot;
-	TupleDesc	tupDesc;
-	HeapTuple	tuple,
-				nw_tuple;
-	Datum		values[9];
-	bool		isnull[9] = { false, false, false,
-							  false, false, false,
-							  false, false, false };
-	bool		replace[9] = { false, true, true,
-							    true, true, true,
-								true, true, true };
-	bool		shouldFree;
-	bool		update_indexes;
-	IndexScanDesc scan;
-	ScanKeyData	key;
-
-	/* Couldn't allow to write if xact must be read-only. */
-	if (XactReadOnly)
-		return;
-
-	if (!open_aqo_relation(NULL, "aqo_query_stat",
-						   "aqo_query_stat_idx",
-						   RowExclusiveLock, &hrel, &irel))
-		return;
-
-	tupDesc = RelationGetDescr(hrel);
-
-	InitDirtySnapshot(snap);
-	scan = index_beginscan(hrel, irel, &snap, 1, 0);
-	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(qhash));
-	index_rescan(scan, &key, 1, NULL, 0);
-	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
-
-	/*values[0] will be initialized later */
-	values[1] = PointerGetDatum(FormVectorSz(stat->execution_time_with_aqo));
-	values[2] = PointerGetDatum(FormVectorSz(stat->execution_time_without_aqo));
-	values[3] = PointerGetDatum(FormVectorSz(stat->planning_time_with_aqo));
-	values[4] = PointerGetDatum(FormVectorSz(stat->planning_time_without_aqo));
-	values[5] = PointerGetDatum(FormVectorSz(stat->cardinality_error_with_aqo));
-	values[6] = PointerGetDatum(FormVectorSz(stat->cardinality_error_without_aqo));
-
-	values[7] = Int64GetDatum(stat->executions_with_aqo);
-	values[8] = Int64GetDatum(stat->executions_without_aqo);
-
-	if (!index_getnext_slot(scan, ForwardScanDirection, slot))
-	{
-		/* Such signature (hash) doesn't yet exist in the ML knowledge base. */
-		values[0] = Int64GetDatum(qhash);
-		tuple = heap_form_tuple(tupDesc, values, isnull);
-		simple_heap_insert(hrel, tuple);
-		my_index_insert(irel, values, isnull, &(tuple->t_self),
-														hrel, UNIQUE_CHECK_YES);
-	}
-	else if (!TransactionIdIsValid(snap.xmin) && !TransactionIdIsValid(snap.xmax))
-	{
-		/* Need to update ML data row and no one backend concurrently doing it. */
-		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
-		Assert(shouldFree != true);
-		values[0] = heap_getattr(tuple, 1, tupDesc, &isnull[0]);
-		nw_tuple = heap_modify_tuple(tuple, tupDesc, values, isnull, replace);
-		if (my_simple_heap_update(hrel, &(nw_tuple->t_self), nw_tuple,
-															&update_indexes))
-		{
-			/* NOTE: insert index tuple iff heap update succeeded! */
-			if (update_indexes)
-				my_index_insert(irel, values, isnull,
-								&(nw_tuple->t_self),
-								hrel, UNIQUE_CHECK_YES);
-		}
-		else
-		{
-			/*
-			 * Ooops, somebody concurrently updated the tuple. It is possible
-			 * only in the case of changes made by third-party code.
-			 */
-			elog(ERROR, "AQO statistic data for query signature "UINT64_FORMAT
-						" concurrently updated by a stranger backend.",
-				 qhash);
-		}
-	}
-	else
-	{
-		/*
-		 * Concurrent update was made. To prevent deadlocks refuse to update.
-		 */
-	}
-
-	ExecDropSingleTupleTableSlot(slot);
-	index_endscan(scan);
-	index_close(irel, RowExclusiveLock);
-	table_close(hrel, RowExclusiveLock);
-
-	CommandCounterIncrement();
-}
-
-/*
  * Expands matrix from storage into simple C-array.
  */
 int
@@ -1108,19 +948,340 @@ add_deactivated_query(uint64 query_hash)
 
 /* *****************************************************************************
  *
- * Implement AQO file storage below
+ * Implementation of the AQO file storage
  *
  **************************************************************************** */
 
+#define PGAQO_STAT_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_statistics.stat"
+
 bool aqo_use_file_storage;
 
-void
-aqo_store_stat(uint64 queryid, QueryStat * stat)
+HTAB *stat_htab = NULL;
+HTAB *queries_htab = NULL; /* TODO */
+HTAB *data_htab = NULL; /* TODO */
+
+/* TODO: think about how to keep query texts. */
+
+/*
+ * Update AQO statistics.
+ *
+ * Add a record (and replace old, if all stat slots is full) to stat slot for
+ * a query class.
+ * Returns a copy of stat entry, allocated in current memory context. Caller is
+ * in charge to free this struct after usage.
+ */
+StatEntry *
+aqo_stat_store(uint64 queryid, bool use_aqo,
+			   double plan_time, double exec_time, double est_error)
 {
+	StatEntry  *entry;
+	bool		found;
+	int			pos;
+
+	Assert(stat_htab);
+
+	LWLockAcquire(&aqo_state->stat_lock, LW_EXCLUSIVE);
+	entry = (StatEntry *) hash_search(stat_htab, &queryid, HASH_ENTER, &found);
+
+	/* Initialize entry on first usage */
+	if (!found)
+	{
+		uint64 qid = entry->queryid;
+		memset(entry, 0, sizeof(StatEntry));
+		entry->queryid = qid;
+	}
+
+	/* Update the entry data */
+
+	if (use_aqo)
+	{
+		Assert(entry->cur_stat_slot_aqo >= 0);
+		pos = entry->cur_stat_slot_aqo;
+		if (entry->cur_stat_slot_aqo < STAT_SAMPLE_SIZE - 1)
+			entry->cur_stat_slot_aqo++;
+		else
+		{
+			size_t sz = (STAT_SAMPLE_SIZE - 1) * sizeof(entry->est_error_aqo[0]);
+
+			Assert(entry->cur_stat_slot_aqo = STAT_SAMPLE_SIZE - 1);
+			memmove(entry->plan_time_aqo, &entry->plan_time_aqo[1], sz);
+			memmove(entry->exec_time_aqo, &entry->exec_time_aqo[1], sz);
+			memmove(entry->est_error_aqo, &entry->est_error_aqo[1], sz);
+		}
+
+		entry->execs_with_aqo++;
+		entry->plan_time_aqo[pos] = plan_time;
+		entry->exec_time_aqo[pos] = exec_time;
+		entry->est_error_aqo[pos] = est_error;
+	}
+	else
+	{
+		Assert(entry->cur_stat_slot >= 0);
+		pos = entry->cur_stat_slot;
+		if (entry->cur_stat_slot < STAT_SAMPLE_SIZE - 1)
+			entry->cur_stat_slot++;
+		else
+		{
+			size_t sz = (STAT_SAMPLE_SIZE - 1) * sizeof(entry->est_error[0]);
+
+			Assert(entry->cur_stat_slot = STAT_SAMPLE_SIZE - 1);
+			memmove(entry->plan_time, &entry->plan_time[1], sz);
+			memmove(entry->exec_time, &entry->exec_time[1], sz);
+			memmove(entry->est_error, &entry->est_error[1], sz);
+		}
+
+		entry->execs_without_aqo++;
+		entry->plan_time[pos] = plan_time;
+		entry->exec_time[pos] = exec_time;
+		entry->est_error[pos] = est_error;
+	}
+	entry = memcpy(palloc(sizeof(StatEntry)), entry, sizeof(StatEntry));
+	LWLockRelease(&aqo_state->stat_lock);
+	return entry;
 }
 
-QueryStat *
-aqo_load_stat(uint64 queryid)
+#include "funcapi.h"
+PG_FUNCTION_INFO_V1(aqo_query_stat);
+
+typedef enum {
+	QUERYID = 0,
+	EXEC_TIME_AQO,
+	EXEC_TIME,
+	PLAN_TIME_AQO,
+	PLAN_TIME,
+	EST_ERROR_AQO,
+	EST_ERROR,
+	NEXECS_AQO,
+	NEXECS,
+	TOTAL_NCOLS
+} aqo_stat_cols;
+
+/*
+ * Returns AQO statistics on controlled query classes.
+ */
+Datum
+aqo_query_stat(PG_FUNCTION_ARGS)
 {
-	return NULL;
+	ReturnSetInfo	   *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	TupleDesc			tupDesc;
+	MemoryContext		per_query_ctx;
+	MemoryContext		oldcontext;
+	Tuplestorestate	   *tupstore;
+	Datum				values[TOTAL_NCOLS + 1];
+	bool				nulls[TOTAL_NCOLS + 1];
+	HASH_SEQ_STATUS		hash_seq;
+	StatEntry	   *entry;
+
+	/* check to see if caller supports us returning a tuplestore */
+	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("set-valued function called in context that cannot accept a set")));
+	if (!(rsinfo->allowedModes & SFRM_Materialize))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("materialize mode required, but it is not allowed in this context")));
+
+	/* Switch into long-lived context to construct returned data structures */
+	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
+	oldcontext = MemoryContextSwitchTo(per_query_ctx);
+
+	/* Build a tuple descriptor for our result type */
+	if (get_call_result_type(fcinfo, NULL, &tupDesc) != TYPEFUNC_COMPOSITE)
+		elog(ERROR, "return type must be a row type");
+	Assert(tupDesc->natts == TOTAL_NCOLS);
+
+	tupstore = tuplestore_begin_heap(true, false, work_mem);
+	rsinfo->returnMode = SFRM_Materialize;
+	rsinfo->setResult = tupstore;
+	rsinfo->setDesc = tupDesc;
+
+	MemoryContextSwitchTo(oldcontext);
+
+	memset(nulls, 0, TOTAL_NCOLS + 1);
+	LWLockAcquire(&aqo_state->stat_lock, LW_SHARED);
+	hash_seq_init(&hash_seq, stat_htab);
+	while ((entry = hash_seq_search(&hash_seq)) != NULL)
+	{
+		values[QUERYID] = Int64GetDatum(entry->queryid);
+		values[NEXECS] = Int64GetDatum(entry->execs_without_aqo);
+		values[NEXECS_AQO] = Int64GetDatum(entry->execs_with_aqo);
+		values[EXEC_TIME_AQO] = PointerGetDatum(form_vector(entry->exec_time_aqo, entry->cur_stat_slot_aqo));
+		values[EXEC_TIME] = PointerGetDatum(form_vector(entry->exec_time, entry->cur_stat_slot));
+		values[PLAN_TIME_AQO] = PointerGetDatum(form_vector(entry->plan_time_aqo, entry->cur_stat_slot_aqo));
+		values[PLAN_TIME] = PointerGetDatum(form_vector(entry->plan_time, entry->cur_stat_slot));
+		values[EST_ERROR_AQO] = PointerGetDatum(form_vector(entry->est_error_aqo, entry->cur_stat_slot_aqo));
+		values[EST_ERROR] = PointerGetDatum(form_vector(entry->est_error, entry->cur_stat_slot));
+		tuplestore_putvalues(tupstore, tupDesc, values, nulls);
+	}
+
+	LWLockRelease(&aqo_state->stat_lock);
+	tuplestore_donestoring(tupstore);
+	return (Datum) 0;
+}
+
+PG_FUNCTION_INFO_V1(aqo_stat_reset);
+
+Datum
+aqo_stat_reset(PG_FUNCTION_ARGS)
+{
+	HASH_SEQ_STATUS	hash_seq;
+	StatEntry *entry;
+	long			num_remove = 0;
+	long			num_entries;
+
+	LWLockAcquire(&aqo_state->stat_lock, LW_EXCLUSIVE);
+	num_entries = hash_get_num_entries(stat_htab);
+	hash_seq_init(&hash_seq, stat_htab);
+	while ((entry = hash_seq_search(&hash_seq)) != NULL)
+	{
+		if (hash_search(stat_htab, &entry->queryid, HASH_REMOVE, NULL) == NULL)
+			elog(ERROR, "[AQO] hash table corrupted");
+		num_remove++;
+	}
+	LWLockRelease(&aqo_state->stat_lock);
+	Assert(num_remove == num_entries); /* Is it really impossible? */
+
+	/* TODO: clean disk storage */
+
+	PG_RETURN_INT64(num_remove);
+}
+
+PG_FUNCTION_INFO_V1(aqo_stat_remove);
+
+Datum
+aqo_stat_remove(PG_FUNCTION_ARGS)
+{
+	uint64			queryid = (uint64) PG_GETARG_INT64(0);
+	StatEntry *entry;
+	bool			removed;
+
+	LWLockAcquire(&aqo_state->stat_lock, LW_EXCLUSIVE);
+	entry = (StatEntry *) hash_search(stat_htab, &queryid, HASH_REMOVE, NULL);
+	removed = (entry) ? true : false;
+	LWLockRelease(&aqo_state->stat_lock);
+	PG_RETURN_BOOL(removed);
+}
+
+static const uint32 PGAQO_FILE_HEADER = 123467589;
+static const uint32 PGAQO_PG_MAJOR_VERSION = PG_VERSION_NUM / 100;
+
+/* Implement data flushing according to pgss_shmem_shutdown() */
+void
+aqo_stat_flush(void)
+{
+	HASH_SEQ_STATUS	hash_seq;
+	StatEntry	   *entry;
+	FILE		   *file;
+	size_t			entry_len = sizeof(StatEntry);
+	int32			num;
+
+	file = AllocateFile(PGAQO_STAT_FILE ".tmp", PG_BINARY_W);
+	if (file == NULL)
+		goto error;
+
+	LWLockAcquire(&aqo_state->stat_lock, LW_SHARED);
+	if (fwrite(&PGAQO_FILE_HEADER, sizeof(uint32), 1, file) != 1)
+			goto error;
+	if (fwrite(&PGAQO_PG_MAJOR_VERSION, sizeof(uint32), 1, file) != 1)
+			goto error;
+	num = hash_get_num_entries(stat_htab);
+
+	if (fwrite(&num, sizeof(int32), 1, file) != 1)
+		goto error;
+
+	hash_seq_init(&hash_seq, stat_htab);
+	while ((entry = hash_seq_search(&hash_seq)) != NULL)
+	{
+		if (fwrite(entry, entry_len, 1, file) != 1)
+		{
+			hash_seq_term(&hash_seq);
+			goto error;
+		}
+		num--;
+	}
+	Assert(num == 0);
+
+	if (FreeFile(file))
+	{
+		file = NULL;
+		goto error;
+	}
+
+	unlink(PGAQO_STAT_FILE);
+	LWLockRelease(&aqo_state->stat_lock);
+	(void) durable_rename(PGAQO_STAT_FILE ".tmp", PGAQO_STAT_FILE, LOG);
+	return;
+
+error:
+	ereport(LOG,
+			(errcode_for_file_access(),
+			 errmsg("could not write file \"%s\": %m",
+					PGAQO_STAT_FILE)));
+	unlink(PGAQO_STAT_FILE);
+
+	if (file)
+		FreeFile(file);
+	LWLockRelease(&aqo_state->stat_lock);
+}
+
+void
+aqo_stat_load(void)
+{
+	FILE   *file;
+	int		i;
+	uint32	header;
+	int32	num;
+	int32	pgver;
+
+	file = AllocateFile(PGAQO_STAT_FILE, PG_BINARY_R);
+	if (file == NULL)
+	{
+		if (errno != ENOENT)
+			goto read_error;
+		return;
+	}
+
+	if (fread(&header, sizeof(uint32), 1, file) != 1 ||
+		fread(&pgver, sizeof(uint32), 1, file) != 1 ||
+		fread(&num, sizeof(int32), 1, file) != 1)
+		goto read_error;
+
+	if (header != PGAQO_FILE_HEADER || pgver != PGAQO_PG_MAJOR_VERSION)
+		goto data_error;
+
+	for (i = 0; i < num; i++)
+	{
+		bool		found;
+		StatEntry	fentry;
+		StatEntry  *entry;
+
+		if (fread(&fentry, sizeof(StatEntry), 1, file) != 1)
+			goto read_error;
+
+		entry = (StatEntry *) hash_search(stat_htab, &fentry.queryid,
+										  HASH_ENTER, &found);
+		Assert(!found);
+		memcpy(entry, &fentry, sizeof(StatEntry));
+	}
+
+	FreeFile(file);
+	unlink(PGAQO_STAT_FILE);
+	return;
+
+read_error:
+	ereport(LOG,
+			(errcode_for_file_access(),
+			 errmsg("could not read file \"%s\": %m",
+					PGAQO_STAT_FILE)));
+	goto fail;
+data_error:
+	ereport(LOG,
+			(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+			 errmsg("ignoring invalid data in file \"%s\"",
+					PGAQO_STAT_FILE)));
+fail:
+	if (file)
+		FreeFile(file);
+	unlink(PGAQO_STAT_FILE);
 }
