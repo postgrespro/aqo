@@ -65,6 +65,7 @@
 #include "aqo.h"
 #include "hash.h"
 #include "preprocessing.h"
+#include "storage.h"
 
 
 /* List of feature spaces, that are processing in this backend. */

@@ -23,6 +23,7 @@
 #include "path_utils.h"
 #include "preprocessing.h"
 #include "learn_cache.h"
+#include "storage.h"
 
 
 PG_MODULE_MAGIC;
@@ -199,6 +200,18 @@ _PG_init(void)
 							 NULL
 	);
 
+	DefineCustomBoolVariable(
+							 "aqo.use_file_storage",
+							 "Used for smooth transition from table storage",
+							 NULL,
+							 &aqo_use_file_storage,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL
+	);
 	DefineCustomIntVariable("aqo.join_threshold",
 							"Sets the threshold of number of JOINs in query beyond which AQO is used.",
 							NULL,

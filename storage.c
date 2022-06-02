@@ -28,6 +28,7 @@
 #include "machine_learning.h"
 #include "preprocessing.h"
 #include "learn_cache.h"
+#include "storage.h"
 
 #define AQO_DATA_COLUMNS	(7)
 HTAB *deactivated_queries = NULL;
@@ -1103,4 +1104,23 @@ void
 add_deactivated_query(uint64 query_hash)
 {
 	hash_search(deactivated_queries, &query_hash, HASH_ENTER, NULL);
+}
+
+/* *****************************************************************************
+ *
+ * Implement AQO file storage below
+ *
+ **************************************************************************** */
+
+bool aqo_use_file_storage;
+
+void
+aqo_store_stat(uint64 queryid, QueryStat * stat)
+{
+}
+
+QueryStat *
+aqo_load_stat(uint64 queryid)
+{
+	return NULL;
 }
