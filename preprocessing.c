@@ -65,6 +65,7 @@
 #include "aqo.h"
 #include "hash.h"
 #include "preprocessing.h"
+#include "storage.h"
 
 
 const char *
