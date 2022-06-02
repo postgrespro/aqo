@@ -29,6 +29,7 @@
 #include "machine_learning.h"
 #include "preprocessing.h"
 #include "learn_cache.h"
+#include "storage.h"
 
 
 typedef struct
@@ -823,7 +824,12 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	}
 
 	if (query_context.collect_stat)
-		stat = get_aqo_stat(query_context.query_hash);
+	{
+		if (!aqo_use_file_storage)
+			stat = get_aqo_stat(query_context.query_hash);
+		else
+			stat = aqo_load_stat(query_context.query_hash);
+	}
 
 	{
 		/* Calculate execution time. */
@@ -873,7 +879,10 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 				automatical_query_tuning(query_context.query_hash, stat);
 
 			/* Write AQO statistics to the aqo_query_stat table */
-			update_aqo_stat(query_context.query_hash, stat);
+			if (!aqo_use_file_storage)
+				update_aqo_stat(query_context.query_hash, stat);
+			else
+				aqo_store_stat(query_context.query_hash, stat);
 			pfree_query_stat(stat);
 		}
 
