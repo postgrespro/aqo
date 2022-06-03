@@ -490,7 +490,7 @@ learnOnPlanState(PlanState *p, void *context)
 
 	/*
 	 * It is needed for correct exp(result) calculation.
-	 * Do it before cardinality error estimation because we can predict no less
+	 * Do it before cardinality error estmation because we can predict no less
 	 * than 1 tuple, but get zero tuples.
 	 */
 	predicted = clamp_row_est(predicted);
@@ -686,6 +686,10 @@ aqo_timeout_handler(void)
 {
 	aqo_obj_stat ctx = {NIL, NIL, NIL, false, false};
 
+	QueryStat *stat = NULL;
+	double error = 0;
+	int64 fintime = 0;
+
 	if (!timeoutCtl.queryDesc || !ExtractFromQueryEnv(timeoutCtl.queryDesc))
 		return;
 
@@ -694,8 +698,21 @@ aqo_timeout_handler(void)
 	ctx.learn = query_context.learn_aqo;
 	ctx.isTimedOut = true;
 
-	elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data. Timeout is %d",(int) get_timeout_finish_time(timeoutCtl.id));
 	learnOnPlanState(timeoutCtl.queryDesc->planstate, (void *) &ctx);
+	stat = get_aqo_stat(query_context.query_hash);
+	error = stat->cardinality_error_with_aqo[stat->cardinality_error_with_aqo_size-1] - cardinality_sum_errors/(1 + cardinality_num_objects);
+	fintime = (int64) get_timeout_finish_time(timeoutCtl.id);
+
+	elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data. Current timeout is %ld, mean integral error is %f", fintime, error);
+
+	if (stat && aqo_learn_statement_timeout)
+	{
+		if (error <= 0.1)
+		{
+			increase_flex_timeout(fintime);
+		}
+	}
+
 }
 
 /*
@@ -714,15 +731,15 @@ get_increment()
  *
  */
 void
-increase_flex_timeout(uint64 query_hash, int64 flex_timeout_fin_time)
+increase_flex_timeout(int64 flex_timeout_fin_time)
 {
 	LOCKTAG		tag;
 	flex_timeout_fin_time = (flex_timeout_fin_time + 1) * get_increment();
 
 	init_lock_tag(&tag, query_context.query_hash, 0);
 	LockAcquire(&tag, ExclusiveLock, false, false);
-	if (!update_query_timeout(query_hash, flex_timeout_fin_time, query_context.count_increase_timeout + 1))
-		elog(NOTICE, "timeout is not updated");
+	if (!update_query_timeout(query_context.query_hash, flex_timeout_fin_time, query_context.count_increase_timeout + 1))
+		elog(NOTICE, "[AQO] Timeout is not updated!");
 	LockRelease(&tag, ExclusiveLock, false);
 }
 
@@ -856,24 +873,18 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		list_free(ctx.selectivities);
 	}
 
-	stat = get_aqo_stat(query_context.query_hash);
-	if (cardinality_num_objects > 0)
-			cardinality_error = cardinality_sum_errors / cardinality_num_objects;
-		else
-			cardinality_error = -1;
-
-	if (stat && aqo_learn_statement_timeout &&
-		stat->cardinality_error_with_aqo[stat->cardinality_error_with_aqo_size-1] - cardinality_sum_errors/cardinality_num_objects <= 0.1)
-		{
-			increase_flex_timeout(query_context.query_hash, (int64) get_timeout_finish_time(timeoutCtl.id));
-		}
-
 	if (query_context.collect_stat)
+		stat = get_aqo_stat(query_context.query_hash);
 	{
 		/* Calculate execution time. */
 		INSTR_TIME_SET_CURRENT(endtime);
 		INSTR_TIME_SUBTRACT(endtime, query_context.start_execution_time);
 		execution_time = INSTR_TIME_GET_DOUBLE(endtime);
+
+		if (cardinality_num_objects > 0)
+			cardinality_error = cardinality_sum_errors / cardinality_num_objects;
+		else
+			cardinality_error = -1;
 
 		/* Prevent concurrent updates. */
 		init_lock_tag(&tag, query_context.query_hash, query_context.fspace_hash);

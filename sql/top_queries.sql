@@ -50,3 +50,4 @@ SELECT query_text,nexecs
 FROM aqo_cardinality_error(false) ce, aqo_query_texts aqt
 WHERE ce.id = aqt.query_hash
 ORDER BY (md5(query_text));
+DROP EXTENSION AQO;

@@ -324,7 +324,7 @@ extern double predict_for_relation(List *restrict_clauses, List *selectivities,
 void aqo_ExecutorStart(QueryDesc *queryDesc, int eflags);
 void aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction,
 					 uint64 count, bool execute_once);
-void increase_flex_timeout(uint64 query_hash, int64 flex_timeout_fin_time);
+void increase_flex_timeout(int64 flex_timeout_fin_time);
 void aqo_ExecutorEnd(QueryDesc *queryDesc);
 
 /* Automatic query tuning */

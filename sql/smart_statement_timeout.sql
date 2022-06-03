@@ -1,24 +1,3 @@
--- The function just copied from stats_ext.sql
-create function check_estimated_rows(text) returns table (estimated int, actual int)
-language plpgsql as
-$$
-declare
-    ln text;
-    tmp text[];
-    first_row bool := true;
-begin
-    for ln in
-        execute format('explain analyze %s', $1)
-    loop
-        if first_row then
-            first_row := false;
-            tmp := regexp_match(ln, 'rows=(\d*) .* rows=(\d*)');
-            return query select tmp[1]::int, tmp[2]::int;
-        end if;
-    end loop;
-end;
-$$;
-
 SET statement_timeout = 5000; -- [0.8s]
 
 DROP TABLE IF EXISTS a,b CASCADE;
@@ -34,10 +13,17 @@ SET aqo.mode = 'learn';
 SET aqo.show_details = 'off';
 SET aqo.learn_statement_timeout = 'on';
 SET aqo.statement_timeout = 4; -- [0.8s]
-SELECT check_estimated_rows('SELECT x FROM A,B where x < 10 and y > 10 group by(x);'); -- haven't any partial data
-select flex_timeout, count_increase_timeout from aqo_queries where query_hash <> 0;
-SELECT check_estimated_rows('SELECT x FROM A,B where x < 10 and y > 10 group by(x);'); -- haven't any partial data
-select flex_timeout, count_increase_timeout from aqo_queries where query_hash <> 0;
-SELECT check_estimated_rows('SELECT x FROM A,B where x < 10 and y > 10 group by(x);'); -- haven't any partial data
-select flex_timeout, count_increase_timeout from aqo_queries where query_hash <> 0;
-SELECT check_estimated_rows('SELECT x FROM A,B where x < 10 and y > 10 group by(x);'); -- haven't any partial data
+
+SELECT count(y), pg_sleep(3) FROM a,b where x > 2 * (select min(x) from A,B where x = y);
+select * from aqo_queries where query_hash <> 0;
+SELECT count(y), pg_sleep(3) FROM a,b where x > 3 * (select min(x) from A,B where x = y);
+select * from aqo_queries where query_hash <> 0;
+SELECT count(y), pg_sleep(3) FROM a,b where x > 3 * (select min(x) from A,B where x = y);
+select * from aqo_queries where query_hash <> 0;
+SELECT count(y), pg_sleep(3) FROM a,b where x > (select min(x) from A,B where x = y);
+select * from aqo_queries where query_hash <> 0;
+SELECT count(y), pg_sleep(3) FROM a,b where x > (select min(x) from A,B where x = y);
+select * from aqo_queries where query_hash <> 0;
+SELECT count(y), pg_sleep(3) FROM a,b where x > (select min(x) from A,B where x = y);
+select * from aqo_queries where query_hash <> 0;
+DROP EXTENSION aqo;

@@ -238,9 +238,6 @@ update_query_timeout(uint64 qhash, int64 flex_timeout, int64 count_increase_time
 
 	index_rescan(scan, &key, 1, NULL, 0);
 	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
-	values[0] = Int64GetDatum(qhash);
-	values[5] = Int64GetDatum(flex_timeout);
-	values[6] = Int64GetDatum(count_increase_timeout);
 	if (!index_getnext_slot(scan, ForwardScanDirection, slot))
 	{
 		result = false;
@@ -254,6 +251,8 @@ update_query_timeout(uint64 qhash, int64 flex_timeout, int64 count_increase_time
 		 */
 		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
 		Assert(shouldFree != true);
+		values[5] = Int64GetDatum(flex_timeout);
+		values[6] = Int64GetDatum(count_increase_timeout);
 		nw_tuple = heap_modify_tuple(tuple, hrel->rd_att, values, isnull, replace);
 
 		if (my_simple_heap_update(hrel, &(nw_tuple->t_self), nw_tuple,
