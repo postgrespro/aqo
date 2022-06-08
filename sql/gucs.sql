@@ -8,7 +8,7 @@ CREATE TABLE t(x int);
 INSERT INTO t (x) (SELECT * FROM generate_series(1, 100) AS gs);
 ANALYZE t;
 
-SELECT * FROM aqo_stat_reset(); -- Remember! DROP EXTENSION doesn't remove any AQO data gathered.
+SELECT * FROM aqo_reset(); -- Remember! DROP EXTENSION doesn't remove any AQO data gathered.
 -- Check AQO addons to explain (the only stable data)
 EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 	SELECT x FROM t;
@@ -22,18 +22,18 @@ SELECT obj_description('aqo_execution_time'::regproc::oid);
 SELECT obj_description('aqo_drop_class'::regproc::oid);
 SELECT obj_description('aqo_cleanup'::regproc::oid);
 SELECT obj_description('aqo_reset_query'::regproc::oid);
-SELECT obj_description('aqo_stat_reset'::regproc::oid);
+SELECT obj_description('aqo_reset'::regproc::oid);
 
 \df aqo_cardinality_error
 \df aqo_execution_time
 \df aqo_drop_class
 \df aqo_cleanup
 \df aqo_reset_query
-\df aqo_stat_reset
+\df aqo_reset
 
 -- Check stat reset
 SELECT count(*) FROM aqo_query_stat;
-SELECT * FROM aqo_stat_reset(); -- Remove one record
+SELECT * FROM aqo_reset(); -- Remove one record from texts and one from stat
 SELECT count(*) FROM aqo_query_stat;
 
 DROP EXTENSION aqo;

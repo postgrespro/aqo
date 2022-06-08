@@ -8,7 +8,7 @@ ANALYZE test;
 -- Learn on a query
 SELECT count(*) FROM test;
 SELECT query_text,learn_aqo, use_aqo, auto_tuning
-FROM aqo_query_texts JOIN aqo_queries USING (query_hash)
+FROM aqo_query_texts JOIN aqo_queries ON (queryid = query_hash)
 ; -- Check result. TODO: use aqo_status()
 
 -- Create a schema and move AQO into it.
@@ -20,7 +20,7 @@ SELECT count(*) FROM test;
 SELECT count(*) FROM test WHERE id < 10;
 
 SELECT query_text,learn_aqo, use_aqo, auto_tuning
-FROM test.aqo_query_texts JOIN test.aqo_queries USING (query_hash)
+FROM test.aqo_query_texts JOIN test.aqo_queries ON (queryid = query_hash)
 ; -- Check result. TODO: We want to find here both queries executed above
 
 -- Add schema which contains AQO to the end of search_path
@@ -30,7 +30,7 @@ SELECT count(*) FROM test;
 SELECT count(*) FROM test WHERE id < 10;
 
 SELECT query_text,learn_aqo, use_aqo, auto_tuning
-FROM test.aqo_query_texts JOIN test.aqo_queries USING (query_hash)
+FROM test.aqo_query_texts JOIN test.aqo_queries ON (queryid = query_hash)
 ; -- Check result.
 
 /*

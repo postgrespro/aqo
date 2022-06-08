@@ -23,7 +23,6 @@
 #include "access/table.h"
 #include "access/tableam.h"
 #include "miscadmin.h"
-#include "pgstat.h"
 
 #include "aqo.h"
 #include "aqo_shared.h"
@@ -262,68 +261,6 @@ update_query(uint64 qhash, uint64 fhash,
 
 	CommandCounterIncrement();
 	return result;
-}
-
-/*
- * Creates entry for new query in aqo_query_texts table with given fields.
- * Returns false if the operation failed, true otherwise.
- */
-bool
-add_query_text(uint64 qhash, const char *query_string)
-{
-	Relation	hrel;
-	Relation	irel;
-	HeapTuple	tuple;
-	Datum		values[2];
-	bool		isnull[2] = {false, false};
-
-	/* Variables for checking of concurrent writings. */
-	TupleTableSlot *slot;
-	IndexScanDesc scan;
-	ScanKeyData key;
-	SnapshotData snap;
-
-	values[0] = Int64GetDatum(qhash);
-	values[1] = CStringGetTextDatum(query_string);
-
-	/* Couldn't allow to write if xact must be read-only. */
-	if (XactReadOnly)
-		return false;
-
-	if (!open_aqo_relation(NULL, "aqo_query_texts",
-						   "aqo_query_texts_query_hash_idx",
-						   RowExclusiveLock, &hrel, &irel))
-		return false;
-
-	tuple = heap_form_tuple(RelationGetDescr(hrel), values, isnull);
-
-	/*
-	 * Start an index scan. Use dirty snapshot to check concurrent updates that
-	 * can be made before, but still not visible.
-	 */
-	InitDirtySnapshot(snap);
-	scan = index_beginscan(hrel, irel, &snap, 1, 0);
-	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(qhash));
-
-	index_rescan(scan, &key, 1, NULL, 0);
-	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
-
-	if (!index_getnext_slot(scan, ForwardScanDirection, slot))
-	{
-		tuple = heap_form_tuple(RelationGetDescr(hrel), values, isnull);
-
-		simple_heap_insert(hrel, tuple);
-		my_index_insert(irel, values, isnull, &(tuple->t_self), hrel,
-															UNIQUE_CHECK_YES);
-	}
-
-	ExecDropSingleTupleTableSlot(slot);
-	index_endscan(scan);
-	index_close(irel, RowExclusiveLock);
-	table_close(hrel, RowExclusiveLock);
-
-	CommandCounterIncrement();
-	return true;
 }
 
 /*
@@ -952,7 +889,41 @@ add_deactivated_query(uint64 query_hash)
  *
  **************************************************************************** */
 
+#include "funcapi.h"
+#include "pgstat.h"
+
 #define PGAQO_STAT_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_statistics.stat"
+#define PGAQO_TEXT_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_query_texts.stat"
+
+PG_FUNCTION_INFO_V1(aqo_query_stat);
+//PG_FUNCTION_INFO_V1(aqo_stat_reset); // ?
+PG_FUNCTION_INFO_V1(aqo_query_texts);
+PG_FUNCTION_INFO_V1(aqo_stat_remove);
+PG_FUNCTION_INFO_V1(aqo_qtexts_remove);
+//PG_FUNCTION_INFO_V1(aqo_qtexts_reset); // ?
+PG_FUNCTION_INFO_V1(aqo_reset);
+
+typedef enum {
+	QUERYID = 0,
+	EXEC_TIME_AQO,
+	EXEC_TIME,
+	PLAN_TIME_AQO,
+	PLAN_TIME,
+	EST_ERROR_AQO,
+	EST_ERROR,
+	NEXECS_AQO,
+	NEXECS,
+	TOTAL_NCOLS
+} aqo_stat_cols;
+
+typedef enum {
+	QT_QUERYID = 0,
+	QT_QUERY_STRING,
+	QT_TOTAL_NCOLS
+} aqo_qtexts_cols;
+
+typedef void* (*form_record_t) (void *ctx, size_t *size);
+typedef void (*deform_record_t) (void *data, size_t size);
 
 bool aqo_use_file_storage;
 
@@ -960,7 +931,18 @@ HTAB *stat_htab = NULL;
 HTAB *queries_htab = NULL; /* TODO */
 HTAB *data_htab = NULL; /* TODO */
 
+HTAB *qtexts_htab = NULL;
+dsa_area *qtext_dsa = NULL;
 /* TODO: think about how to keep query texts. */
+
+/* Used to check data file consistency */
+static const uint32 PGAQO_FILE_HEADER = 123467589;
+static const uint32 PGAQO_PG_MAJOR_VERSION = PG_VERSION_NUM / 100;
+
+static void dsa_init(void);
+static int data_store(const char *filename, form_record_t callback,
+					  long nrecs, void *ctx);
+static void data_load(const char *filename, deform_record_t callback, void *ctx);
 
 /*
  * Update AQO statistics.
@@ -1040,22 +1022,6 @@ aqo_stat_store(uint64 queryid, bool use_aqo,
 	return entry;
 }
 
-#include "funcapi.h"
-PG_FUNCTION_INFO_V1(aqo_query_stat);
-
-typedef enum {
-	QUERYID = 0,
-	EXEC_TIME_AQO,
-	EXEC_TIME,
-	PLAN_TIME_AQO,
-	PLAN_TIME,
-	EST_ERROR_AQO,
-	EST_ERROR,
-	NEXECS_AQO,
-	NEXECS,
-	TOTAL_NCOLS
-} aqo_stat_cols;
-
 /*
  * Returns AQO statistics on controlled query classes.
  */
@@ -1120,13 +1086,11 @@ aqo_query_stat(PG_FUNCTION_ARGS)
 	return (Datum) 0;
 }
 
-PG_FUNCTION_INFO_V1(aqo_stat_reset);
-
-Datum
-aqo_stat_reset(PG_FUNCTION_ARGS)
+static long
+aqo_stat_reset(void)
 {
 	HASH_SEQ_STATUS	hash_seq;
-	StatEntry *entry;
+	StatEntry	   *entry;
 	long			num_remove = 0;
 	long			num_entries;
 
@@ -1142,19 +1106,17 @@ aqo_stat_reset(PG_FUNCTION_ARGS)
 	LWLockRelease(&aqo_state->stat_lock);
 	Assert(num_remove == num_entries); /* Is it really impossible? */
 
-	/* TODO: clean disk storage */
+	aqo_stat_flush();
 
-	PG_RETURN_INT64(num_remove);
+	return num_remove;
 }
-
-PG_FUNCTION_INFO_V1(aqo_stat_remove);
 
 Datum
 aqo_stat_remove(PG_FUNCTION_ARGS)
 {
-	uint64			queryid = (uint64) PG_GETARG_INT64(0);
-	StatEntry *entry;
-	bool			removed;
+	uint64		queryid = (uint64) PG_GETARG_INT64(0);
+	StatEntry   *entry;
+	bool		removed;
 
 	LWLockAcquire(&aqo_state->stat_lock, LW_EXCLUSIVE);
 	entry = (StatEntry *) hash_search(stat_htab, &queryid, HASH_REMOVE, NULL);
@@ -1163,78 +1125,234 @@ aqo_stat_remove(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(removed);
 }
 
-static const uint32 PGAQO_FILE_HEADER = 123467589;
-static const uint32 PGAQO_PG_MAJOR_VERSION = PG_VERSION_NUM / 100;
+static void *
+_form_stat_record_cb(void *ctx, size_t *size)
+{
+	HASH_SEQ_STATUS *hash_seq = (HASH_SEQ_STATUS *) ctx;
+	StatEntry		*entry;
+
+	*size = sizeof(StatEntry);
+	entry = hash_seq_search(hash_seq);
+	if (entry == NULL)
+		return NULL;
+
+	return memcpy(palloc(*size), entry, *size);
+}
 
 /* Implement data flushing according to pgss_shmem_shutdown() */
+
 void
 aqo_stat_flush(void)
 {
 	HASH_SEQ_STATUS	hash_seq;
-	StatEntry	   *entry;
-	FILE		   *file;
-	size_t			entry_len = sizeof(StatEntry);
-	int32			num;
+	int				ret;
+	long			entries;
 
-	file = AllocateFile(PGAQO_STAT_FILE ".tmp", PG_BINARY_W);
+	LWLockAcquire(&aqo_state->stat_lock, LW_SHARED);
+	entries = hash_get_num_entries(stat_htab);
+	hash_seq_init(&hash_seq, stat_htab);
+	ret = data_store(PGAQO_STAT_FILE, _form_stat_record_cb, entries,
+					 (void *) &hash_seq);
+	if (ret != 0)
+		hash_seq_term(&hash_seq);
+
+	LWLockRelease(&aqo_state->stat_lock);
+}
+
+static void *
+_form_qtext_record_cb(void *ctx, size_t *size)
+{
+	HASH_SEQ_STATUS *hash_seq = (HASH_SEQ_STATUS *) ctx;
+	QueryTextEntry	*entry;
+	void		    *data;
+	char			*query_string;
+	char			*ptr;
+
+	entry = hash_seq_search(hash_seq);
+	if (entry == NULL)
+		return NULL;
+
+	Assert(DsaPointerIsValid(entry->qtext_dp));
+	query_string = dsa_get_address(qtext_dsa, entry->qtext_dp);
+	*size = sizeof(entry->queryid) + strlen(query_string) + 1;
+	data = palloc(*size);
+	ptr = data;
+	memcpy(ptr, &entry->queryid, sizeof(entry->queryid));
+	ptr += sizeof(entry->queryid);
+	memcpy(ptr, query_string, strlen(query_string) + 1);
+	return memcpy(palloc(*size), data, *size);
+}
+
+void
+aqo_qtexts_flush(void)
+{
+	HASH_SEQ_STATUS	hash_seq;
+	int				ret;
+	long			entries;
+
+	dsa_init();
+	LWLockAcquire(&aqo_state->qtexts_lock, LW_SHARED);
+
+	if (!aqo_state->qtexts_changed)
+		/* XXX: mull over forced mode. */
+		goto end;
+
+	entries = hash_get_num_entries(qtexts_htab);
+	hash_seq_init(&hash_seq, qtexts_htab);
+	ret = data_store(PGAQO_TEXT_FILE, _form_qtext_record_cb, entries,
+					 (void *) &hash_seq);
+	if (ret != 0)
+		hash_seq_term(&hash_seq);
+	aqo_state->qtexts_changed = false;
+
+end:
+	LWLockRelease(&aqo_state->qtexts_lock);
+}
+
+static int
+data_store(const char *filename, form_record_t callback,
+		   long nrecs, void *ctx)
+{
+	FILE   *file;
+	size_t	size;
+	uint	counter = 0;
+	void   *data;
+	char   *tmpfile;
+
+	tmpfile = psprintf("%s.tmp", filename);
+	file = AllocateFile(tmpfile, PG_BINARY_W);
 	if (file == NULL)
 		goto error;
 
-	LWLockAcquire(&aqo_state->stat_lock, LW_SHARED);
-	if (fwrite(&PGAQO_FILE_HEADER, sizeof(uint32), 1, file) != 1)
-			goto error;
-	if (fwrite(&PGAQO_PG_MAJOR_VERSION, sizeof(uint32), 1, file) != 1)
-			goto error;
-	num = hash_get_num_entries(stat_htab);
-
-	if (fwrite(&num, sizeof(int32), 1, file) != 1)
+	if (fwrite(&PGAQO_FILE_HEADER, sizeof(uint32), 1, file) != 1 ||
+		fwrite(&PGAQO_PG_MAJOR_VERSION, sizeof(uint32), 1, file) != 1 ||
+		fwrite(&nrecs, sizeof(long), 1, file) != 1)
 		goto error;
 
-	hash_seq_init(&hash_seq, stat_htab);
-	while ((entry = hash_seq_search(&hash_seq)) != NULL)
+	while ((data = callback(ctx, &size)) != NULL)
 	{
-		if (fwrite(entry, entry_len, 1, file) != 1)
-		{
-			hash_seq_term(&hash_seq);
+		/* TODO: Add CRC code ? */
+		if (fwrite(&size, sizeof(size), 1, file) != 1 ||
+			fwrite(data, size, 1, file) != 1)
 			goto error;
-		}
-		num--;
+		pfree(data);
+		counter++;
 	}
-	Assert(num == 0);
 
+	Assert(counter == nrecs);
 	if (FreeFile(file))
 	{
 		file = NULL;
 		goto error;
 	}
 
-	unlink(PGAQO_STAT_FILE);
-	LWLockRelease(&aqo_state->stat_lock);
-	(void) durable_rename(PGAQO_STAT_FILE ".tmp", PGAQO_STAT_FILE, LOG);
-	return;
+	(void) durable_rename(tmpfile, filename, LOG);
+	pfree(tmpfile);
+	elog(DEBUG2, "[AQO] %d records stored in file %s.", counter, filename);
+	return 0;
 
 error:
 	ereport(LOG,
 			(errcode_for_file_access(),
-			 errmsg("could not write file \"%s\": %m",
-					PGAQO_STAT_FILE)));
-	unlink(PGAQO_STAT_FILE);
+			 errmsg("could not write file \"%s\": %m", tmpfile)));
 
 	if (file)
 		FreeFile(file);
-	LWLockRelease(&aqo_state->stat_lock);
+	unlink(tmpfile);
+	pfree(tmpfile);
+	return -1;
+}
+
+static void
+_deform_stat_record_cb(void *data, size_t size)
+{
+	bool		found;
+	StatEntry  *entry;
+	uint64		queryid;
+
+	Assert(LWLockHeldByMeInMode(&aqo_state->stat_lock, LW_EXCLUSIVE));
+	Assert(size == sizeof(StatEntry));
+
+	queryid = ((StatEntry *) data)->queryid;
+	entry = (StatEntry *) hash_search(stat_htab, &queryid, HASH_ENTER, &found);
+	Assert(!found);
+	memcpy(entry, data, sizeof(StatEntry));
 }
 
 void
 aqo_stat_load(void)
 {
-	FILE   *file;
-	int		i;
-	uint32	header;
-	int32	num;
-	int32	pgver;
+	long	entries;
 
-	file = AllocateFile(PGAQO_STAT_FILE, PG_BINARY_R);
+	Assert(!LWLockHeldByMe(&aqo_state->stat_lock));
+
+	LWLockAcquire(&aqo_state->stat_lock, LW_EXCLUSIVE);
+	entries = hash_get_num_entries(stat_htab);
+	Assert(entries == 0);
+	data_load(PGAQO_STAT_FILE, _deform_stat_record_cb, NULL);
+
+	LWLockRelease(&aqo_state->stat_lock);
+}
+
+
+static void
+_deform_qtexts_record_cb(void *data, size_t size)
+{
+	bool			found;
+	QueryTextEntry *entry;
+	uint64			queryid = *(uint64 *) data;
+	char		   *query_string = (char *) data + sizeof(queryid);
+	size_t			len = size - sizeof(queryid);
+	char		   *strptr;
+
+	Assert(LWLockHeldByMeInMode(&aqo_state->qtexts_lock, LW_EXCLUSIVE));
+	Assert(strlen(query_string) + 1 == len);
+	entry = (QueryTextEntry *) hash_search(qtexts_htab, &queryid,
+										   HASH_ENTER, &found);
+	Assert(!found);
+
+	entry->qtext_dp = dsa_allocate(qtext_dsa, len);
+	Assert(DsaPointerIsValid(entry->qtext_dp));
+	strptr = (char *) dsa_get_address(qtext_dsa, entry->qtext_dp);
+	strlcpy(strptr, query_string, len);
+}
+
+void
+aqo_qtexts_load(void)
+{
+	uint64	queryid = 0;
+	bool	found;
+
+	Assert(!LWLockHeldByMe(&aqo_state->qtexts_lock));
+	Assert(qtext_dsa != NULL);
+
+	LWLockAcquire(&aqo_state->qtexts_lock, LW_EXCLUSIVE);
+	Assert(hash_get_num_entries(qtexts_htab) == 0);
+	data_load(PGAQO_TEXT_FILE, _deform_qtexts_record_cb, NULL);
+
+	/* Check existence of default feature space */
+	(void) hash_search(qtexts_htab, &queryid, HASH_FIND, &found);
+
+	aqo_state->qtexts_changed = false; /* mem data consistent with disk */
+	LWLockRelease(&aqo_state->qtexts_lock);
+
+	if (!found)
+	{
+		if (!aqo_qtext_store(0, "COMMON feature space (do not delete!)"))
+			elog(PANIC, "[AQO] DSA Initialization was unsuccessful");
+	}
+}
+
+static void
+data_load(const char *filename, deform_record_t callback, void *ctx)
+{
+	FILE   *file;
+	long	i;
+	uint32	header;
+	int32	pgver;
+	long	num;
+
+	file = AllocateFile(filename, PG_BINARY_R);
 	if (file == NULL)
 	{
 		if (errno != ENOENT)
@@ -1244,7 +1362,7 @@ aqo_stat_load(void)
 
 	if (fread(&header, sizeof(uint32), 1, file) != 1 ||
 		fread(&pgver, sizeof(uint32), 1, file) != 1 ||
-		fread(&num, sizeof(int32), 1, file) != 1)
+		fread(&num, sizeof(long), 1, file) != 1)
 		goto read_error;
 
 	if (header != PGAQO_FILE_HEADER || pgver != PGAQO_PG_MAJOR_VERSION)
@@ -1252,36 +1370,249 @@ aqo_stat_load(void)
 
 	for (i = 0; i < num; i++)
 	{
-		bool		found;
-		StatEntry	fentry;
-		StatEntry  *entry;
+		void   *data;
+		size_t	size;
 
-		if (fread(&fentry, sizeof(StatEntry), 1, file) != 1)
+		if (fread(&size, sizeof(size), 1, file) != 1)
 			goto read_error;
-
-		entry = (StatEntry *) hash_search(stat_htab, &fentry.queryid,
-										  HASH_ENTER, &found);
-		Assert(!found);
-		memcpy(entry, &fentry, sizeof(StatEntry));
+		data = palloc(size);
+		if (fread(data, size, 1, file) != 1)
+			goto read_error;
+		callback(data, size);
+		pfree(data);
 	}
 
 	FreeFile(file);
-	unlink(PGAQO_STAT_FILE);
+	unlink(filename);
+
+	elog(DEBUG2, "[AQO] %ld records loaded from file %s.", num, filename);
 	return;
 
 read_error:
 	ereport(LOG,
 			(errcode_for_file_access(),
-			 errmsg("could not read file \"%s\": %m",
-					PGAQO_STAT_FILE)));
+			 errmsg("could not read file \"%s\": %m", filename)));
 	goto fail;
 data_error:
 	ereport(LOG,
 			(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-			 errmsg("ignoring invalid data in file \"%s\"",
-					PGAQO_STAT_FILE)));
+			 errmsg("ignoring invalid data in file \"%s\"", filename)));
 fail:
 	if (file)
 		FreeFile(file);
-	unlink(PGAQO_STAT_FILE);
+	unlink(filename);
+}
+
+static void
+on_shmem_shutdown(int code, Datum arg)
+{
+	aqo_qtexts_flush();
+}
+
+/*
+ * Initialize DSA memory for AQO shared data with variable length.
+ * On first call, create DSA segments and load data into hash table and DSA
+ * from disk.
+ */
+static void
+dsa_init()
+{
+	MemoryContext	old_context;
+
+	if (qtext_dsa)
+		return;
+
+	old_context = MemoryContextSwitchTo(TopMemoryContext);
+	LWLockAcquire(&aqo_state->lock, LW_EXCLUSIVE);
+
+	if (aqo_state->qtexts_dsa_handler == DSM_HANDLE_INVALID)
+	{
+		qtext_dsa = dsa_create(aqo_state->qtext_trancheid);
+		dsa_pin(qtext_dsa);
+		aqo_state->qtexts_dsa_handler = dsa_get_handle(qtext_dsa);
+
+		/* Load and initialize quuery texts hash table */
+		aqo_qtexts_load();
+	}
+	else
+		qtext_dsa = dsa_attach(aqo_state->qtexts_dsa_handler);
+
+	dsa_pin_mapping(qtext_dsa);
+	MemoryContextSwitchTo(old_context);
+	LWLockRelease(&aqo_state->lock);
+
+	before_shmem_exit(on_shmem_shutdown, (Datum) 0);
+}
+
+/* ************************************************************************** */
+
+/*
+ * XXX: Maybe merge with aqo_queries ?
+ */
+bool
+aqo_qtext_store(uint64 queryid, const char *query_string)
+{
+	QueryTextEntry *entry;
+	bool			found;
+
+	Assert(!LWLockHeldByMe(&aqo_state->qtexts_lock));
+
+	if (query_string == NULL)
+		return false;
+
+	dsa_init();
+
+	LWLockAcquire(&aqo_state->qtexts_lock, LW_EXCLUSIVE);
+	entry = (QueryTextEntry *) hash_search(qtexts_htab, &queryid, HASH_ENTER,
+										   &found);
+
+	/* Initialize entry on first usage */
+	if (!found)
+	{
+		size_t size = strlen(query_string) + 1;
+		char *strptr;
+
+		entry->queryid = queryid;
+		entry->qtext_dp = dsa_allocate(qtext_dsa, size);
+		Assert(DsaPointerIsValid(entry->qtext_dp));
+		strptr = (char *) dsa_get_address(qtext_dsa, entry->qtext_dp);
+		strlcpy(strptr, query_string, size);
+		aqo_state->qtexts_changed = true;
+	}
+	LWLockRelease(&aqo_state->qtexts_lock);
+	return !found;
+}
+
+Datum
+aqo_query_texts(PG_FUNCTION_ARGS)
+{
+	ReturnSetInfo	   *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	TupleDesc			tupDesc;
+	MemoryContext		per_query_ctx;
+	MemoryContext		oldcontext;
+	Tuplestorestate	   *tupstore;
+	Datum				values[QT_TOTAL_NCOLS];
+	bool				nulls[QT_TOTAL_NCOLS];
+	HASH_SEQ_STATUS		hash_seq;
+	QueryTextEntry	   *entry;
+
+	Assert(!LWLockHeldByMe(&aqo_state->qtexts_lock));
+
+	/* check to see if caller supports us returning a tuplestore */
+	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("set-valued function called in context that cannot accept a set")));
+	if (!(rsinfo->allowedModes & SFRM_Materialize))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("materialize mode required, but it is not allowed in this context")));
+
+	/* Switch into long-lived context to construct returned data structures */
+	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
+	oldcontext = MemoryContextSwitchTo(per_query_ctx);
+
+	/* Build a tuple descriptor for our result type */
+	if (get_call_result_type(fcinfo, NULL, &tupDesc) != TYPEFUNC_COMPOSITE)
+		elog(ERROR, "return type must be a row type");
+	Assert(tupDesc->natts == QT_TOTAL_NCOLS);
+
+	tupstore = tuplestore_begin_heap(true, false, work_mem);
+	rsinfo->returnMode = SFRM_Materialize;
+	rsinfo->setResult = tupstore;
+	rsinfo->setDesc = tupDesc;
+
+	MemoryContextSwitchTo(oldcontext);
+
+	dsa_init();
+	memset(nulls, 0, QT_TOTAL_NCOLS);
+	LWLockAcquire(&aqo_state->qtexts_lock, LW_SHARED);
+	hash_seq_init(&hash_seq, qtexts_htab);
+	while ((entry = hash_seq_search(&hash_seq)) != NULL)
+	{
+		Assert(DsaPointerIsValid(entry->qtext_dp));
+		char *ptr = dsa_get_address(qtext_dsa, entry->qtext_dp);
+		values[QT_QUERYID] = Int64GetDatum(entry->queryid);
+		values[QT_QUERY_STRING] = CStringGetTextDatum(ptr);
+		tuplestore_putvalues(tupstore, tupDesc, values, nulls);
+	}
+
+	LWLockRelease(&aqo_state->qtexts_lock);
+	tuplestore_donestoring(tupstore);
+	return (Datum) 0;
+}
+
+Datum
+aqo_qtexts_remove(PG_FUNCTION_ARGS)
+{
+	uint64			queryid = (uint64) PG_GETARG_INT64(0);
+	bool			found = false;
+	QueryTextEntry *entry;
+
+	dsa_init();
+
+	Assert(!LWLockHeldByMe(&aqo_state->qtexts_lock));
+	LWLockAcquire(&aqo_state->qtexts_lock, LW_EXCLUSIVE);
+
+	/*
+	 * Look for a record with this queryid. DSA fields must be freed before
+	 * deletion of the record.
+	 */
+	entry = (QueryTextEntry *) hash_search(qtexts_htab, &queryid, HASH_FIND, &found);
+	if (!found)
+		goto end;
+
+	/* Free DSA memory, allocated foro this record */
+	Assert(DsaPointerIsValid(entry->qtext_dp));
+	dsa_free(qtext_dsa, entry->qtext_dp);
+
+	(void) hash_search(qtexts_htab, &queryid, HASH_REMOVE, &found);
+	Assert(found);
+end:
+	LWLockRelease(&aqo_state->qtexts_lock);
+	PG_RETURN_BOOL(found);
+}
+
+static long
+aqo_qtexts_reset(void)
+{
+	HASH_SEQ_STATUS	hash_seq;
+	QueryTextEntry *entry;
+	long			num_remove = 0;
+	long			num_entries;
+
+	dsa_init();
+
+	Assert(!LWLockHeldByMe(&aqo_state->qtexts_lock));
+	LWLockAcquire(&aqo_state->qtexts_lock, LW_EXCLUSIVE);
+	num_entries = hash_get_num_entries(qtexts_htab);
+	hash_seq_init(&hash_seq, qtexts_htab);
+	while ((entry = hash_seq_search(&hash_seq)) != NULL)
+	{
+		if (entry->queryid == 0)
+			continue;
+
+		Assert(DsaPointerIsValid(entry->qtext_dp));
+		dsa_free(qtext_dsa, entry->qtext_dp);
+		if (hash_search(qtexts_htab, &entry->queryid, HASH_REMOVE, NULL) == NULL)
+			elog(ERROR, "[AQO] hash table corrupted");
+		num_remove++;
+	}
+	aqo_state->qtexts_changed = true;
+	LWLockRelease(&aqo_state->qtexts_lock);
+	Assert(num_remove == num_entries - 1); /* Is it really impossible? */
+
+	/* TODO: clean disk storage */
+
+	return num_remove;
+}
+
+Datum
+aqo_reset(PG_FUNCTION_ARGS)
+{
+	long counter = 0;
+
+	counter += aqo_stat_reset();
+	counter += aqo_qtexts_reset();
+	PG_RETURN_INT64(counter);
 }

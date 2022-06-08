@@ -23,8 +23,8 @@ DROP TABLE pt;
 SELECT aqo_cleanup();
 SELECT count(*) FROM aqo_data; -- Should be 0
 SELECT query_text FROM aqo_queries aq LEFT JOIN aqo_query_texts aqt
-ON aq.query_hash = aqt.query_hash
-; -- TODO: should contain just one row
+ON aq.query_hash = aqt.queryid
+ORDER BY (md5(query_text)); -- TODO: should contain just one row
 
 -- Test learning on temporary table
 CREATE TABLE pt AS SELECT x AS x, (x % 10) AS y FROM generate_series(1,100) AS x;

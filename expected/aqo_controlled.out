@@ -297,4 +297,11 @@ DROP INDEX aqo_test1_idx_a;
 DROP TABLE aqo_test1;
 DROP INDEX aqo_test2_idx_a;
 DROP TABLE aqo_test2;
+-- XXX: extension dropping doesn't clear file storage. Do it manually.
+SELECT aqo_reset();
+ aqo_reset 
+-----------
+        22
+(1 row)
+
 DROP EXTENSION aqo;

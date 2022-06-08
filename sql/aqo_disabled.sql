@@ -95,6 +95,9 @@ FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
 WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
 SELECT count(*) FROM aqo_queries WHERE query_hash <> fspace_hash; -- Should be zero
 
+-- XXX: extension dropping doesn't clear file storage. Do it manually.
+SELECT aqo_reset();
+
 DROP EXTENSION aqo;
 
 DROP INDEX aqo_test0_idx_a;

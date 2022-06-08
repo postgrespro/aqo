@@ -30,6 +30,11 @@ typedef struct AQOSharedState
 
 	/* Storage fields */
 	LWLock		stat_lock; /* lock for access to stat storage */
+
+	LWLock		qtexts_lock; /* Lock for shared fields below */
+	dsa_handle	qtexts_dsa_handler; /* DSA area for storing of query texts */
+	int			qtext_trancheid;
+	bool		qtexts_changed;
 } AQOSharedState;
 
 
