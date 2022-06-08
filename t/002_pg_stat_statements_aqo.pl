@@ -3,7 +3,7 @@ use warnings;
 
 use PostgresNode;
 use TestLib;
-use Test::More tests => 3;
+use Test::More tests => 2;
 
 my $node = get_new_node('profiling');
 $node->init;
@@ -57,11 +57,5 @@ $res = $node->safe_psql('postgres', "SELECT * FROM aqo_test0");
 $res = $node->safe_psql('postgres', "SELECT count(*) FROM pg_stat_statements where query = 'SELECT * FROM aqo_test0'");
 is($res, 1); # The same query add in pg_stat_statements
 $res = $node->safe_psql('postgres', "SELECT count(*) from aqo_query_texts where query_text = 'SELECT * FROM aqo_test0'");
-is($res, 0); # The same query isn't add in aqo_query_texts
-$query_id = $node->safe_psql('postgres', "SELECT queryid FROM pg_stat_statements where query = 'SELECT * FROM aqo_test0'");
-$res = $node->safe_psql('postgres', "insert into aqo_queries values ($query_id,'f','f',$query_id,'f')");
-# Add query in aqo_query_texts
-$res = $node->safe_psql('postgres', "insert into aqo_query_texts values ($query_id,'SELECT * FROM aqo_test0')");
-$res = $node->safe_psql('postgres', "SELECT count(*) from aqo_query_texts where query_text = 'SELECT * FROM aqo_test0'"); # The same query is in aqo_query_texts
-is($res, 1);
+is($res, 0); # The same query isn't added into aqo_query_texts
 $node->stop();

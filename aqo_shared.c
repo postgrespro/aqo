@@ -180,40 +180,54 @@ aqo_init_shmem(void)
 	aqo_state = NULL;
 	fss_htab = NULL;
 	stat_htab = NULL;
+	qtexts_htab = NULL;
 
 	LWLockAcquire(AddinShmemInitLock, LW_EXCLUSIVE);
-	aqo_state = ShmemInitStruct("aqo", sizeof(AQOSharedState), &found);
+	aqo_state = ShmemInitStruct("AQO", sizeof(AQOSharedState), &found);
 	if (!found)
 	{
 		/* First time through ... */
 
 		LWLockInitialize(&aqo_state->lock, LWLockNewTrancheId());
 		aqo_state->dsm_handler = DSM_HANDLE_INVALID;
+		aqo_state->qtexts_dsa_handler = DSM_HANDLE_INVALID;
+		aqo_state->qtext_trancheid = LWLockNewTrancheId();
+		aqo_state->qtexts_changed = false;
 
 		LWLockInitialize(&aqo_state->stat_lock, LWLockNewTrancheId());
+		LWLockInitialize(&aqo_state->qtexts_lock, LWLockNewTrancheId());
 	}
 
 	info.keysize = sizeof(htab_key);
 	info.entrysize = sizeof(htab_entry);
-	fss_htab = ShmemInitHash("aqo hash",
+	fss_htab = ShmemInitHash("AQO hash",
 							  aqo_htab_max_items, aqo_htab_max_items,
 							  &info,
 							  HASH_ELEM | HASH_BLOBS);
 
 	info.keysize = sizeof(((StatEntry *) 0)->queryid);
 	info.entrysize = sizeof(StatEntry);
-	stat_htab = ShmemInitHash("aqo stat hash",
+	stat_htab = ShmemInitHash("AQO Stat HTAB",
 							  fs_max_items, fs_max_items,
-							  &info,
-							  HASH_ELEM | HASH_BLOBS);
+							  &info, HASH_ELEM | HASH_BLOBS);
+
+	/* Init shared memory table for query texts */
+	info.keysize = sizeof(((QueryTextEntry *) 0)->queryid);
+	info.entrysize = sizeof(QueryTextEntry);
+	qtexts_htab = ShmemInitHash("AQO Query Texts HTAB",
+								fs_max_items, fs_max_items,
+								&info, HASH_ELEM | HASH_BLOBS);
 
 	LWLockRelease(AddinShmemInitLock);
-	LWLockRegisterTranche(aqo_state->lock.tranche, "aqo");
-	LWLockRegisterTranche(aqo_state->stat_lock.tranche, "aqo stat storage");
+	LWLockRegisterTranche(aqo_state->lock.tranche, "AQO");
+	LWLockRegisterTranche(aqo_state->stat_lock.tranche, "AQO Stat Lock Tranche");
+	LWLockRegisterTranche(aqo_state->qtexts_lock.tranche, "AQO QTexts Lock Tranche");
+	LWLockRegisterTranche(aqo_state->qtext_trancheid, "AQO Query Texts Tranche");
+
 
 	if (!IsUnderPostmaster)
 	{
-		on_shmem_exit(on_shmem_shutdown, (Datum) 0);
+		before_shmem_exit(on_shmem_shutdown, (Datum) 0);
 		aqo_stat_load();
 	}
 }

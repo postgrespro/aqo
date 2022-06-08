@@ -254,7 +254,6 @@ int get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash);
 extern bool find_query(uint64 qhash, QueryContextData *ctx);
 extern bool update_query(uint64 qhash, uint64 fhash,
 						 bool learn_aqo, bool use_aqo, bool auto_tuning);
-extern bool add_query_text(uint64 query_hash, const char *query_string);
 extern bool load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 						 bool isSafe);
 extern bool load_fss(uint64 fs, int fss, OkNNrdata *data, List **reloids,

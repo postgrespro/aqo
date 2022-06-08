@@ -2,6 +2,7 @@
 #define STORAGE_H
 
 #include "utils/array.h"
+#include "utils/dsa.h" /* Public structs have links to DSA memory blocks */
 
 #define STAT_SAMPLE_SIZE	(20)
 
@@ -31,9 +32,23 @@ typedef struct StatEntry
 	double	est_error_aqo[STAT_SAMPLE_SIZE];
 } StatEntry;
 
+/*
+ * Storage entry for query texts.
+ * Query strings may have very different sizes. So, in hash table we store only
+ * link to DSA-allocated memory.
+ */
+typedef struct QueryTextEntry
+{
+	uint64	queryid;
+
+	/* Link to DSA-allocated momory block. Can be shared across backends */
+	dsa_pointer qtext_dp;
+} QueryTextEntry;
+
 extern bool aqo_use_file_storage;
 
 extern HTAB *stat_htab;
+extern HTAB *qtexts_htab;
 extern HTAB *queries_htab; /* TODO */
 extern HTAB *data_htab; /* TODO */
 
@@ -42,6 +57,9 @@ extern StatEntry *aqo_stat_store(uint64 queryid, bool use_aqo, double plan_time,
 extern void aqo_stat_flush(void);
 extern void aqo_stat_load(void);
 
+extern bool aqo_qtext_store(uint64 queryid, const char *query_string);
+extern void aqo_qtexts_flush(void);
+extern void aqo_qtexts_load(void);
 /* Utility routines */
 extern ArrayType *form_vector(double *vector, int nrows);
 

@@ -11,7 +11,7 @@ SELECT count(*) FROM test;
 (1 row)
 
 SELECT query_text,learn_aqo, use_aqo, auto_tuning
-FROM aqo_query_texts JOIN aqo_queries USING (query_hash)
+FROM aqo_query_texts JOIN aqo_queries ON (queryid = query_hash)
 ; -- Check result. TODO: use aqo_status()
               query_text               | learn_aqo | use_aqo | auto_tuning 
 ---------------------------------------+-----------+---------+-------------
@@ -36,7 +36,7 @@ SELECT count(*) FROM test WHERE id < 10;
 (1 row)
 
 SELECT query_text,learn_aqo, use_aqo, auto_tuning
-FROM test.aqo_query_texts JOIN test.aqo_queries USING (query_hash)
+FROM test.aqo_query_texts JOIN test.aqo_queries ON (queryid = query_hash)
 ; -- Check result. TODO: We want to find here both queries executed above
               query_text               | learn_aqo | use_aqo | auto_tuning 
 ---------------------------------------+-----------+---------+-------------
@@ -64,7 +64,7 @@ SELECT count(*) FROM test WHERE id < 10;
 (1 row)
 
 SELECT query_text,learn_aqo, use_aqo, auto_tuning
-FROM test.aqo_query_texts JOIN test.aqo_queries USING (query_hash)
+FROM test.aqo_query_texts JOIN test.aqo_queries ON (queryid = query_hash)
 ; -- Check result.
                 query_text                | learn_aqo | use_aqo | auto_tuning 
 ------------------------------------------+-----------+---------+-------------
