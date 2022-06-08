@@ -215,6 +215,13 @@ SELECT count(*) FROM aqo_queries WHERE query_hash <> fspace_hash; -- Should be z
      0
 (1 row)
 
+-- XXX: extension dropping doesn't clear file storage. Do it manually.
+SELECT aqo_reset();
+ aqo_reset 
+-----------
+         8
+(1 row)
+
 DROP EXTENSION aqo;
 DROP INDEX aqo_test0_idx_a;
 DROP TABLE aqo_test0;

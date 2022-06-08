@@ -28,12 +28,23 @@ CREATE TABLE aqo_queries (
 	auto_tuning		boolean NOT NULL
 );
 
-CREATE TABLE aqo_query_texts (
-	query_hash		bigint CONSTRAINT aqo_query_texts_query_hash_idx PRIMARY KEY REFERENCES aqo_queries ON DELETE CASCADE,
-	query_text		text NOT NULL
-);
+CREATE FUNCTION aqo_query_texts(OUT queryid bigint, OUT query_text text)
+RETURNS SETOF record
+AS 'MODULE_PATHNAME', 'aqo_query_texts'
+LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
+CREATE FUNCTION aqo_qtexts_remove(queryid bigint) RETURNS bool
+AS 'MODULE_PATHNAME'
+LANGUAGE C STRICT PARALLEL SAFE;
 
-/* Now redefine */
+--
+-- Remove all records in the AQO storage.
+-- Return number of rows removed.
+--
+CREATE FUNCTION aqo_reset() RETURNS bigint
+AS 'MODULE_PATHNAME' LANGUAGE C PARALLEL SAFE;
+COMMENT ON FUNCTION aqo_reset() IS
+'Reset all data gathered by AQO';
+
 CREATE FUNCTION aqo_query_stat(
   OUT queryid						bigint,
   OUT execution_time_with_aqo		double precision[],
@@ -50,17 +61,7 @@ AS 'MODULE_PATHNAME', 'aqo_query_stat'
 LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
 
 CREATE VIEW aqo_query_stat AS SELECT * FROM aqo_query_stat();
-
---
--- Remove all records in the AQO statistics.
--- Return number of rows removed.
---
-CREATE FUNCTION aqo_stat_reset() RETURNS bigint
-AS 'MODULE_PATHNAME'
-LANGUAGE C PARALLEL SAFE;
-
-COMMENT ON FUNCTION aqo_stat_reset() IS
-'Reset query statistics gathered by AQO';
+CREATE VIEW aqo_query_texts AS SELECT * FROM aqo_query_texts();
 
 CREATE FUNCTION aqo_stat_remove(fs bigint) RETURNS bool
 AS 'MODULE_PATHNAME'
@@ -87,7 +88,7 @@ CREATE TABLE aqo_data (
 CREATE UNIQUE INDEX aqo_fss_access_idx ON aqo_data (fspace_hash, fsspace_hash);
 
 INSERT INTO aqo_queries VALUES (0, false, false, 0, false);
-INSERT INTO aqo_query_texts VALUES (0, 'COMMON feature space (do not delete!)');
+-- INSERT INTO aqo_query_texts VALUES (0, 'COMMON feature space (do not delete!)');
 -- a virtual query for COMMON feature space
 
 CREATE TRIGGER aqo_queries_invalidate AFTER UPDATE OR DELETE OR TRUNCATE
@@ -174,11 +175,9 @@ BEGIN
 
   SELECT count(*) FROM aqo_data WHERE fspace_hash = fs INTO num;
 
-  /*
-   * Remove the only from aqo_queries table. All other data will be removed by
-   * CASCADE deletion.
-   */
   DELETE FROM aqo_queries WHERE query_hash = queryid;
+  PERFORM aqo_stat_remove(queryid);
+  PERFORM aqo_qtexts_remove(queryid);
   RETURN num;
 END;
 $$ LANGUAGE plpgsql;
@@ -216,7 +215,8 @@ BEGIN
 
     -- Remove ALL feature space if one of oids isn't exists
     DELETE FROM aqo_queries WHERE fspace_hash = fs;
-	PERFORM * FROM aqo_stat_remove(fs);
+    PERFORM * FROM aqo_stat_remove(fs);
+    PERFORM * FROM aqo_qtexts_remove(fs);
   END LOOP;
 
   -- Calculate difference with previous state of knowledge base

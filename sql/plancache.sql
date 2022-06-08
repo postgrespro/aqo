@@ -27,7 +27,7 @@ BEGIN
     execute 'EXECUTE fooplan(1)';
   END LOOP;
 
-  SELECT query_hash FROM aqo_query_texts
+  SELECT queryid FROM aqo_query_texts
     WHERE query_text LIKE '%count(*) FROM test WHERE x%' INTO qhash;
 
   RETURN QUERY SELECT executions_without_aqo nnex,

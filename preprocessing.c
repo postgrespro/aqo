@@ -323,10 +323,9 @@ ignore_query_settings:
 
 		/*
 		 * Add query text into the ML-knowledge base. Just for further
-		 * analysis. In the case of cached plans we could have NULL query text.
+		 * analysis. In the case of cached plans we may have NULL query text.
 		 */
-		if (query_string != NULL)
-			add_query_text(query_context.query_hash, query_string);
+		aqo_qtext_store(query_context.query_hash, query_string);
 
 		LockRelease(&tag, ExclusiveLock, false);
 	}

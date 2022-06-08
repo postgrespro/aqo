@@ -128,13 +128,13 @@ SELECT aqo_cleanup();
 
 -- Result of the query below should be empty
 SELECT * FROM aqo_query_texts aqt1, aqo_query_texts aqt2
-WHERE aqt1.query_text = aqt2.query_text AND aqt1.query_hash <> aqt2.query_hash;
+WHERE aqt1.query_text = aqt2.query_text AND aqt1.queryid <> aqt2.queryid;
 
 -- Fix the state of the AQO data
-SELECT reliability,nfeatures,query_text
+SELECT min(reliability),sum(nfeatures),query_text
 FROM aqo_data ad, aqo_query_texts aqt
-WHERE aqt.query_hash = ad.fspace_hash
-ORDER BY (md5(query_text))
+WHERE aqt.queryid = ad.fspace_hash
+GROUP BY (query_text) ORDER BY (md5(query_text))
 ;
 
 DROP TABLE tmp1;
@@ -233,7 +233,7 @@ SELECT * FROM check_estimated_rows('
 SELECT count(*) FROM
   (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
 ;
-SELECT query_text FROM aqo_query_texts WHERE query_hash <> 0; -- Check query
+SELECT query_text FROM aqo_query_texts WHERE queryid <> 0; -- Check query
 
 SET aqo.join_threshold = 1;
 SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1;');
@@ -301,10 +301,14 @@ SELECT * FROM check_estimated_rows('
 ; -- One JOIN extracted from CTE, another - from a FROM part of the query
 SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
 
+DROP FUNCTION check_estimated_rows;
 RESET aqo.join_threshold;
 DROP INDEX aqo_test0_idx_a;
 DROP TABLE aqo_test0;
 DROP INDEX aqo_test1_idx_a;
 DROP TABLE aqo_test1;
+
+-- XXX: extension dropping doesn't clear file storage. Do it manually.
+SELECT aqo_reset();
+
 DROP EXTENSION aqo;
-DROP FUNCTION check_estimated_rows;

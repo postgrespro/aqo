@@ -5,10 +5,10 @@ SET aqo.show_details = true;
 CREATE TABLE t(x int);
 INSERT INTO t (x) (SELECT * FROM generate_series(1, 100) AS gs);
 ANALYZE t;
-SELECT * FROM aqo_stat_reset(); -- Remember! DROP EXTENSION doesn't remove any AQO data gathered.
- aqo_stat_reset 
-----------------
-             61
+SELECT * FROM aqo_reset(); -- Remember! DROP EXTENSION doesn't remove any AQO data gathered.
+ aqo_reset 
+-----------
+        12
 (1 row)
 
 -- Check AQO addons to explain (the only stable data)
@@ -68,10 +68,10 @@ SELECT obj_description('aqo_reset_query'::regproc::oid);
  Remove from AQO storage only learning data for given QueryId.
 (1 row)
 
-SELECT obj_description('aqo_stat_reset'::regproc::oid);
-            obj_description             
-----------------------------------------
- Reset query statistics gathered by AQO
+SELECT obj_description('aqo_reset'::regproc::oid);
+        obj_description         
+--------------------------------
+ Reset all data gathered by AQO
 (1 row)
 
 \df aqo_cardinality_error
@@ -109,11 +109,11 @@ SELECT obj_description('aqo_stat_reset'::regproc::oid);
  public | aqo_reset_query | integer          | queryid bigint      | func
 (1 row)
 
-\df aqo_stat_reset
-                            List of functions
- Schema |      Name      | Result data type | Argument data types | Type 
---------+----------------+------------------+---------------------+------
- public | aqo_stat_reset | bigint           |                     | func
+\df aqo_reset
+                         List of functions
+ Schema |   Name    | Result data type | Argument data types | Type 
+--------+-----------+------------------+---------------------+------
+ public | aqo_reset | bigint           |                     | func
 (1 row)
 
 -- Check stat reset
@@ -123,10 +123,10 @@ SELECT count(*) FROM aqo_query_stat;
      1
 (1 row)
 
-SELECT * FROM aqo_stat_reset(); -- Remove one record
- aqo_stat_reset 
-----------------
-              1
+SELECT * FROM aqo_reset(); -- Remove one record from texts and one from stat
+ aqo_reset 
+-----------
+         2
 (1 row)
 
 SELECT count(*) FROM aqo_query_stat;
