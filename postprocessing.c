@@ -148,14 +148,13 @@ learn_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 	uint64			fs = query_context.fspace_hash;
 	double		   *features;
 	double			target;
-	OkNNrdata		data;
+	OkNNrdata	   *data;
 	int				fss;
-	int				i;
+	int				ncols;
 
-	memset(&data, 0, sizeof(OkNNrdata));
 	target = log(learned);
 	fss = get_fss_for_object(rels->signatures, ctx->clauselist,
-							 ctx->selectivities, &data.cols, &features);
+							 ctx->selectivities, &ncols, &features);
 
 	/* Only Agg nodes can have non-empty a grouping expressions list. */
 	Assert(!IsA(plan, Agg) || aqo_node->grouping_exprs != NIL);
@@ -167,19 +166,14 @@ learn_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 	if (notExecuted && aqo_node->prediction > 0)
 		return;
 
-	if (data.cols > 0)
-		for (i = 0; i < aqo_K; ++i)
-			data.matrix[i] = palloc(sizeof(double) * data.cols);
+	data = OkNNr_allocate(ncols);
 
 	/* Critical section */
-	atomic_fss_learn_step(fs, fss, &data, features, target, rfactor,
+	atomic_fss_learn_step(fs, fss, data, features, target, rfactor,
 						  rels->hrels, ctx->isTimedOut);
 	/* End of critical section */
 
-	if (data.cols > 0)
-		for (i = 0; i < aqo_K; ++i)
-			pfree(data.matrix[i]);
-
+	OkNNr_free(data);
 	pfree(features);
 }
 

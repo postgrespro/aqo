@@ -21,6 +21,9 @@ typedef struct OkNNrdata
 	double	rfactors[aqo_K];
 } OkNNrdata;
 
+extern OkNNrdata* OkNNr_allocate(int ncols);
+extern void OkNNr_free(OkNNrdata *data);
+
 /* Machine learning techniques */
 extern double OkNNr_predict(OkNNrdata *data, double *features);
 extern int OkNNr_learn(OkNNrdata *data,
