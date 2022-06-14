@@ -88,7 +88,8 @@ extern void aqo_qtexts_flush(void);
 extern void aqo_qtexts_load(void);
 
 extern bool aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids);
-extern bool load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids);
+extern bool load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
+						  bool wideSearch);
 extern void aqo_data_flush(void);
 extern void aqo_data_load(void);
 /* Utility routines */
