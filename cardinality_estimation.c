@@ -64,8 +64,8 @@ predict_for_relation(List *clauses, List *selectivities, List *relsigns,
 {
 	double	   *features;
 	double		result;
-	int			i;
-	OkNNrdata	data;
+	int			ncols;
+	OkNNrdata  *data;
 
 	if (relsigns == NIL)
 		/*
@@ -75,14 +75,11 @@ predict_for_relation(List *clauses, List *selectivities, List *relsigns,
 		return -4.;
 
 	*fss = get_fss_for_object(relsigns, clauses, selectivities,
-							  &data.cols, &features);
+							  &ncols, &features);
+	data = OkNNr_allocate(ncols);
 
-	if (data.cols > 0)
-		for (i = 0; i < aqo_K; ++i)
-			data.matrix[i] = palloc0(sizeof(double) * data.cols);
-
-	if (load_fss_ext(query_context.fspace_hash, *fss, &data, NULL, true))
-		result = OkNNr_predict(&data, features);
+	if (load_fss_ext(query_context.fspace_hash, *fss, data, NULL, true))
+		result = OkNNr_predict(data, features);
 	else
 	{
 		/*
@@ -93,25 +90,21 @@ predict_for_relation(List *clauses, List *selectivities, List *relsigns,
 		 */
 
 		/* Try to search in surrounding feature spaces for the same node */
-		if (!load_fss(query_context.fspace_hash, *fss, &data, NULL, false))
+		if (!load_aqo_data(query_context.fspace_hash, *fss, data, NULL, true))
 			result = -1;
 		else
 		{
 			elog(DEBUG5, "[AQO] Make prediction for fss %d by a neighbour "
 				 "includes %d feature(s) and %d fact(s).",
-				 *fss, data.cols, data.rows);
-			result = OkNNr_predict(&data, features);
+				 *fss, data->cols, data->rows);
+			result = OkNNr_predict(data, features);
 		}
 	}
 #ifdef AQO_DEBUG_PRINT
 	predict_debug_output(clauses, selectivities, relsigns, *fss, result);
 #endif
 	pfree(features);
-	if (data.cols > 0)
-	{
-		for (i = 0; i < aqo_K; ++i)
-			pfree(data.matrix[i]);
-	}
+	OkNNr_free(data);
 
 	if (result < 0)
 		return -1;
