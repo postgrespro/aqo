@@ -49,24 +49,24 @@ WHERE str NOT LIKE 'Query Identifier%';
 SELECT str AS result
 FROM expln('
 SELECT x FROM A where x < 10 group by(x);') AS str
-WHERE str NOT LIKE 'Query Identifier%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
 -- cardinality 1000 in Seq Scan on a
 SELECT str AS result
 FROM expln('
 SELECT x,y FROM A,B WHERE x < 10 AND A.x = B.y;') AS str
-WHERE str NOT LIKE 'Query Identifier%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
 
 -- cardinality 100 in Seq Scan on a and Seq Scan on b
 SELECT str AS result
 FROM expln('
 SELECT x FROM A,B where x < 10 and y > 10 group by(x);') AS str
-WHERE str NOT LIKE 'Query Identifier%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
 -- cardinality 1000 Hash Cond: (a.x = b.y) and 1 Seq Scan on b
 -- this cardinality is wrong because we take it from bad neibours (previous query).
 -- clause y > 10 give count of rows with the same clauses.
 SELECT str AS result
 FROM expln('
 SELECT x,y FROM A,B WHERE x < 10 and y > 10 AND A.x = B.y;') AS str
-WHERE str NOT LIKE 'Query Identifier%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
 
 DROP EXTENSION aqo CASCADE;
