@@ -124,14 +124,13 @@ WHERE str NOT LIKE 'Query Identifier%';
 SELECT str AS result
 FROM expln('
 SELECT x FROM A where x < 10 group by(x);') AS str
-WHERE str NOT LIKE 'Query Identifier%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
                         result                         
 -------------------------------------------------------
  HashAggregate (actual rows=10 loops=1)
    AQO not used
    Output: x
    Group Key: a.x
-   Batches: 1  Memory Usage: 40kB
    ->  Seq Scan on public.a (actual rows=1000 loops=1)
          AQO not used
          Output: x
@@ -139,13 +138,13 @@ WHERE str NOT LIKE 'Query Identifier%';
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(12 rows)
+(11 rows)
 
 -- cardinality 1000 in Seq Scan on a
 SELECT str AS result
 FROM expln('
 SELECT x,y FROM A,B WHERE x < 10 AND A.x = B.y;') AS str
-WHERE str NOT LIKE 'Query Identifier%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
                            result                            
 -------------------------------------------------------------
  Merge Join (actual rows=100000 loops=1)
@@ -156,7 +155,6 @@ WHERE str NOT LIKE 'Query Identifier%';
          AQO not used
          Output: a.x
          Sort Key: a.x
-         Sort Method: quicksort  Memory: 79kB
          ->  Seq Scan on public.a (actual rows=1000 loops=1)
                AQO: rows=1000, error=0%
                Output: a.x
@@ -165,27 +163,25 @@ WHERE str NOT LIKE 'Query Identifier%';
          AQO not used
          Output: b.y
          Sort Key: b.y
-         Sort Method: quicksort  Memory: 79kB
          ->  Seq Scan on public.b (actual rows=1000 loops=1)
                AQO not used
                Output: b.y
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(24 rows)
+(22 rows)
 
 -- cardinality 100 in Seq Scan on a and Seq Scan on b
 SELECT str AS result
 FROM expln('
 SELECT x FROM A,B where x < 10 and y > 10 group by(x);') AS str
-WHERE str NOT LIKE 'Query Identifier%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
                              result                             
 ----------------------------------------------------------------
  HashAggregate (actual rows=0 loops=1)
    AQO not used
    Output: a.x
    Group Key: a.x
-   Batches: 1  Memory Usage: 40kB
    ->  Nested Loop (actual rows=0 loops=1)
          AQO not used
          Output: a.x
@@ -202,7 +198,7 @@ WHERE str NOT LIKE 'Query Identifier%';
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1
-(21 rows)
+(20 rows)
 
 -- cardinality 1000 Hash Cond: (a.x = b.y) and 1 Seq Scan on b
 -- this cardinality is wrong because we take it from bad neibours (previous query).
@@ -210,7 +206,7 @@ WHERE str NOT LIKE 'Query Identifier%';
 SELECT str AS result
 FROM expln('
 SELECT x,y FROM A,B WHERE x < 10 and y > 10 AND A.x = B.y;') AS str
-WHERE str NOT LIKE 'Query Identifier%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
                           result                          
 ----------------------------------------------------------
  Hash Join (actual rows=0 loops=1)
@@ -224,7 +220,6 @@ WHERE str NOT LIKE 'Query Identifier%';
    ->  Hash (actual rows=0 loops=1)
          AQO not used
          Output: b.y
-         Buckets: 1024  Batches: 1  Memory Usage: 8kB
          ->  Seq Scan on public.b (actual rows=0 loops=1)
                AQO: rows=1, error=100%
                Output: b.y
@@ -233,6 +228,6 @@ WHERE str NOT LIKE 'Query Identifier%';
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(20 rows)
+(19 rows)
 
 DROP EXTENSION aqo CASCADE;
