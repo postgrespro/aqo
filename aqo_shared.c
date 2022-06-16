@@ -19,7 +19,9 @@ typedef struct
 #define free_space(hdr) (uint32) (temp_storage_size - sizeof(dsm_seg_hdr) - hdr->delta)
 #define addr(delta)	((char *) dsm_segment_address(seg) + sizeof(dsm_seg_hdr) + delta)
 
+shmem_request_hook_type prev_shmem_request_hook = NULL;
 shmem_startup_hook_type prev_shmem_startup_hook = NULL;
+
 AQOSharedState *aqo_state = NULL;
 HTAB *fss_htab = NULL;
 static int aqo_htab_max_items = 1000;
@@ -161,6 +163,15 @@ aqo_detach_shmem(int code, Datum arg)
 	if (seg != NULL)
 		dsm_detach(seg);
 	seg = NULL;
+}
+
+void
+aqo_shmem_request(void)
+{
+	if (prev_shmem_request_hook)
+		prev_shmem_request_hook();
+
+	RequestAddinShmemSpace(aqo_memsize());
 }
 
 void

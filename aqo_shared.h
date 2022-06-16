@@ -2,6 +2,7 @@
 #define AQO_SHARED_H
 
 
+#include "miscadmin.h"
 #include "storage/dsm.h"
 #include "storage/ipc.h"
 #include "storage/lwlock.h"
@@ -28,6 +29,7 @@ typedef struct AQOSharedState
 } AQOSharedState;
 
 
+extern shmem_request_hook_type prev_shmem_request_hook;
 extern shmem_startup_hook_type prev_shmem_startup_hook;
 extern AQOSharedState *aqo_state;
 extern HTAB *fss_htab;
@@ -38,6 +40,7 @@ extern void reset_dsm_cache(void);
 extern void *get_dsm_all(uint32 *size);
 extern char *get_cache_address(void);
 extern uint32 get_dsm_cache_pos(uint32 size);
+extern void aqo_shmem_request(void);
 extern void aqo_init_shmem(void);
 
 #endif /* AQO_SHARED_H */

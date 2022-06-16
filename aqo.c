@@ -205,6 +205,8 @@ _PG_init(void)
 							 NULL
 	);
 
+	prev_shmem_request_hook						= shmem_request_hook;
+	prev_shmem_request_hook						= aqo_shmem_request;
 	prev_shmem_startup_hook						= shmem_startup_hook;
 	shmem_startup_hook							= aqo_init_shmem;
 	prev_planner_hook							= planner_hook;
@@ -250,7 +252,6 @@ _PG_init(void)
 	RegisterAQOPlanNodeMethods();
 
 	MarkGUCPrefixReserved("aqo");
-	RequestAddinShmemSpace(aqo_memsize());
 }
 
 PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
