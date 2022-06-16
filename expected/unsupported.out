@@ -547,11 +547,11 @@ FROM public.show_cardinality_errors(true)
 WHERE error > 0.;
  num |   error   
 -----+-----------
-   1 |  1.15e+02
-   2 |  3.00e+01
-   3 |  3.00e+01
-   4 |  3.00e+01
-   5 |  1.33e+00
+   1 |  1.42e+00
+   2 |  7.68e-01
+   3 |  7.68e-01
+   4 |  4.54e-01
+   5 |  7.04e-02
 (5 rows)
 
 DROP TABLE t,t1 CASCADE;
