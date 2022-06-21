@@ -40,6 +40,8 @@ typedef struct AQOSharedState
 	dsa_handle	data_dsa_handler;
 	int			data_trancheid;
 	bool		data_changed;
+
+	LWLock		queries_lock;  /* lock for access to queries storage */
 } AQOSharedState;
 
 

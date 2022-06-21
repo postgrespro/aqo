@@ -107,9 +107,12 @@ SELECT count(*) FROM tmp1;
 
 DROP TABLE tmp1;
 SET aqo.mode = 'controlled';
-UPDATE aqo_queries SET auto_tuning=false;
-UPDATE aqo_queries SET learn_aqo=true;
-UPDATE aqo_queries SET use_aqo=false;
+SELECT aqo_queries_update(1, 0, 0);
+ aqo_queries_update 
+--------------------
+ 
+(1 row)
+
 EXPLAIN (COSTS FALSE)
 SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -191,7 +194,12 @@ WHERE t1.a = t2.b AND t2.a = t3.b;
          ->  Seq Scan on aqo_test1 t3
 (9 rows)
 
-UPDATE aqo_queries SET use_aqo=true;
+SELECT aqo_queries_update(2, 1, 2);
+ aqo_queries_update 
+--------------------
+ 
+(1 row)
+
 EXPLAIN (COSTS FALSE)
 SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -301,7 +309,7 @@ DROP TABLE aqo_test2;
 SELECT aqo_reset();
  aqo_reset 
 -----------
-        50
+        61
 (1 row)
 
 DROP EXTENSION aqo;

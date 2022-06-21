@@ -23,7 +23,7 @@ DROP TABLE pt;
 SELECT aqo_cleanup();
 SELECT count(*) FROM aqo_data; -- Should be 0
 SELECT query_text FROM aqo_queries aq LEFT JOIN aqo_query_texts aqt
-ON aq.query_hash = aqt.queryid
+ON aq.queryid = aqt.queryid
 ORDER BY (md5(query_text)); -- TODO: should contain just one row
 
 -- Test learning on temporary table

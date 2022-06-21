@@ -77,10 +77,8 @@ SELECT count(*) FROM tmp1;
 DROP TABLE tmp1;
 
 SET aqo.mode = 'controlled';
-UPDATE aqo_queries SET auto_tuning=false;
 
-UPDATE aqo_queries SET learn_aqo=true;
-UPDATE aqo_queries SET use_aqo=false;
+SELECT aqo_queries_update(1, 0, 0);
 
 EXPLAIN (COSTS FALSE)
 SELECT * FROM aqo_test0
@@ -108,7 +106,7 @@ SELECT t1.a AS a, t2.a AS b, t3.a AS c
 FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3
 WHERE t1.a = t2.b AND t2.a = t3.b;
 
-UPDATE aqo_queries SET use_aqo=true;
+SELECT aqo_queries_update(2, 1, 2);
 
 EXPLAIN (COSTS FALSE)
 SELECT * FROM aqo_test0
