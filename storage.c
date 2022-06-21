@@ -91,174 +91,6 @@ cleanup:
 }
 
 /*
- * Returns whether the query with given hash is in aqo_queries.
- * If yes, returns the content of the first line with given hash.
- *
- * Use dirty snapshot to see all (include in-progess) data. We want to prevent
- * wait in the XactLockTableWait routine.
- * If query is found in the knowledge base, fill the query context struct.
- */
-bool
-find_query(uint64 qhash, QueryContextData *ctx)
-{
-	Relation		hrel;
-	Relation		irel;
-	HeapTuple		tuple;
-	TupleTableSlot *slot;
-	bool			shouldFree = true;
-	IndexScanDesc	scan;
-	ScanKeyData		key;
-	SnapshotData	snap;
-	bool			find_ok = false;
-	Datum			values[5];
-	bool			nulls[5] = {false, false, false, false, false};
-
-	if (!open_aqo_relation(NULL, "aqo_queries", "aqo_queries_query_hash_idx",
-		AccessShareLock, &hrel, &irel))
-		return false;
-
-	InitDirtySnapshot(snap);
-	scan = index_beginscan(hrel, irel, &snap, 1, 0);
-	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(qhash));
-
-	index_rescan(scan, &key, 1, NULL, 0);
-	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
-	find_ok = index_getnext_slot(scan, ForwardScanDirection, slot);
-
-	if (find_ok)
-	{
-		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
-		Assert(shouldFree != true);
-		heap_deform_tuple(tuple, hrel->rd_att, values, nulls);
-
-		/* Fill query context data */
-		ctx->learn_aqo = DatumGetBool(values[1]);
-		ctx->use_aqo = DatumGetBool(values[2]);
-		ctx->fspace_hash = DatumGetInt64(values[3]);
-		ctx->auto_tuning = DatumGetBool(values[4]);
-		ctx->collect_stat = query_context.auto_tuning;
-	}
-
-	ExecDropSingleTupleTableSlot(slot);
-	index_endscan(scan);
-	index_close(irel,  AccessShareLock);
-	table_close(hrel,  AccessShareLock);
-	return find_ok;
-}
-
-/*
- * Update query status in intelligent mode.
- *
- * Do it gently: to prevent possible deadlocks, revert this update if any
- * concurrent transaction is doing it.
- *
- * Such logic is possible, because this update is performed by AQO itself. It is
- * not break any learning logic besides possible additional learning iterations.
- * Pass NIL as a value of the relations field to avoid updating it.
- */
-bool
-update_query(uint64 qhash, uint64 fhash,
-			 bool learn_aqo, bool use_aqo, bool auto_tuning)
-{
-	Relation	hrel;
-	Relation	irel;
-	TupleTableSlot *slot;
-	HeapTuple	tuple,
-				nw_tuple;
-	Datum		values[5];
-	bool		isnull[5] = { false, false, false, false, false };
-	bool		replace[5] = { false, true, true, true, true };
-	bool		shouldFree;
-	bool		result = true;
-	bool		update_indexes;
-	IndexScanDesc scan;
-	ScanKeyData key;
-	SnapshotData snap;
-
-	/* Couldn't allow to write if xact must be read-only. */
-	if (XactReadOnly)
-		return false;
-
-	if (!open_aqo_relation(NULL, "aqo_queries", "aqo_queries_query_hash_idx",
-		RowExclusiveLock, &hrel, &irel))
-		return false;
-
-	/*
-	 * Start an index scan. Use dirty snapshot to check concurrent updates that
-	 * can be made before, but still not visible.
-	 */
-	InitDirtySnapshot(snap);
-	scan = index_beginscan(hrel, irel, &snap, 1, 0);
-	ScanKeyInit(&key, 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(qhash));
-
-	index_rescan(scan, &key, 1, NULL, 0);
-	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
-
-	values[0] = Int64GetDatum(qhash);
-	values[1] = BoolGetDatum(learn_aqo);
-	values[2] = BoolGetDatum(use_aqo);
-	values[3] = Int64GetDatum(fhash);
-	values[4] = BoolGetDatum(auto_tuning);
-
-	if (!index_getnext_slot(scan, ForwardScanDirection, slot))
-	{
-		/* New tuple for the ML knowledge base */
-		tuple = heap_form_tuple(RelationGetDescr(hrel), values, isnull);
-		simple_heap_insert(hrel, tuple);
-		my_index_insert(irel, values, isnull, &(tuple->t_self),
-														hrel, UNIQUE_CHECK_YES);
-	}
-	else if (!TransactionIdIsValid(snap.xmin) &&
-			 !TransactionIdIsValid(snap.xmax))
-	{
-		/*
-		 * Update existed data. No one concurrent transaction doesn't update this
-		 * right now.
-		 */
-		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
-		Assert(shouldFree != true);
-		nw_tuple = heap_modify_tuple(tuple, hrel->rd_att, values, isnull, replace);
-
-		if (my_simple_heap_update(hrel, &(nw_tuple->t_self), nw_tuple,
-															&update_indexes))
-		{
-			if (update_indexes)
-				my_index_insert(irel, values, isnull,
-								&(nw_tuple->t_self),
-								hrel, UNIQUE_CHECK_YES);
-			result = true;
-		}
-		else
-		{
-			/*
-			 * Ooops, somebody concurrently updated the tuple. It is possible
-			 * only in the case of changes made by third-party code.
-			 */
-			elog(ERROR, "AQO feature space data for signature ("UINT64_FORMAT \
-						", "UINT64_FORMAT") concurrently"
-						" updated by a stranger backend.",
-						qhash, fhash);
-			result = false;
-		}
-	}
-	else
-	{
-		/*
-		 * Concurrent update was made. To prevent deadlocks refuse to update.
-		 */
-		result = false;
-	}
-
-	ExecDropSingleTupleTableSlot(slot);
-	index_endscan(scan);
-	index_close(irel, RowExclusiveLock);
-	table_close(hrel, RowExclusiveLock);
-
-	CommandCounterIncrement();
-	return result;
-}
-
-/*
 static ArrayType *
 form_strings_vector(List *reloids)
 {
@@ -506,13 +338,19 @@ add_deactivated_query(uint64 query_hash)
 #define PGAQO_STAT_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_statistics.stat"
 #define PGAQO_TEXT_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_query_texts.stat"
 #define PGAQO_DATA_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_data.stat"
+#define PGAQO_QUERIES_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_queries.stat"
 
 PG_FUNCTION_INFO_V1(aqo_query_stat);
 PG_FUNCTION_INFO_V1(aqo_query_texts);
 PG_FUNCTION_INFO_V1(aqo_data);
+PG_FUNCTION_INFO_V1(aqo_queries);
 PG_FUNCTION_INFO_V1(aqo_stat_remove);
 PG_FUNCTION_INFO_V1(aqo_qtexts_remove);
 PG_FUNCTION_INFO_V1(aqo_data_remove);
+PG_FUNCTION_INFO_V1(aqo_queries_remove);
+PG_FUNCTION_INFO_V1(aqo_enable_query);
+PG_FUNCTION_INFO_V1(aqo_disable_query);
+PG_FUNCTION_INFO_V1(aqo_queries_update);
 PG_FUNCTION_INFO_V1(aqo_reset);
 
 typedef enum {
@@ -529,13 +367,18 @@ typedef enum {
 	AD_OIDS, AD_TOTAL_NCOLS
 } aqo_data_cols;
 
+typedef enum {
+	AQ_QUERYID = 0, AQ_FSPACE_HASH, AQ_LEARN_AQO, AQ_USE_AQO, AQ_AUTO_TUNING, 
+	AQ_TOTAL_NCOLS
+} aqo_queries_cols;
+
 typedef void* (*form_record_t) (void *ctx, size_t *size);
 typedef void (*deform_record_t) (void *data, size_t size);
 
 bool aqo_use_file_storage;
 
 HTAB *stat_htab = NULL;
-HTAB *queries_htab = NULL; /* TODO */
+HTAB *queries_htab = NULL;
 
 HTAB *qtexts_htab = NULL;
 dsa_area *qtext_dsa = NULL;
@@ -883,6 +726,38 @@ end:
 	LWLockRelease(&aqo_state->data_lock);
 }
 
+static void *
+_form_queries_record_cb(void *ctx, size_t *size)
+{
+	HASH_SEQ_STATUS *hash_seq = (HASH_SEQ_STATUS *) ctx;
+	QueriesEntry		*entry;
+
+	*size = sizeof(QueriesEntry);
+	entry = hash_seq_search(hash_seq);
+	if (entry == NULL)
+		return NULL;
+
+	return memcpy(palloc(*size), entry, *size);
+}
+
+void
+aqo_queries_flush(void)
+{
+	HASH_SEQ_STATUS	hash_seq;
+	int				ret;
+	long			entries;
+
+	LWLockAcquire(&aqo_state->queries_lock, LW_SHARED);
+	entries = hash_get_num_entries(queries_htab);
+	hash_seq_init(&hash_seq, queries_htab);
+	ret = data_store(PGAQO_QUERIES_FILE, _form_queries_record_cb, entries,
+					 (void *) &hash_seq);
+	if (ret != 0)
+		hash_seq_term(&hash_seq);
+
+	LWLockRelease(&aqo_state->queries_lock);
+}
+
 static int
 data_store(const char *filename, form_record_t callback,
 		   long nrecs, void *ctx)
@@ -1062,6 +937,45 @@ aqo_data_load(void)
 }
 
 static void
+_deform_queries_record_cb(void *data, size_t size)
+{
+	bool			found;
+	QueriesEntry  	*entry;
+	uint64			queryid;
+
+	Assert(LWLockHeldByMeInMode(&aqo_state->queries_lock, LW_EXCLUSIVE));
+	Assert(size == sizeof(QueriesEntry));
+
+	queryid = ((QueriesEntry *) data)->queryid;
+	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, HASH_ENTER, &found);
+	Assert(!found);
+	memcpy(entry, data, sizeof(QueriesEntry));
+}
+
+void
+aqo_queries_load(void)
+{
+	long	entries;
+	bool	found;
+	uint64	queryid = 0;
+
+	Assert(!LWLockHeldByMe(&aqo_state->queries_lock));
+
+	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
+	entries = hash_get_num_entries(queries_htab);
+	Assert(entries == 0);
+	data_load(PGAQO_QUERIES_FILE, _deform_queries_record_cb, NULL);
+	(void) hash_search(queries_htab, &queryid, HASH_FIND, &found);
+
+	LWLockRelease(&aqo_state->queries_lock);
+	if (!found)
+	{
+		if (!aqo_queries_store(0, 0, 0, 0, 0))
+			elog(PANIC, "[AQO] aqo_queries initialization was unsuccessful");
+	}
+}
+
+static void
 data_load(const char *filename, deform_record_t callback, void *ctx)
 {
 	FILE   *file;
@@ -1157,7 +1071,7 @@ dsa_init()
 		dsa_pin(data_dsa);
 		aqo_state->data_dsa_handler = dsa_get_handle(data_dsa);
 
-		/* Load and initialize quuery texts hash table */
+		/* Load and initialize query texts hash table */
 		aqo_qtexts_load();
 		aqo_data_load();
 	}
@@ -1759,6 +1673,219 @@ aqo_data_reset(void)
 }
 
 Datum
+aqo_queries(PG_FUNCTION_ARGS)
+{
+	ReturnSetInfo	   *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	TupleDesc			tupDesc;
+	MemoryContext		per_query_ctx;
+	MemoryContext		oldcontext;
+	Tuplestorestate	   *tupstore;
+	Datum				values[AQ_TOTAL_NCOLS + 1];
+	bool				nulls[AQ_TOTAL_NCOLS + 1];
+	HASH_SEQ_STATUS		hash_seq;
+	QueriesEntry	   *entry;
+
+	/* check to see if caller supports us returning a tuplestore */
+	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("set-valued function called in context that cannot accept a set")));
+	if (!(rsinfo->allowedModes & SFRM_Materialize))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("materialize mode required, but it is not allowed in this context")));
+
+	/* Switch into long-lived context to construct returned data structures */
+	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
+	oldcontext = MemoryContextSwitchTo(per_query_ctx);
+
+	/* Build a tuple descriptor for our result type */
+	if (get_call_result_type(fcinfo, NULL, &tupDesc) != TYPEFUNC_COMPOSITE)
+		elog(ERROR, "return type must be a row type");
+	Assert(tupDesc->natts == AQ_TOTAL_NCOLS);
+
+	tupstore = tuplestore_begin_heap(true, false, work_mem);
+	rsinfo->returnMode = SFRM_Materialize;
+	rsinfo->setResult = tupstore;
+	rsinfo->setDesc = tupDesc;
+
+	MemoryContextSwitchTo(oldcontext);
+
+	memset(nulls, 0, AQ_TOTAL_NCOLS + 1);
+	LWLockAcquire(&aqo_state->queries_lock, LW_SHARED);
+	hash_seq_init(&hash_seq, queries_htab);
+	while ((entry = hash_seq_search(&hash_seq)) != NULL)
+	{
+		values[AQ_QUERYID] = Int64GetDatum(entry->queryid);
+		values[AQ_FSPACE_HASH] = Int64GetDatum(entry->fspace_hash);
+		values[AQ_LEARN_AQO] = BoolGetDatum(entry->learn_aqo);
+		values[AQ_USE_AQO] = BoolGetDatum(entry->use_aqo);
+		values[AQ_AUTO_TUNING] = BoolGetDatum(entry->auto_tuning);
+		tuplestore_putvalues(tupstore, tupDesc, values, nulls);
+	}
+
+	LWLockRelease(&aqo_state->queries_lock);
+	tuplestore_donestoring(tupstore);
+	return (Datum) 0;
+}
+
+Datum
+aqo_queries_remove(PG_FUNCTION_ARGS)
+{
+	uint64			queryid = (uint64) PG_GETARG_INT64(0);
+	QueriesEntry   *entry;
+	bool			removed;
+
+	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
+	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, HASH_REMOVE, NULL);
+	removed = (entry) ? true : false;
+	LWLockRelease(&aqo_state->queries_lock);
+	PG_RETURN_BOOL(removed);
+}
+
+QueriesEntry *
+aqo_queries_store(uint64 queryid, uint64 fspace_hash, bool learn_aqo, 
+				  bool use_aqo, bool auto_tuning)
+{
+	QueriesEntry   *entry;
+	bool			found;
+
+	Assert(queries_htab);
+
+	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
+	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, HASH_ENTER, &found);
+
+	/* Initialize entry on first usage */
+	if (!found)
+	{
+		uint64 qid = entry->queryid;
+		memset(entry, 0, sizeof(QueriesEntry));
+		entry->queryid = qid;
+		entry->fspace_hash = fspace_hash;
+	}
+	entry->learn_aqo = learn_aqo;
+	entry->use_aqo = use_aqo;
+	entry->auto_tuning = auto_tuning;
+
+	entry = memcpy(palloc(sizeof(QueriesEntry)), entry, sizeof(QueriesEntry));
+	LWLockRelease(&aqo_state->queries_lock);
+	return entry;
+}
+
+static long
+aqo_queries_reset(void)
+{
+	HASH_SEQ_STATUS		hash_seq;
+	QueriesEntry	   *entry;
+	long				num_remove = 0;
+	long				num_entries;
+
+	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
+	num_entries = hash_get_num_entries(queries_htab);
+	hash_seq_init(&hash_seq, queries_htab);
+	while ((entry = hash_seq_search(&hash_seq)) != NULL)
+	{
+		if (hash_search(queries_htab, &entry->queryid, HASH_REMOVE, NULL) == NULL)
+			elog(ERROR, "[AQO] hash table corrupted");
+		num_remove++;
+	}
+	LWLockRelease(&aqo_state->queries_lock);
+	Assert(num_remove == num_entries);
+
+	aqo_queries_flush();
+
+	return num_remove;
+}
+
+Datum
+aqo_enable_query(PG_FUNCTION_ARGS)
+{
+	uint64			queryid = (uint64) PG_GETARG_INT64(0);
+	QueriesEntry   *entry;
+	bool			found;
+
+	Assert(queries_htab);
+
+	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
+	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, HASH_FIND, &found);
+
+	if(found)
+	{
+		entry->learn_aqo = 1;
+		entry->use_aqo = 1;
+	}
+	else
+	{
+		elog(ERROR, "[AQO] Entry with queryid %ld not contained in table", queryid);
+	}
+	LWLockRelease(&aqo_state->queries_lock);
+	PG_RETURN_VOID();
+}
+
+Datum
+aqo_disable_query(PG_FUNCTION_ARGS)
+{
+	uint64			queryid = (uint64) PG_GETARG_INT64(0);
+	QueriesEntry   *entry;
+	bool			found;
+
+	Assert(queries_htab);
+
+	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
+	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, HASH_FIND, &found);
+
+	if(found)
+	{
+		entry->learn_aqo = 0;
+		entry->use_aqo = 0;
+		entry->auto_tuning = 0;
+	}
+	else
+	{
+		elog(ERROR, "[AQO] Entry with %ld not contained in table", queryid);
+	}
+	LWLockRelease(&aqo_state->queries_lock);
+	PG_RETURN_VOID();
+}
+
+bool
+file_find_query(uint64 queryid)
+{
+	bool			found;
+
+	Assert(queries_htab);
+
+	LWLockAcquire(&aqo_state->queries_lock, LW_SHARED);
+	hash_search(queries_htab, &queryid, HASH_FIND, &found);
+	LWLockRelease(&aqo_state->queries_lock);
+	return found;
+}
+
+Datum 
+aqo_queries_update(PG_FUNCTION_ARGS)
+{
+	HASH_SEQ_STATUS		hash_seq;
+	QueriesEntry	   *entry;
+	int					learn_aqo = (int) PG_GETARG_INT32(0);
+	int					use_aqo = (int) PG_GETARG_INT32(1);
+	int					auto_tuning = (int) PG_GETARG_INT32(2);
+
+	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
+	hash_seq_init(&hash_seq, queries_htab);
+	while ((entry = hash_seq_search(&hash_seq)) != NULL)
+	{
+		if (learn_aqo != 2)
+			entry->learn_aqo = learn_aqo;
+		if (use_aqo != 2)
+			entry->use_aqo = use_aqo;
+		if (auto_tuning != 2)
+			entry->auto_tuning = auto_tuning;
+	}
+	LWLockRelease(&aqo_state->queries_lock);
+	PG_RETURN_VOID();
+}
+
+Datum
 aqo_reset(PG_FUNCTION_ARGS)
 {
 	long counter = 0;
@@ -1766,5 +1893,6 @@ aqo_reset(PG_FUNCTION_ARGS)
 	counter += aqo_stat_reset();
 	counter += aqo_qtexts_reset();
 	counter += aqo_data_reset();
+	counter += aqo_queries_reset();
 	PG_RETURN_INT64(counter);
 }

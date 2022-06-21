@@ -64,7 +64,7 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
          Filter: ((b < 1) AND (d < 0))
 (10 rows)
 
-SELECT count(*) FROM aqo_queries WHERE query_hash <> fspace_hash; -- Should be zero
+SELECT count(*) FROM aqo_queries WHERE queryid <> fspace_hash; -- Should be zero
  count 
 -------
      0
@@ -116,7 +116,7 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
          Filter: ((b < 1) AND (d < 0))
 (10 rows)
 
-SELECT count(*) FROM aqo_queries WHERE query_hash <> fspace_hash; -- Should be zero
+SELECT count(*) FROM aqo_queries WHERE queryid <> fspace_hash; -- Should be zero
  count 
 -------
      0
@@ -142,14 +142,19 @@ SELECT count(*) FROM tmp1;
 (1 row)
 
 DROP TABLE tmp1;
-SELECT count(*) FROM aqo_queries WHERE query_hash <> fspace_hash; -- Should be zero
+SELECT count(*) FROM aqo_queries WHERE queryid <> fspace_hash; -- Should be zero
  count 
 -------
      0
 (1 row)
 
 SET aqo.mode = 'controlled';
-UPDATE aqo_queries SET learn_aqo = true, use_aqo = true, auto_tuning = false;
+SELECT aqo_queries_update(1, 1, 0);
+ aqo_queries_update 
+--------------------
+ 
+(1 row)
+
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
                                     QUERY PLAN                                    
@@ -176,7 +181,7 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
          Filter: ((b < 1) AND (d < 0))
 (10 rows)
 
-SELECT count(*) FROM aqo_queries WHERE query_hash <> fspace_hash; -- Should be zero
+SELECT count(*) FROM aqo_queries WHERE queryid <> fspace_hash; -- Should be zero
  count 
 -------
      0
@@ -209,7 +214,7 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
          Filter: ((b < 1) AND (d < 0))
 (10 rows)
 
-SELECT count(*) FROM aqo_queries WHERE query_hash <> fspace_hash; -- Should be zero
+SELECT count(*) FROM aqo_queries WHERE queryid <> fspace_hash; -- Should be zero
  count 
 -------
      0
@@ -219,7 +224,7 @@ SELECT count(*) FROM aqo_queries WHERE query_hash <> fspace_hash; -- Should be z
 SELECT aqo_reset();
  aqo_reset 
 -----------
-        18
+        23
 (1 row)
 
 DROP EXTENSION aqo;

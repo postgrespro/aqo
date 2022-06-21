@@ -7,8 +7,8 @@ ANALYZE test;
 
 -- Learn on a query
 SELECT count(*) FROM test;
-SELECT query_text,learn_aqo, use_aqo, auto_tuning
-FROM aqo_query_texts JOIN aqo_queries ON (queryid = query_hash)
+SELECT query_text, learn_aqo, use_aqo, auto_tuning
+FROM aqo_query_texts aqt JOIN aqo_queries aq ON (aqt.queryid = aq.queryid)
 ; -- Check result. TODO: use aqo_status()
 
 -- Create a schema and move AQO into it.
@@ -20,7 +20,7 @@ SELECT count(*) FROM test;
 SELECT count(*) FROM test WHERE id < 10;
 
 SELECT query_text, learn_aqo, use_aqo, auto_tuning
-FROM test.aqo_query_texts JOIN test.aqo_queries ON (queryid = query_hash)
+FROM test.aqo_query_texts aqt JOIN test.aqo_queries aq ON (aqt.queryid = aq.queryid)
 ORDER BY (md5(query_text))
 ; -- Check result. TODO: We want to find here both queries executed above
 
@@ -31,7 +31,7 @@ SELECT count(*) FROM test;
 SELECT count(*) FROM test WHERE id < 10;
 
 SELECT query_text, learn_aqo, use_aqo, auto_tuning
-FROM test.aqo_query_texts JOIN test.aqo_queries ON (queryid = query_hash)
+FROM test.aqo_query_texts aqt JOIN test.aqo_queries aq ON (aqt.queryid = aq.queryid)
 ORDER BY (md5(query_text))
 ; -- Check result.
 
@@ -39,10 +39,10 @@ ORDER BY (md5(query_text))
  * Below, we should check each UI function
  */
 SELECT aqo_disable_query(id) FROM (
-  SELECT query_hash AS id FROM aqo_queries WHERE query_hash <> 0) AS q1;
+  SELECT queryid AS id FROM aqo_queries WHERE queryid <> 0) AS q1;
 SELECT learn_aqo, use_aqo, auto_tuning FROM test.aqo_queries;
 SELECT aqo_enable_query(id) FROM (
-  SELECT query_hash AS id FROM aqo_queries WHERE query_hash <> 0) AS q1;
+  SELECT queryid AS id FROM aqo_queries WHERE queryid <> 0) AS q1;
 SELECT learn_aqo, use_aqo, auto_tuning FROM test.aqo_queries;
 
 RESET search_path;

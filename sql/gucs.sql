@@ -33,7 +33,7 @@ SELECT obj_description('aqo_reset'::regproc::oid);
 
 -- Check stat reset
 SELECT count(*) FROM aqo_query_stat;
-SELECT * FROM aqo_reset(); -- Remove one record from texts and one from stat
+SELECT * FROM aqo_reset(); -- Remove one record from all tables
 SELECT count(*) FROM aqo_query_stat;
 
 DROP EXTENSION aqo;

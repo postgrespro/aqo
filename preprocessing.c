@@ -205,7 +205,7 @@ aqo_planner(Query *parse,
 		goto ignore_query_settings;
 	}
 
-	query_is_stored = find_query(query_context.query_hash, &query_context);
+	query_is_stored = file_find_query(query_context.query_hash);
 
 	if (!query_is_stored)
 	{
@@ -317,7 +317,7 @@ ignore_query_settings:
 		 * concurrent addition from another backend we will try to restart
 		 * preprocessing routine.
 		 */
-		update_query(query_context.query_hash, query_context.fspace_hash,
+		aqo_queries_store(query_context.query_hash, query_context.fspace_hash,
 					 query_context.learn_aqo, query_context.use_aqo,
 					 query_context.auto_tuning);
 
