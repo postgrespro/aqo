@@ -141,7 +141,7 @@ DROP TABLE tmp1;
 
 SET aqo.mode = 'controlled';
 
-UPDATE aqo_queries SET learn_aqo = false, use_aqo = false, auto_tuning = false;
+SELECT aqo_queries_update(0, 0, 0);
 
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -172,7 +172,7 @@ EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c, t4.a AS d
 FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
 WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
 
-UPDATE aqo_queries SET learn_aqo = false, use_aqo = true, auto_tuning = false;
+SELECT aqo_queries_update(0, 1, 0);
 
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -214,8 +214,8 @@ SELECT * FROM aqo_drop_class(42);
 -- Remove all data from ML knowledge base
 SELECT count(*) FROM (
 SELECT aqo_drop_class(q1.id::bigint) FROM (
-    SELECT query_hash AS id
-    FROM aqo_queries WHERE query_hash <> 0) AS q1
+    SELECT queryid AS id
+    FROM aqo_queries WHERE queryid <> 0) AS q1
 ) AS q2;
 SELECT count(*) FROM aqo_data;
 

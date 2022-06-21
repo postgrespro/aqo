@@ -20,13 +20,19 @@ DROP TABLE public.aqo_queries CASCADE;
 DROP TABLE public.aqo_query_texts CASCADE;
 DROP TABLE public.aqo_query_stat CASCADE;
 
-CREATE TABLE aqo_queries (
-	query_hash		bigint CONSTRAINT aqo_queries_query_hash_idx PRIMARY KEY,
-	learn_aqo		boolean NOT NULL,
-	use_aqo			boolean NOT NULL,
-	fspace_hash		bigint NOT NULL,
-	auto_tuning		boolean NOT NULL
-);
+CREATE FUNCTION aqo_queries (
+	OUT queryid		bigint,
+  OUT fspace_hash		bigint,
+	OUT learn_aqo		boolean,
+	OUT use_aqo			boolean,
+	OUT auto_tuning		boolean
+)
+RETURNS SETOF record
+AS 'MODULE_PATHNAME', 'aqo_queries'
+LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
+CREATE FUNCTION aqo_queries_remove(queryid bigint) RETURNS bool
+AS 'MODULE_PATHNAME'
+LANGUAGE C STRICT PARALLEL SAFE;
 
 CREATE FUNCTION aqo_query_texts(OUT queryid bigint, OUT query_text text)
 RETURNS SETOF record
@@ -79,17 +85,18 @@ LANGUAGE C PARALLEL SAFE;
 CREATE VIEW aqo_query_stat AS SELECT * FROM aqo_query_stat();
 CREATE VIEW aqo_query_texts AS SELECT * FROM aqo_query_texts();
 CREATE VIEW aqo_data AS SELECT * FROM aqo_data();
+CREATE VIEW aqo_queries AS SELECT * FROM aqo_queries();
 
 CREATE FUNCTION aqo_stat_remove(fs bigint) RETURNS bool
 AS 'MODULE_PATHNAME'
 LANGUAGE C STRICT PARALLEL SAFE;
 
-INSERT INTO aqo_queries VALUES (0, false, false, 0, false);
+-- INSERT INTO aqo_queries VALUES (0, false, false, 0, false);
 -- a virtual query for COMMON feature space
 
-CREATE TRIGGER aqo_queries_invalidate AFTER UPDATE OR DELETE OR TRUNCATE
-	ON aqo_queries FOR EACH STATEMENT
-	EXECUTE PROCEDURE invalidate_deactivated_queries_cache();
+--CREATE TRIGGER aqo_queries_invalidate AFTER UPDATE OR DELETE OR TRUNCATE
+--	ON aqo_queries FOR EACH STATEMENT
+--	EXECUTE PROCEDURE invalidate_deactivated_queries_cache();
 
 --
 -- Show execution time of queries, for which AQO has statistics.
@@ -110,12 +117,12 @@ IF (controlled) THEN
        queryid, fs_hash, exectime, execs
     FROM (
     SELECT
-      aq.query_hash AS queryid,
+      aq.queryid AS queryid,
       aq.fspace_hash AS fs_hash,
       execution_time_with_aqo[array_length(execution_time_with_aqo, 1)] AS exectime,
       executions_with_aqo AS execs
     FROM aqo_queries aq JOIN aqo_query_stat aqs
-    ON aq.query_hash = aqs.queryid
+    ON aq.queryid = aqs.queryid
     WHERE TRUE = ANY (SELECT unnest(execution_time_with_aqo) IS NOT NULL)
     ) AS q1
     ORDER BY nn ASC;
@@ -129,12 +136,12 @@ ELSE
       queryid, fs_hash, exectime, execs
     FROM (
       SELECT
-        aq.query_hash AS queryid,
+        aq.queryid AS queryid,
         aq.fspace_hash AS fs_hash,
         (SELECT AVG(t) FROM unnest(execution_time_without_aqo) t) AS exectime,
         executions_without_aqo AS execs
       FROM aqo_queries aq JOIN aqo_query_stat aqs
-      ON aq.query_hash = aqs.queryid
+      ON aq.queryid = aqs.queryid
       WHERE TRUE = ANY (SELECT unnest(execution_time_without_aqo) IS NOT NULL)
       ) AS q1
     ORDER BY (nn) ASC;
@@ -148,32 +155,32 @@ COMMENT ON FUNCTION aqo_execution_time(boolean) IS
 --
 -- Remove all information about a query class from AQO storage.
 --
-CREATE OR REPLACE FUNCTION aqo_drop_class(queryid bigint)
+CREATE OR REPLACE FUNCTION aqo_drop_class(queryid_rm bigint)
 RETURNS integer AS $$
 DECLARE
   lfs bigint;
   num integer;
 BEGIN
-  IF (queryid = 0) THEN
-    raise EXCEPTION '[AQO] Cannot remove basic class %.', queryid;
+  IF (queryid_rm = 0) THEN
+    raise EXCEPTION '[AQO] Cannot remove basic class %.', queryid_rm;
   END IF;
 
-  SELECT fspace_hash FROM aqo_queries WHERE (query_hash = queryid) INTO lfs;
+  SELECT fspace_hash FROM aqo_queries WHERE (queryid = queryid_rm) INTO lfs;
 
   IF (lfs IS NULL) THEN
-    raise WARNING '[AQO] Nothing to remove for the class %.', queryid;
+    raise WARNING '[AQO] Nothing to remove for the class %.', queryid_rm;
     RETURN 0;
   END IF;
 
-  IF (lfs <> queryid) THEN
-    raise WARNING '[AQO] Removing query class has non-generic feature space value: id = %, fs = %.', queryid, fs;
+  IF (lfs <> queryid_rm) THEN
+    raise WARNING '[AQO] Removing query class has non-generic feature space value: id = %, fs = %.', queryid_rm, fs;
   END IF;
 
   SELECT count(*) FROM aqo_data WHERE fs = lfs INTO num;
 
-  DELETE FROM aqo_queries WHERE query_hash = queryid;
-  PERFORM aqo_stat_remove(queryid);
-  PERFORM aqo_qtexts_remove(queryid);
+  PERFORM aqo_queries_remove(queryid_rm);
+  PERFORM aqo_stat_remove(queryid_rm);
+  PERFORM aqo_qtexts_remove(queryid_rm);
   PERFORM aqo_data_remove(lfs, NULL);
   RETURN num;
 END;
@@ -211,7 +218,7 @@ BEGIN
 --    END IF;
 
     -- Remove ALL feature space if one of oids isn't exists
-    DELETE FROM aqo_queries WHERE fspace_hash = lfs;
+    PERFORM aqo_queries_remove(lfs);
     PERFORM aqo_stat_remove(lfs);
     PERFORM aqo_qtexts_remove(lfs);
 	PERFORM aqo_data_remove(lfs, NULL);
@@ -250,12 +257,12 @@ IF (controlled) THEN
       query_id, fs_hash, cerror, execs
     FROM (
     SELECT
-      aq.query_hash AS query_id,
+      aq.queryid AS query_id,
       aq.fspace_hash AS fs_hash,
       cardinality_error_with_aqo[array_length(cardinality_error_with_aqo, 1)] AS cerror,
       executions_with_aqo AS execs
     FROM aqo_queries aq JOIN aqo_query_stat aqs
-    ON aq.query_hash = aqs.queryid
+    ON aq.queryid = aqs.queryid
     WHERE TRUE = ANY (SELECT unnest(cardinality_error_with_aqo) IS NOT NULL)
     ) AS q1
     ORDER BY nn ASC;
@@ -266,12 +273,12 @@ ELSE
       query_id, fs_hash, cerror, execs
     FROM (
       SELECT
-        aq.query_hash AS query_id,
+        aq.queryid AS query_id,
         aq.fspace_hash AS fs_hash,
 		(SELECT AVG(t) FROM unnest(cardinality_error_without_aqo) t) AS cerror,
         executions_without_aqo AS execs
       FROM aqo_queries aq JOIN aqo_query_stat aqs
-      ON aq.query_hash = aqs.queryid
+      ON aq.queryid = aqs.queryid
       WHERE TRUE = ANY (SELECT unnest(cardinality_error_without_aqo) IS NOT NULL)
       ) AS q1
     ORDER BY (nn) ASC;
@@ -289,17 +296,17 @@ COMMENT ON FUNCTION aqo_cardinality_error(boolean) IS
 -- class.
 -- Returns a number of deleted rows in the aqo_data table.
 --
-CREATE OR REPLACE FUNCTION aqo_reset_query(queryid bigint)
+CREATE OR REPLACE FUNCTION aqo_reset_query(queryid_res bigint)
 RETURNS integer AS $$
 DECLARE
   num integer;
   fs  bigint;
 BEGIN
-  IF (queryid = 0) THEN
+  IF (queryid_res = 0) THEN
     raise WARNING '[AQO] Reset common feature space.'
   END IF;
 
-  SELECT fspace_hash FROM aqo_queries WHERE query_hash = queryid INTO fs;
+  SELECT fspace_hash FROM aqo_queries WHERE queryid = queryid_res INTO fs;
   SELECT count(*) FROM aqo_data WHERE fspace_hash = fs INTO num;
   DELETE FROM aqo_data WHERE fspace_hash = fs;
   RETURN num;
@@ -338,18 +345,18 @@ FROM aqo_queries aq, aqo_query_stat aqs,
 				execution_time_with_aqo			AS n3,
 				execution_time_without_aqo		AS n4
 		FROM aqo_query_stat aqs WHERE
-			aqs.query_hash = $1) AS al) AS q
-WHERE (aqs.query_hash = aq.query_hash) AND
-	aqs.query_hash = $1;
+			aqs.queryid = $1) AS al) AS q
+WHERE (aqs.queryid = aq.queryid) AND
+	aqs.queryid = $1;
 $$ LANGUAGE SQL;
 
-CREATE FUNCTION aqo_enable_query(hash bigint)
+/* CREATE FUNCTION aqo_enable_query(hash bigint)
 RETURNS VOID AS $$
 UPDATE aqo_queries SET
 	learn_aqo = 'true',
 	use_aqo = 'true'
-	WHERE query_hash = $1;
-$$ LANGUAGE SQL;
+	WHERE queryid = $1;
+$$ LANGUAGE SQL; 
 
 CREATE FUNCTION aqo_disable_query(hash bigint)
 RETURNS VOID AS $$
@@ -357,5 +364,21 @@ UPDATE aqo_queries SET
 	learn_aqo = 'false',
 	use_aqo = 'false',
 	auto_tuning = 'false'
-	WHERE query_hash = $1;
+	WHERE queryid = $1;
 $$ LANGUAGE SQL;
+*/
+
+CREATE FUNCTION aqo_enable_query(hash bigint)
+RETURNS void
+AS 'MODULE_PATHNAME', 'aqo_enable_query'
+LANGUAGE C STRICT VOLATILE;
+
+CREATE FUNCTION aqo_disable_query(hash bigint)
+RETURNS void
+AS 'MODULE_PATHNAME', 'aqo_enable_query'
+LANGUAGE C STRICT VOLATILE;
+
+CREATE FUNCTION aqo_queries_update(learn_aqo int, use_aqo int, auto_tuning int)
+RETURNS void
+AS 'MODULE_PATHNAME', 'aqo_queries_update'
+LANGUAGE C STRICT VOLATILE;

@@ -71,6 +71,15 @@ typedef struct DataEntry
 	dsa_pointer data_dp;
 } DataEntry;
 
+typedef struct QueriesEntry
+{
+	uint64	queryid;
+	uint64	fspace_hash;
+	bool	learn_aqo;
+	bool	use_aqo;
+	bool	auto_tuning;
+} QueriesEntry;
+
 extern bool aqo_use_file_storage;
 
 extern HTAB *stat_htab;
@@ -92,6 +101,11 @@ extern bool load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 						  bool wideSearch);
 extern void aqo_data_flush(void);
 extern void aqo_data_load(void);
+
+extern QueriesEntry *aqo_queries_store(uint64 queryid, uint64 fspace_hash, bool learn_aqo,
+									   bool use_aqo, bool auto_tuning);
+extern void aqo_queries_flush(void);
+extern void aqo_queries_load(void);
 /* Utility routines */
 extern ArrayType *form_vector(double *vector, int nrows);
 

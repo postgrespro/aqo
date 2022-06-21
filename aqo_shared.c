@@ -183,6 +183,7 @@ aqo_init_shmem(void)
 	stat_htab = NULL;
 	qtexts_htab = NULL;
 	data_htab = NULL;
+	queries_htab = NULL;
 
 	LWLockAcquire(AddinShmemInitLock, LW_EXCLUSIVE);
 	aqo_state = ShmemInitStruct("AQO", sizeof(AQOSharedState), &found);
@@ -203,6 +204,7 @@ aqo_init_shmem(void)
 		LWLockInitialize(&aqo_state->stat_lock, LWLockNewTrancheId());
 		LWLockInitialize(&aqo_state->qtexts_lock, LWLockNewTrancheId());
 		LWLockInitialize(&aqo_state->data_lock, LWLockNewTrancheId());
+		LWLockInitialize(&aqo_state->queries_lock, LWLockNewTrancheId());
 	}
 
 	info.keysize = sizeof(htab_key);
@@ -232,6 +234,13 @@ aqo_init_shmem(void)
 							  fss_max_items, fss_max_items,
 							  &info, HASH_ELEM | HASH_BLOBS);
 
+	/* Shared memory hash table for queries */
+	info.keysize = sizeof(((QueriesEntry *) 0)->queryid);
+	info.entrysize = sizeof(QueriesEntry);
+	queries_htab = ShmemInitHash("AQO Queries HTAB",
+							  fs_max_items, fs_max_items,
+							  &info, HASH_ELEM | HASH_BLOBS);
+
 	LWLockRelease(AddinShmemInitLock);
 	LWLockRegisterTranche(aqo_state->lock.tranche, "AQO");
 	LWLockRegisterTranche(aqo_state->stat_lock.tranche, "AQO Stat Lock Tranche");
@@ -239,11 +248,15 @@ aqo_init_shmem(void)
 	LWLockRegisterTranche(aqo_state->qtext_trancheid, "AQO Query Texts Tranche");
 	LWLockRegisterTranche(aqo_state->data_lock.tranche, "AQO Data Lock Tranche");
 	LWLockRegisterTranche(aqo_state->data_trancheid, "AQO Data Tranche");
+	LWLockRegisterTranche(aqo_state->queries_lock.tranche, "AQO Queries Lock Tranche");
 
 	if (!IsUnderPostmaster)
 	{
 		before_shmem_exit(on_shmem_shutdown, (Datum) 0);
-		aqo_stat_load(); /* Doesn't use DSA, so can be loaded in postmaster */
+
+		 /* Doesn't use DSA, so can be loaded in postmaster */
+		aqo_stat_load();
+		aqo_queries_load();
 	}
 }
 
@@ -254,6 +267,7 @@ static void
 on_shmem_shutdown(int code, Datum arg)
 {
 	aqo_stat_flush();
+	aqo_queries_flush();
 }
 
 Size
@@ -267,6 +281,7 @@ aqo_memsize(void)
 	size = add_size(size, hash_estimate_size(fs_max_items, sizeof(StatEntry)));
 	size = add_size(size, hash_estimate_size(fs_max_items, sizeof(QueryTextEntry)));
 	size = add_size(size, hash_estimate_size(fss_max_items, sizeof(DataEntry)));
+	size = add_size(size, hash_estimate_size(fs_max_items, sizeof(QueriesEntry)));
 
 	return size;
 }

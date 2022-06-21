@@ -36,7 +36,7 @@ SELECT count(*) FROM (SELECT x, y FROM t2 GROUP BY GROUPING SETS ((x,y), (x), (y
 SELECT num, to_char(error, '9.99EEEE') FROM aqo_cardinality_error(false) AS te
 WHERE te.fshash = (
   SELECT fspace_hash FROM aqo_queries
-  WHERE aqo_queries.query_hash = (
+  WHERE aqo_queries.queryid = (
     SELECT aqo_query_texts.queryid FROM aqo_query_texts
     WHERE query_text = 'SELECT count(*) FROM (SELECT x, y FROM t2 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;'
   )
@@ -51,4 +51,5 @@ FROM aqo_cardinality_error(false) ce, aqo_query_texts aqt
 WHERE ce.id = aqt.queryid
 ORDER BY (md5(query_text));
 
-DROP EXTENSION aqo CASCADE;
+SELECT aqo_reset();
+DROP EXTENSION aqo;

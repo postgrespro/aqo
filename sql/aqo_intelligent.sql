@@ -145,7 +145,7 @@ DROP TABLE tmp1;
 
 SET aqo.mode = 'controlled';
 
-UPDATE aqo_queries SET learn_aqo = false, use_aqo = false, auto_tuning = false;
+SELECT aqo_queries_update(0, 0, 0);
 
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -174,7 +174,7 @@ EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c, t4.a AS d
 FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
 WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
 
-UPDATE aqo_queries SET learn_aqo = false, use_aqo = true, auto_tuning = false;
+SELECT aqo_queries_update(0, 1, 0);
 
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;

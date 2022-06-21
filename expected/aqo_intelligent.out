@@ -507,7 +507,7 @@ DROP TABLE aqo_test1;
 SELECT aqo_reset();
  aqo_reset 
 -----------
-       103
+       127
 (1 row)
 
 DROP EXTENSION aqo;
