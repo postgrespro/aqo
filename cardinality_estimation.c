@@ -33,7 +33,7 @@ predict_debug_output(List *clauses, List *selectivities,
 
 	initStringInfo(&debug_str);
 	appendStringInfo(&debug_str, "fss: %d, clausesNum: %d, ",
-					 fss_hash, list_length(clauses));
+					 fss, list_length(clauses));
 
 	appendStringInfoString(&debug_str, ", selectivities: { ");
 	foreach(lc, selectivities)
@@ -45,8 +45,8 @@ predict_debug_output(List *clauses, List *selectivities,
 	appendStringInfoString(&debug_str, "}, reloids: { ");
 	foreach(lc, reloids)
 	{
-		Value *relname = lfirst_node(String, lc);
-		appendStringInfo(&debug_str, "%s ", valStr(relname));
+		Oid relname = lfirst_oid(lc);
+		appendStringInfo(&debug_str, "%d ", relname);
 	}
 
 	appendStringInfo(&debug_str, "}, result: %lf", result);
