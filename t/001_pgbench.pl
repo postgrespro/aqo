@@ -228,7 +228,7 @@ $fss_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_data;");
 # Number of rows in aqo_queries: related to pgbench test and total value.
 my $pgb_fs_count = $node->safe_psql('postgres', "
 	SELECT count(*) FROM aqo_queries
-	WHERE fspace_hash IN (
+	WHERE fs IN (
 		SELECT fs FROM aqo_data
 		WHERE
 			$aoid = ANY(oids) OR

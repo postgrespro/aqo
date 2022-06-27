@@ -38,109 +38,6 @@ static ArrayType *form_matrix(double *matrix, int nrows, int ncols);
 
 #define FormVectorSz(v_name)			(form_vector((v_name), (v_name ## _size)))
 
-static bool my_simple_heap_update(Relation relation,
-								  ItemPointer otid,
-								  HeapTuple tup,
-								  bool *update_indexes);
-
-/*
- * Open an AQO-related relation.
- * It should be done carefully because of a possible concurrent DROP EXTENSION
- * command. In such case AQO must be disabled in this backend.
- */
-static bool
-open_aqo_relation(char *heaprelnspname, char *heaprelname,
-				  char *indrelname, LOCKMODE lockmode,
-				  Relation *hrel, Relation *irel)
-{
-	Oid			reloid;
-	RangeVar   *rv;
-
-	reloid = RelnameGetRelid(indrelname);
-	if (!OidIsValid(reloid))
-		goto cleanup;
-
-	rv = makeRangeVar(heaprelnspname, heaprelname, -1);
-	*hrel = table_openrv_extended(rv,  lockmode, true);
-	if (*hrel == NULL)
-		goto cleanup;
-
-	/* Try to open index relation carefully. */
-	*irel = try_relation_open(reloid,  lockmode);
-	if (*irel == NULL)
-	{
-		relation_close(*hrel, lockmode);
-		goto cleanup;
-	}
-
-	return true;
-
-cleanup:
-	/*
-	 * Absence of any AQO-related table tell us that someone executed
-	 * a 'DROP EXTENSION aqo' command. We disable AQO for all future queries
-	 * in this backend. For performance reasons we do it locally.
-	 * Clear profiling hash table.
-	 * Also, we gently disable AQO for the rest of the current query
-	 * execution process.
-	 */
-	aqo_enabled = false;
-	disable_aqo_for_query();
-	return false;
-
-}
-
-/*
-static ArrayType *
-form_strings_vector(List *reloids)
-{
-	Datum	   *rels;
-	ArrayType  *array;
-	ListCell   *lc;
-	int			i = 0;
-
-	if (reloids == NIL)
-		return NULL;
-
-	rels = (Datum *) palloc(list_length(reloids) * sizeof(Datum));
-
-	foreach(lc, reloids)
-	{
-		char *relname = strVal(lfirst(lc));
-
-		rels[i++] = CStringGetTextDatum(relname);
-	}
-
-	array = construct_array(rels, i, TEXTOID, -1, false, TYPALIGN_INT);
-	pfree(rels);
-	return array;
-}
-
-static List *
-deform_strings_vector(Datum datum)
-{
-	ArrayType  *array = DatumGetArrayTypePCopy(PG_DETOAST_DATUM(datum));
-	Datum	   *values;
-	int			i;
-	int			nelems = 0;
-	List	   *reloids = NIL;
-
-	deconstruct_array(array, TEXTOID, -1, false, TYPALIGN_INT,
-					  &values, NULL, &nelems);
-	for (i = 0; i < nelems; ++i)
-	{
-		Value *s;
-
-		s = makeString(pstrdup(TextDatumGetCString(values[i])));
-		reloids = lappend(reloids, s);
-	}
-
-	pfree(values);
-	pfree(array);
-	return reloids;
-}
-*/
-
 bool
 load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids, bool isSafe)
 {
@@ -191,7 +88,7 @@ form_matrix(double *matrix, int nrows, int ncols)
 /*
  * Forms ArrayType object for storage from simple C-array vector.
  */
-ArrayType *
+static ArrayType *
 form_vector(double *vector, int nrows)
 {
 	Datum	   *elems;
@@ -211,80 +108,6 @@ form_vector(double *vector, int nrows)
 	return array;
 }
 
-/*
- * Returns true if updated successfully, false if updated concurrently by
- * another session, error otherwise.
- */
-static bool
-my_simple_heap_update(Relation relation, ItemPointer otid, HeapTuple tup,
-					  bool *update_indexes)
-{
-	TM_Result result;
-	TM_FailureData hufd;
-	LockTupleMode lockmode;
-
-	Assert(update_indexes != NULL);
-	result = heap_update(relation, otid, tup,
-						 GetCurrentCommandId(true), InvalidSnapshot,
-						 true /* wait for commit */ ,
-						 &hufd, &lockmode);
-	switch (result)
-	{
-		case TM_SelfModified:
-			/* Tuple was already updated in current command? */
-			elog(ERROR, "tuple already updated by self");
-			break;
-
-		case TM_Ok:
-			/* done successfully */
-			if (!HeapTupleIsHeapOnly(tup))
-				*update_indexes = true;
-			else
-				*update_indexes = false;
-			return true;
-
-		case TM_Updated:
-			return false;
-			break;
-
-		case TM_BeingModified:
-			return false;
-			break;
-
-		default:
-			elog(ERROR, "unrecognized heap_update status: %u", result);
-			break;
-	}
-	return false;
-}
-
-
-/* Provides correct insert in both PostgreQL 9.6.X and 10.X.X */
-bool
-my_index_insert(Relation indexRelation,
-				Datum *values, bool *isnull,
-				ItemPointer heap_t_ctid,
-				Relation heapRelation,
-				IndexUniqueCheck checkUnique)
-{
-	/* Index must be UNIQUE to support uniqueness checks */
-	Assert(checkUnique == UNIQUE_CHECK_NO ||
-		   indexRelation->rd_index->indisunique);
-
-#if PG_VERSION_NUM < 100000
-	return index_insert(indexRelation, values, isnull, heap_t_ctid,
-						heapRelation, checkUnique);
-#elif PG_VERSION_NUM < 140000
-	return index_insert(indexRelation, values, isnull, heap_t_ctid,
-						heapRelation, checkUnique,
-						BuildIndexInfo(indexRelation));
-#else
-	return index_insert(indexRelation, values, isnull, heap_t_ctid,
-						heapRelation, checkUnique, false,
-						BuildIndexInfo(indexRelation));
-#endif
-}
-
 /* Creates a storage for hashes of deactivated queries */
 void
 init_deactivated_queries_storage(void)
@@ -301,29 +124,21 @@ init_deactivated_queries_storage(void)
 									  HASH_ELEM | HASH_BLOBS);
 }
 
-/* Destroys the storage for hash of deactivated queries */
-void
-fini_deactivated_queries_storage(void)
-{
-	hash_destroy(deactivated_queries);
-	deactivated_queries = NULL;
-}
-
 /* Checks whether the query with given hash is deactivated */
 bool
-query_is_deactivated(uint64 query_hash)
+query_is_deactivated(uint64 queryid)
 {
 	bool		found;
 
-	hash_search(deactivated_queries, &query_hash, HASH_FIND, &found);
+	hash_search(deactivated_queries, &queryid, HASH_FIND, &found);
 	return found;
 }
 
-/* Adds given query hash into the set of hashes of deactivated queries*/
+/* Adds given query hash into the set of hashes of deactivated queries */
 void
-add_deactivated_query(uint64 query_hash)
+add_deactivated_query(uint64 queryid)
 {
-	hash_search(deactivated_queries, &query_hash, HASH_ENTER, NULL);
+	hash_search(deactivated_queries, &queryid, HASH_ENTER, NULL);
 }
 
 /* *****************************************************************************
@@ -368,7 +183,7 @@ typedef enum {
 } aqo_data_cols;
 
 typedef enum {
-	AQ_QUERYID = 0, AQ_FSPACE_HASH, AQ_LEARN_AQO, AQ_USE_AQO, AQ_AUTO_TUNING, 
+	AQ_QUERYID = 0, AQ_FS, AQ_LEARN_AQO, AQ_USE_AQO, AQ_AUTO_TUNING,
 	AQ_TOTAL_NCOLS
 } aqo_queries_cols;
 
@@ -965,6 +780,8 @@ aqo_queries_load(void)
 	entries = hash_get_num_entries(queries_htab);
 	Assert(entries == 0);
 	data_load(PGAQO_QUERIES_FILE, _deform_queries_record_cb, NULL);
+
+	/* Check existence of default feature space */
 	(void) hash_search(queries_htab, &queryid, HASH_FIND, &found);
 
 	LWLockRelease(&aqo_state->queries_lock);
@@ -1717,7 +1534,7 @@ aqo_queries(PG_FUNCTION_ARGS)
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
 		values[AQ_QUERYID] = Int64GetDatum(entry->queryid);
-		values[AQ_FSPACE_HASH] = Int64GetDatum(entry->fspace_hash);
+		values[AQ_FS] = Int64GetDatum(entry->fs);
 		values[AQ_LEARN_AQO] = BoolGetDatum(entry->learn_aqo);
 		values[AQ_USE_AQO] = BoolGetDatum(entry->use_aqo);
 		values[AQ_AUTO_TUNING] = BoolGetDatum(entry->auto_tuning);
@@ -1743,8 +1560,8 @@ aqo_queries_remove(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(removed);
 }
 
-QueriesEntry *
-aqo_queries_store(uint64 queryid, uint64 fspace_hash, bool learn_aqo, 
+bool
+aqo_queries_store(uint64 queryid, uint64 fs, bool learn_aqo,
 				  bool use_aqo, bool auto_tuning)
 {
 	QueriesEntry   *entry;
@@ -1752,24 +1569,20 @@ aqo_queries_store(uint64 queryid, uint64 fspace_hash, bool learn_aqo,
 
 	Assert(queries_htab);
 
-	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
-	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, HASH_ENTER, &found);
+	/* Guard for default feature space */
+	Assert(queryid != 0 || (fs == 0 && learn_aqo == false &&
+		   use_aqo == false && auto_tuning == false));
 
-	/* Initialize entry on first usage */
-	if (!found)
-	{
-		uint64 qid = entry->queryid;
-		memset(entry, 0, sizeof(QueriesEntry));
-		entry->queryid = qid;
-		entry->fspace_hash = fspace_hash;
-	}
+	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
+	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, HASH_ENTER,
+										 &found);
+	entry->fs = fs;
 	entry->learn_aqo = learn_aqo;
 	entry->use_aqo = use_aqo;
 	entry->auto_tuning = auto_tuning;
 
-	entry = memcpy(palloc(sizeof(QueriesEntry)), entry, sizeof(QueriesEntry));
 	LWLockRelease(&aqo_state->queries_lock);
-	return entry;
+	return true;
 }
 
 static long
@@ -1785,12 +1598,16 @@ aqo_queries_reset(void)
 	hash_seq_init(&hash_seq, queries_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
+		if (entry->queryid == 0)
+			/* Don't remove default feature space */
+			continue;
+
 		if (hash_search(queries_htab, &entry->queryid, HASH_REMOVE, NULL) == NULL)
 			elog(ERROR, "[AQO] hash table corrupted");
 		num_remove++;
 	}
 	LWLockRelease(&aqo_state->queries_lock);
-	Assert(num_remove == num_entries);
+	Assert(num_remove == num_entries - 1);
 
 	aqo_queries_flush();
 
@@ -1806,18 +1623,23 @@ aqo_enable_query(PG_FUNCTION_ARGS)
 
 	Assert(queries_htab);
 
+	if (queryid == 0)
+		elog(ERROR, "[AQO] Default class can't be updated.");
+
 	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
 	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, HASH_FIND, &found);
 
-	if(found)
+	if (found)
 	{
-		entry->learn_aqo = 1;
-		entry->use_aqo = 1;
+		entry->learn_aqo = true;
+		entry->use_aqo = true;
+		if (aqo_mode == AQO_MODE_INTELLIGENT)
+			entry->auto_tuning = true;
 	}
 	else
-	{
 		elog(ERROR, "[AQO] Entry with queryid %ld not contained in table", queryid);
-	}
+
+	hash_search(deactivated_queries, &queryid, HASH_REMOVE, NULL);
 	LWLockRelease(&aqo_state->queries_lock);
 	PG_RETURN_VOID();
 }
@@ -1836,9 +1658,9 @@ aqo_disable_query(PG_FUNCTION_ARGS)
 
 	if(found)
 	{
-		entry->learn_aqo = 0;
-		entry->use_aqo = 0;
-		entry->auto_tuning = 0;
+		entry->learn_aqo = false;
+		entry->use_aqo = false;
+		entry->auto_tuning = false;
 	}
 	else
 	{
@@ -1849,40 +1671,61 @@ aqo_disable_query(PG_FUNCTION_ARGS)
 }
 
 bool
-file_find_query(uint64 queryid)
+aqo_queries_find(uint64 queryid, QueryContextData *ctx)
 {
 	bool			found;
+	QueriesEntry   *entry;
 
 	Assert(queries_htab);
 
 	LWLockAcquire(&aqo_state->queries_lock, LW_SHARED);
-	hash_search(queries_htab, &queryid, HASH_FIND, &found);
+	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, HASH_FIND, &found);
+	if (found)
+	{
+		ctx->query_hash = entry->queryid;
+		ctx->learn_aqo = entry->learn_aqo;
+		ctx->use_aqo = entry->use_aqo;
+		ctx->auto_tuning = entry->auto_tuning;
+	}
 	LWLockRelease(&aqo_state->queries_lock);
 	return found;
 }
 
-Datum 
+/*
+ * Update AQO preferences for a given queryid value.
+ * if incoming param is null - leave it unchanged.
+ * if forced is false, do nothing if query with such ID isn't exists yet.
+ * Return true if operation have done some changes.
+ */
+Datum
 aqo_queries_update(PG_FUNCTION_ARGS)
 {
-	HASH_SEQ_STATUS		hash_seq;
-	QueriesEntry	   *entry;
-	int					learn_aqo = (int) PG_GETARG_INT32(0);
-	int					use_aqo = (int) PG_GETARG_INT32(1);
-	int					auto_tuning = (int) PG_GETARG_INT32(2);
+	QueriesEntry   *entry;
+	uint64			queryid = PG_GETARG_INT64(AQ_QUERYID);
+	bool			found;
+
+	if (queryid == 0)
+		/* Do nothing for default feature space */
+		PG_RETURN_BOOL(false);
 
 	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
-	hash_seq_init(&hash_seq, queries_htab);
-	while ((entry = hash_seq_search(&hash_seq)) != NULL)
-	{
-		if (learn_aqo != 2)
-			entry->learn_aqo = learn_aqo;
-		if (use_aqo != 2)
-			entry->use_aqo = use_aqo;
-		if (auto_tuning != 2)
-			entry->auto_tuning = auto_tuning;
-	}
+	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, HASH_FIND,
+										 &found);
+
+	if (!PG_ARGISNULL(AQ_FS))
+		entry->fs = PG_GETARG_INT64(AQ_FS);
+	if (!PG_ARGISNULL(AQ_LEARN_AQO))
+		entry->learn_aqo = PG_GETARG_INT64(AQ_LEARN_AQO);
+	if (!PG_ARGISNULL(AQ_USE_AQO))
+		entry->use_aqo = PG_GETARG_INT64(AQ_USE_AQO);
+	if (!PG_ARGISNULL(AQ_AUTO_TUNING))
+		entry->auto_tuning = PG_GETARG_INT64(AQ_AUTO_TUNING);
+
+	/* Remove the class from cache of deactivated queries */
+	hash_search(deactivated_queries, &queryid, HASH_REMOVE, NULL);
+
 	LWLockRelease(&aqo_state->queries_lock);
-	PG_RETURN_VOID();
+	PG_RETURN_BOOL(true);
 }
 
 Datum

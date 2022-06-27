@@ -200,6 +200,7 @@ aqo_init_shmem(void)
 		aqo_state->data_dsa_handler = DSM_HANDLE_INVALID;
 		aqo_state->data_trancheid = LWLockNewTrancheId();
 		aqo_state->data_changed = false;
+		aqo_state->queries_changed = false;
 
 		LWLockInitialize(&aqo_state->stat_lock, LWLockNewTrancheId());
 		LWLockInitialize(&aqo_state->qtexts_lock, LWLockNewTrancheId());

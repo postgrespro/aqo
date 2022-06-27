@@ -12,11 +12,12 @@ SELECT count(*) FROM test;
 
 SELECT query_text, learn_aqo, use_aqo, auto_tuning
 FROM aqo_query_texts aqt JOIN aqo_queries aq ON (aqt.queryid = aq.queryid)
+ORDER BY (md5(query_text))
 ; -- Check result. TODO: use aqo_status()
               query_text               | learn_aqo | use_aqo | auto_tuning 
 ---------------------------------------+-----------+---------+-------------
- COMMON feature space (do not delete!) | f         | f       | f
  SELECT count(*) FROM test;            | t         | t       | f
+ COMMON feature space (do not delete!) | f         | f       | f
 (2 rows)
 
 -- Create a schema and move AQO into it.
@@ -38,12 +39,13 @@ SELECT count(*) FROM test WHERE id < 10;
 SELECT query_text, learn_aqo, use_aqo, auto_tuning
 FROM test.aqo_query_texts aqt JOIN test.aqo_queries aq ON (aqt.queryid = aq.queryid)
 ORDER BY (md5(query_text))
-; -- Check result. TODO: We want to find here both queries executed above
-              query_text               | learn_aqo | use_aqo | auto_tuning 
----------------------------------------+-----------+---------+-------------
- SELECT count(*) FROM test;            | t         | t       | f
- COMMON feature space (do not delete!) | f         | f       | f
-(2 rows)
+; -- Find out both queries executed above
+                query_text                | learn_aqo | use_aqo | auto_tuning 
+------------------------------------------+-----------+---------+-------------
+ SELECT count(*) FROM test;               | t         | t       | f
+ COMMON feature space (do not delete!)    | f         | f       | f
+ SELECT count(*) FROM test WHERE id < 10; | t         | t       | f
+(3 rows)
 
 -- Add schema which contains AQO to the end of search_path
 SELECT set_config('search_path', current_setting('search_path') || ', test', false);
@@ -90,8 +92,8 @@ SELECT learn_aqo, use_aqo, auto_tuning FROM test.aqo_queries;
  learn_aqo | use_aqo | auto_tuning 
 -----------+---------+-------------
  f         | f       | f
- f         | f       | f
- f         | f       | f
+ t         | t       | f
+ t         | t       | f
 (3 rows)
 
 SELECT aqo_enable_query(id) FROM (

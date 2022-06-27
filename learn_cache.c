@@ -18,6 +18,7 @@
 #include "aqo.h"
 #include "aqo_shared.h"
 #include "learn_cache.h"
+#include "storage.h"
 
 
 typedef struct

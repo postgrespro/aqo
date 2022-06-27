@@ -92,5 +92,6 @@ SELECT * FROM check_estimated_rows('
 '); -- Don't use AQO for temp table because of different attname
 
 DROP TABLE pt CASCADE;
+SELECT 1 FROM aqo_reset();
 DROP EXTENSION aqo;
 DROP FUNCTION check_estimated_rows;
