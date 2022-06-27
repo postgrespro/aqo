@@ -145,7 +145,10 @@ DROP TABLE tmp1;
 
 SET aqo.mode = 'controlled';
 
-SELECT aqo_queries_update(0, 0, 0);
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, false, false, false)
+; -- Disable all query classes
 
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -174,7 +177,10 @@ EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c, t4.a AS d
 FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
 WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
 
-SELECT aqo_queries_update(0, 1, 0);
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, false, true, false)
+; -- set learn = false, use = true, tuning = false
 
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -210,6 +216,6 @@ DROP INDEX aqo_test1_idx_a;
 DROP TABLE aqo_test1;
 
 -- XXX: extension dropping doesn't clear file storage. Do it manually.
-SELECT aqo_reset();
+SELECT 1 FROM aqo_reset();
 
 DROP EXTENSION aqo;

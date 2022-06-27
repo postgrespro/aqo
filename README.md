@@ -215,7 +215,7 @@ execution of such query type. Disabling of AQO usage is reasonable for that
 cases in which query execution time increases after applying AQO. It happens
 sometimes because of cost models incompleteness.
 
-`Fspace_hash` setting is for extra advanced AQO tuning. It may be changed manually
+`fs` setting is for extra advanced AQO tuning. It may be changed manually
 to optimize a number of queries using the same model. It may decrease the
 amount of memory for models and even the query execution time, but also it
 may cause the bad AQO's behavior, so please use it only if you know exactly
@@ -233,7 +233,7 @@ ignored.
 
 If `aqo.mode` is `'learn'`, then the normalized query hash appends to aqo_queries
 with the default settings `learn_aqo=true`, `use_aqo=true`, `auto_tuning=false`, and
-`fspace_hash = query_hash` which means that AQO uses separate machine learning
+`fs = queryid` which means that AQO uses separate machine learning
 model for this query type optimization. After that the query is processed as if
 it already was in aqo_queries.
 

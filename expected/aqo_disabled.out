@@ -64,7 +64,7 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
          Filter: ((b < 1) AND (d < 0))
 (10 rows)
 
-SELECT count(*) FROM aqo_queries WHERE queryid <> fspace_hash; -- Should be zero
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
  count 
 -------
      0
@@ -116,7 +116,7 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
          Filter: ((b < 1) AND (d < 0))
 (10 rows)
 
-SELECT count(*) FROM aqo_queries WHERE queryid <> fspace_hash; -- Should be zero
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
  count 
 -------
      0
@@ -142,17 +142,20 @@ SELECT count(*) FROM tmp1;
 (1 row)
 
 DROP TABLE tmp1;
-SELECT count(*) FROM aqo_queries WHERE queryid <> fspace_hash; -- Should be zero
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
  count 
 -------
      0
 (1 row)
 
 SET aqo.mode = 'controlled';
-SELECT aqo_queries_update(1, 1, 0);
- aqo_queries_update 
---------------------
- 
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, true, true, false)
+; -- Enable all disabled query classes
+ count 
+-------
+     5
 (1 row)
 
 EXPLAIN SELECT * FROM aqo_test0
@@ -181,7 +184,7 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
          Filter: ((b < 1) AND (d < 0))
 (10 rows)
 
-SELECT count(*) FROM aqo_queries WHERE queryid <> fspace_hash; -- Should be zero
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
  count 
 -------
      0
@@ -214,17 +217,17 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
          Filter: ((b < 1) AND (d < 0))
 (10 rows)
 
-SELECT count(*) FROM aqo_queries WHERE queryid <> fspace_hash; -- Should be zero
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
  count 
 -------
      0
 (1 row)
 
 -- XXX: extension dropping doesn't clear file storage. Do it manually.
-SELECT aqo_reset();
- aqo_reset 
------------
-        23
+SELECT 1 FROM aqo_reset();
+ ?column? 
+----------
+        1
 (1 row)
 
 DROP EXTENSION aqo;

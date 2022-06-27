@@ -186,5 +186,11 @@ SELECT * FROM check_estimated_rows('
 (1 row)
 
 DROP TABLE pt CASCADE;
+SELECT 1 FROM aqo_reset();
+ ?column? 
+----------
+        1
+(1 row)
+
 DROP EXTENSION aqo;
 DROP FUNCTION check_estimated_rows;

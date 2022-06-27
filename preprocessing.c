@@ -11,7 +11,7 @@
  *		'use_aqo': whether to use AQO estimations in query optimization
  *		'learn_aqo': whether to update AQO data based on query execution
  *					 statistics
- *		'fspace_hash': hash of feature space to use with given query
+ *		'fs': hash of feature space to use with given query
  *		'auto_tuning': whether AQO may change use_aqo and learn_aqo values
  *					   for the next execution of such type of query using
  *					   its self-tuning algorithm
@@ -224,6 +224,7 @@ aqo_planner(Query *parse,
 		 * recursion, as an example).
 		 */
 		disable_aqo_for_query();
+
 		return call_default_planner(parse,
 									query_string,
 									cursorOptions,
@@ -244,7 +245,7 @@ aqo_planner(Query *parse,
 		goto ignore_query_settings;
 	}
 
-	query_is_stored = file_find_query(query_context.query_hash);
+	query_is_stored = aqo_queries_find(query_context.query_hash, &query_context);
 
 	if (!query_is_stored)
 	{
@@ -351,14 +352,15 @@ ignore_query_settings:
 		 */
 		init_lock_tag(&tag, query_context.query_hash, 0);
 		LockAcquire(&tag, ExclusiveLock, false, false);
+
 		/*
 		 * Add query into the AQO knowledge base. To process an error with
 		 * concurrent addition from another backend we will try to restart
 		 * preprocessing routine.
 		 */
 		aqo_queries_store(query_context.query_hash, query_context.fspace_hash,
-					 query_context.learn_aqo, query_context.use_aqo,
-					 query_context.auto_tuning);
+						  query_context.learn_aqo, query_context.use_aqo,
+						  query_context.auto_tuning);
 
 		/*
 		 * Add query text into the ML-knowledge base. Just for further
@@ -392,7 +394,6 @@ ignore_query_settings:
 void
 disable_aqo_for_query(void)
 {
-
 	query_context.learn_aqo = false;
 	query_context.use_aqo = false;
 	query_context.auto_tuning = false;

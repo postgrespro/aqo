@@ -36,7 +36,7 @@ WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
 EXPLAIN SELECT t1.a, t2.b, t3.c
 FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
 WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
-SELECT count(*) FROM aqo_queries WHERE queryid <> fspace_hash; -- Should be zero
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
 
 SET aqo.mode = 'disabled';
 
@@ -58,7 +58,7 @@ EXPLAIN SELECT t1.a, t2.b, t3.c
 FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
 WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
 
-SELECT count(*) FROM aqo_queries WHERE queryid <> fspace_hash; -- Should be zero
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
 SET aqo.mode = 'intelligent';
 
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
@@ -72,10 +72,13 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
 SELECT count(*) FROM tmp1;
 DROP TABLE tmp1;
 
-SELECT count(*) FROM aqo_queries WHERE queryid <> fspace_hash; -- Should be zero
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
 SET aqo.mode = 'controlled';
 
-SELECT aqo_queries_update(1, 1, 0);
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, true, true, false)
+; -- Enable all disabled query classes
 
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -84,7 +87,7 @@ EXPLAIN SELECT t1.a, t2.b, t3.c
 FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
 WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
 
-SELECT count(*) FROM aqo_queries WHERE queryid <> fspace_hash; -- Should be zero
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
 SET aqo.mode = 'disabled';
 
 EXPLAIN SELECT * FROM aqo_test0
@@ -93,10 +96,10 @@ WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
 EXPLAIN SELECT t1.a, t2.b, t3.c
 FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
 WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
-SELECT count(*) FROM aqo_queries WHERE queryid <> fspace_hash; -- Should be zero
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
 
 -- XXX: extension dropping doesn't clear file storage. Do it manually.
-SELECT aqo_reset();
+SELECT 1 FROM aqo_reset();
 
 DROP EXTENSION aqo;
 

@@ -293,20 +293,6 @@ _PG_init(void)
 	MarkGUCPrefixReserved("aqo");
 }
 
-PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
-
-/*
- * Clears the cache of deactivated queries if the user changed aqo_queries
- * manually.
- */
-Datum
-invalidate_deactivated_queries_cache(PG_FUNCTION_ARGS)
-{
-	fini_deactivated_queries_storage();
-	init_deactivated_queries_storage();
-	PG_RETURN_POINTER(NULL);
-}
-
 /*
  * Return AQO schema's Oid or InvalidOid if that's not possible.
  */
@@ -383,4 +369,16 @@ IsQueryDisabled(void)
 		return true;
 
 	return false;
+}
+
+PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
+
+/*
+ * Clears the cache of deactivated queries if the user changed aqo_queries
+ * manually.
+ */
+Datum
+invalidate_deactivated_queries_cache(PG_FUNCTION_ARGS)
+{
+       PG_RETURN_POINTER(NULL);
 }
