@@ -107,10 +107,13 @@ SELECT count(*) FROM tmp1;
 
 DROP TABLE tmp1;
 SET aqo.mode = 'controlled';
-SELECT aqo_queries_update(1, 0, 0);
- aqo_queries_update 
---------------------
- 
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, true, false, false)
+; -- learn = true, use = false, tuning = false
+ count 
+-------
+    12
 (1 row)
 
 EXPLAIN (COSTS FALSE)
@@ -194,10 +197,13 @@ WHERE t1.a = t2.b AND t2.a = t3.b;
          ->  Seq Scan on aqo_test1 t3
 (9 rows)
 
-SELECT aqo_queries_update(2, 1, 2);
- aqo_queries_update 
---------------------
- 
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, NULL, true, NULL)
+; -- set use = true
+ count 
+-------
+    12
 (1 row)
 
 EXPLAIN (COSTS FALSE)
@@ -306,10 +312,10 @@ DROP TABLE aqo_test1;
 DROP INDEX aqo_test2_idx_a;
 DROP TABLE aqo_test2;
 -- XXX: extension dropping doesn't clear file storage. Do it manually.
-SELECT aqo_reset();
- aqo_reset 
------------
-        61
+SELECT 1 FROM aqo_reset();
+ ?column? 
+----------
+        1
 (1 row)
 
 DROP EXTENSION aqo;

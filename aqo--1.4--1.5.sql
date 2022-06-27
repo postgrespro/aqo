@@ -21,11 +21,11 @@ DROP TABLE public.aqo_query_texts CASCADE;
 DROP TABLE public.aqo_query_stat CASCADE;
 
 CREATE FUNCTION aqo_queries (
-	OUT queryid		bigint,
-  OUT fspace_hash		bigint,
-	OUT learn_aqo		boolean,
-	OUT use_aqo			boolean,
-	OUT auto_tuning		boolean
+  OUT queryid		bigint,
+  OUT fs			bigint,
+  OUT learn_aqo		boolean,
+  OUT use_aqo		boolean,
+  OUT auto_tuning	boolean
 )
 RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'aqo_queries'
@@ -91,13 +91,6 @@ CREATE FUNCTION aqo_stat_remove(fs bigint) RETURNS bool
 AS 'MODULE_PATHNAME'
 LANGUAGE C STRICT PARALLEL SAFE;
 
--- INSERT INTO aqo_queries VALUES (0, false, false, 0, false);
--- a virtual query for COMMON feature space
-
---CREATE TRIGGER aqo_queries_invalidate AFTER UPDATE OR DELETE OR TRUNCATE
---	ON aqo_queries FOR EACH STATEMENT
---	EXECUTE PROCEDURE invalidate_deactivated_queries_cache();
-
 --
 -- Show execution time of queries, for which AQO has statistics.
 -- controlled - show stat on executions where AQO was used for cardinality
@@ -118,7 +111,7 @@ IF (controlled) THEN
     FROM (
     SELECT
       aq.queryid AS queryid,
-      aq.fspace_hash AS fs_hash,
+      aq.fs AS fs_hash,
       execution_time_with_aqo[array_length(execution_time_with_aqo, 1)] AS exectime,
       executions_with_aqo AS execs
     FROM aqo_queries aq JOIN aqo_query_stat aqs
@@ -137,7 +130,7 @@ ELSE
     FROM (
       SELECT
         aq.queryid AS queryid,
-        aq.fspace_hash AS fs_hash,
+        aq.fs AS fs_hash,
         (SELECT AVG(t) FROM unnest(execution_time_without_aqo) t) AS exectime,
         executions_without_aqo AS execs
       FROM aqo_queries aq JOIN aqo_query_stat aqs
@@ -165,7 +158,7 @@ BEGIN
     raise EXCEPTION '[AQO] Cannot remove basic class %.', queryid_rm;
   END IF;
 
-  SELECT fspace_hash FROM aqo_queries WHERE (queryid = queryid_rm) INTO lfs;
+  SELECT fs FROM aqo_queries WHERE (queryid = queryid_rm) INTO lfs;
 
   IF (lfs IS NULL) THEN
     raise WARNING '[AQO] Nothing to remove for the class %.', queryid_rm;
@@ -258,7 +251,7 @@ IF (controlled) THEN
     FROM (
     SELECT
       aq.queryid AS query_id,
-      aq.fspace_hash AS fs_hash,
+      aq.fs AS fs_hash,
       cardinality_error_with_aqo[array_length(cardinality_error_with_aqo, 1)] AS cerror,
       executions_with_aqo AS execs
     FROM aqo_queries aq JOIN aqo_query_stat aqs
@@ -274,7 +267,7 @@ ELSE
     FROM (
       SELECT
         aq.queryid AS query_id,
-        aq.fspace_hash AS fs_hash,
+        aq.fs AS fs_hash,
 		(SELECT AVG(t) FROM unnest(cardinality_error_without_aqo) t) AS cerror,
         executions_without_aqo AS execs
       FROM aqo_queries aq JOIN aqo_query_stat aqs
@@ -300,15 +293,15 @@ CREATE OR REPLACE FUNCTION aqo_reset_query(queryid_res bigint)
 RETURNS integer AS $$
 DECLARE
   num integer;
-  fs  bigint;
+  lfs  bigint;
 BEGIN
   IF (queryid_res = 0) THEN
     raise WARNING '[AQO] Reset common feature space.'
   END IF;
 
-  SELECT fspace_hash FROM aqo_queries WHERE queryid = queryid_res INTO fs;
-  SELECT count(*) FROM aqo_data WHERE fspace_hash = fs INTO num;
-  DELETE FROM aqo_data WHERE fspace_hash = fs;
+  SELECT fs FROM aqo_queries WHERE queryid = queryid_res INTO lfs;
+  SELECT count(*) FROM aqo_data WHERE fs = lfs INTO num;
+  DELETE FROM aqo_data WHERE fs = lfs;
   RETURN num;
 END;
 $$ LANGUAGE plpgsql;
@@ -329,7 +322,7 @@ RETURNS TABLE (
 	"err_aqo"		TEXT,
 	"iters_aqo"		BIGINT
 ) AS $$
-SELECT	learn_aqo,use_aqo,auto_tuning,fspace_hash,
+SELECT	learn_aqo,use_aqo,auto_tuning,fs,
 		to_char(execution_time_without_aqo[n4],'9.99EEEE'),
 		to_char(cardinality_error_without_aqo[n2],'9.99EEEE'),
 		executions_without_aqo,
@@ -350,35 +343,18 @@ WHERE (aqs.queryid = aq.queryid) AND
 	aqs.queryid = $1;
 $$ LANGUAGE SQL;
 
-/* CREATE FUNCTION aqo_enable_query(hash bigint)
-RETURNS VOID AS $$
-UPDATE aqo_queries SET
-	learn_aqo = 'true',
-	use_aqo = 'true'
-	WHERE queryid = $1;
-$$ LANGUAGE SQL; 
-
-CREATE FUNCTION aqo_disable_query(hash bigint)
-RETURNS VOID AS $$
-UPDATE aqo_queries SET
-	learn_aqo = 'false',
-	use_aqo = 'false',
-	auto_tuning = 'false'
-	WHERE queryid = $1;
-$$ LANGUAGE SQL;
-*/
-
-CREATE FUNCTION aqo_enable_query(hash bigint)
+CREATE FUNCTION aqo_enable_query(queryid bigint)
 RETURNS void
 AS 'MODULE_PATHNAME', 'aqo_enable_query'
 LANGUAGE C STRICT VOLATILE;
 
-CREATE FUNCTION aqo_disable_query(hash bigint)
+CREATE FUNCTION aqo_disable_query(queryid bigint)
 RETURNS void
 AS 'MODULE_PATHNAME', 'aqo_enable_query'
 LANGUAGE C STRICT VOLATILE;
 
-CREATE FUNCTION aqo_queries_update(learn_aqo int, use_aqo int, auto_tuning int)
-RETURNS void
+CREATE FUNCTION aqo_queries_update(queryid bigint, fs bigint, learn_aqo bool,
+								   use_aqo bool, auto_tuning bool)
+RETURNS bool
 AS 'MODULE_PATHNAME', 'aqo_queries_update'
-LANGUAGE C STRICT VOLATILE;
+LANGUAGE C VOLATILE;

@@ -144,7 +144,7 @@
 #include "utils/snapmgr.h"
 
 #include "machine_learning.h"
-#include "storage.h"
+//#include "storage.h"
 
 /* Check PostgreSQL version (9.6.0 contains important changes in planner) */
 #if PG_VERSION_NUM < 90600
@@ -200,6 +200,8 @@ typedef struct QueryContextData
 	double		planning_time;
 } QueryContextData;
 
+struct StatEntry;
+
 extern double predicted_ppi_rows;
 extern double fss_ppi_hash;
 
@@ -251,18 +253,10 @@ int get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash);
 
 
 /* Storage interaction */
-extern bool file_find_query(uint64 queryid);
 extern bool load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 						 bool isSafe);
 extern bool update_fss_ext(uint64 fs, int fss, OkNNrdata *data,
 						   List *reloids, bool isTimedOut);
-extern bool my_index_insert(Relation indexRelation,	Datum *values, bool *isnull,
-							ItemPointer heap_t_ctid, Relation heapRelation,
-							IndexUniqueCheck checkUnique);
-void init_deactivated_queries_storage(void);
-void fini_deactivated_queries_storage(void);
-extern bool query_is_deactivated(uint64 query_hash);
-extern void add_deactivated_query(uint64 query_hash);
 
 /* Query preprocessing hooks */
 extern void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
@@ -283,7 +277,7 @@ void aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction,
 void aqo_ExecutorEnd(QueryDesc *queryDesc);
 
 /* Automatic query tuning */
-extern void automatical_query_tuning(uint64 query_hash, StatEntry *stat);
+extern void automatical_query_tuning(uint64 query_hash, struct StatEntry *stat);
 
 /* Utilities */
 extern int int64_compare(const void *a, const void *b);

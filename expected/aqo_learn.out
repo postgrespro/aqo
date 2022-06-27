@@ -277,7 +277,15 @@ GROUP BY (query_text) ORDER BY (md5(query_text))
 
 DROP TABLE tmp1;
 SET aqo.mode = 'controlled';
-UPDATE aqo_queries SET learn_aqo = false, use_aqo = false, auto_tuning = false;
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, false, false, false)
+; -- Disable all AQO query classes
+ count 
+-------
+     8
+(1 row)
+
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
                                     QUERY PLAN                                    
@@ -376,7 +384,15 @@ WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
          ->  Seq Scan on aqo_test1 t4  (cost=0.00..1.20 rows=20 width=8)
 (13 rows)
 
-UPDATE aqo_queries SET learn_aqo = false, use_aqo = true, auto_tuning = false;
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, false, true, false)
+; -- learn = false, use = true, tuning = false
+ count 
+-------
+     8
+(1 row)
+
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
                                     QUERY PLAN                                    
@@ -707,10 +723,10 @@ DROP TABLE aqo_test0;
 DROP INDEX aqo_test1_idx_a;
 DROP TABLE aqo_test1;
 -- XXX: extension dropping doesn't clear file storage. Do it manually.
-SELECT aqo_reset();
- aqo_reset 
------------
-        44
+SELECT 1 FROM aqo_reset();
+ ?column? 
+----------
+        1
 (1 row)
 
 DROP EXTENSION aqo;

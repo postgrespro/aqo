@@ -5,6 +5,7 @@
 #include "utils/array.h"
 #include "utils/dsa.h" /* Public structs have links to DSA memory blocks */
 
+#include "aqo.h"
 #include "machine_learning.h"
 
 #define STAT_SAMPLE_SIZE	(20)
@@ -74,7 +75,8 @@ typedef struct DataEntry
 typedef struct QueriesEntry
 {
 	uint64	queryid;
-	uint64	fspace_hash;
+
+	uint64	fs;
 	bool	learn_aqo;
 	bool	use_aqo;
 	bool	auto_tuning;
@@ -102,11 +104,18 @@ extern bool load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 extern void aqo_data_flush(void);
 extern void aqo_data_load(void);
 
-extern QueriesEntry *aqo_queries_store(uint64 queryid, uint64 fspace_hash, bool learn_aqo,
-									   bool use_aqo, bool auto_tuning);
+extern bool aqo_queries_find(uint64 queryid, QueryContextData *ctx);
+extern bool aqo_queries_store(uint64 queryid, uint64 fs, bool learn_aqo,
+							  bool use_aqo, bool auto_tuning);
 extern void aqo_queries_flush(void);
 extern void aqo_queries_load(void);
-/* Utility routines */
-extern ArrayType *form_vector(double *vector, int nrows);
+
+/*
+ * Machinery for deactivated queries cache.
+ * TODO: Should live in a custom memory context
+ */
+extern void init_deactivated_queries_storage(void);
+extern bool query_is_deactivated(uint64 query_hash);
+extern void add_deactivated_query(uint64 query_hash);
 
 #endif /* STORAGE_H */

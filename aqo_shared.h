@@ -42,6 +42,7 @@ typedef struct AQOSharedState
 	bool		data_changed;
 
 	LWLock		queries_lock;  /* lock for access to queries storage */
+	bool		queries_changed;
 } AQOSharedState;
 
 
