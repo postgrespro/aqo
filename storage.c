@@ -19,10 +19,9 @@
 
 #include <unistd.h>
 
-#include "access/heapam.h"
-#include "access/table.h"
-#include "access/tableam.h"
+#include "funcapi.h"
 #include "miscadmin.h"
+#include "pgstat.h"
 
 #include "aqo.h"
 #include "aqo_shared.h"
@@ -31,12 +30,73 @@
 #include "learn_cache.h"
 #include "storage.h"
 
-#define AQO_DATA_COLUMNS	(7)
+
+/* AQO storage file names */
+#define PGAQO_STAT_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_statistics.stat"
+#define PGAQO_TEXT_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_query_texts.stat"
+#define PGAQO_DATA_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_data.stat"
+#define PGAQO_QUERIES_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_queries.stat"
+
+#define AQO_DATA_COLUMNS			(7)
+#define FormVectorSz(v_name)		(form_vector((v_name), (v_name ## _size)))
+
+
+typedef enum {
+	QUERYID = 0, EXEC_TIME_AQO, EXEC_TIME, PLAN_TIME_AQO, PLAN_TIME,
+	EST_ERROR_AQO, EST_ERROR, NEXECS_AQO, NEXECS, TOTAL_NCOLS
+} aqo_stat_cols;
+
+typedef enum {
+	QT_QUERYID = 0, QT_QUERY_STRING, QT_TOTAL_NCOLS
+} aqo_qtexts_cols;
+
+typedef enum {
+	AD_FS = 0, AD_FSS, AD_NFEATURES, AD_FEATURES, AD_TARGETS, AD_RELIABILITY,
+	AD_OIDS, AD_TOTAL_NCOLS
+} aqo_data_cols;
+
+typedef enum {
+	AQ_QUERYID = 0, AQ_FS, AQ_LEARN_AQO, AQ_USE_AQO, AQ_AUTO_TUNING,
+	AQ_TOTAL_NCOLS
+} aqo_queries_cols;
+
+typedef void* (*form_record_t) (void *ctx, size_t *size);
+typedef void (*deform_record_t) (void *data, size_t size);
+
+
+HTAB *stat_htab = NULL;
+HTAB *queries_htab = NULL;
+HTAB *qtexts_htab = NULL;
+dsa_area *qtext_dsa = NULL;
+HTAB *data_htab = NULL;
+dsa_area *data_dsa = NULL;
 HTAB *deactivated_queries = NULL;
 
-static ArrayType *form_matrix(double *matrix, int nrows, int ncols);
+/* Used to check data file consistency */
+static const uint32 PGAQO_FILE_HEADER = 123467589;
+static const uint32 PGAQO_PG_MAJOR_VERSION = PG_VERSION_NUM / 100;
 
-#define FormVectorSz(v_name)			(form_vector((v_name), (v_name ## _size)))
+
+static ArrayType *form_matrix(double *matrix, int nrows, int ncols);
+static void dsa_init(void);
+static int data_store(const char *filename, form_record_t callback,
+					  long nrecs, void *ctx);
+static void data_load(const char *filename, deform_record_t callback, void *ctx);
+static size_t _compute_data_dsa(const DataEntry *entry);
+
+PG_FUNCTION_INFO_V1(aqo_query_stat);
+PG_FUNCTION_INFO_V1(aqo_query_texts);
+PG_FUNCTION_INFO_V1(aqo_data);
+PG_FUNCTION_INFO_V1(aqo_queries);
+PG_FUNCTION_INFO_V1(aqo_stat_remove);
+PG_FUNCTION_INFO_V1(aqo_qtexts_remove);
+PG_FUNCTION_INFO_V1(aqo_data_remove);
+PG_FUNCTION_INFO_V1(aqo_queries_remove);
+PG_FUNCTION_INFO_V1(aqo_enable_query);
+PG_FUNCTION_INFO_V1(aqo_disable_query);
+PG_FUNCTION_INFO_V1(aqo_queries_update);
+PG_FUNCTION_INFO_V1(aqo_reset);
+
 
 bool
 load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids, bool isSafe)
@@ -141,75 +201,6 @@ add_deactivated_query(uint64 queryid)
 	hash_search(deactivated_queries, &queryid, HASH_ENTER, NULL);
 }
 
-/* *****************************************************************************
- *
- * Implementation of the AQO file storage
- *
- **************************************************************************** */
-
-#include "funcapi.h"
-#include "pgstat.h"
-
-#define PGAQO_STAT_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_statistics.stat"
-#define PGAQO_TEXT_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_query_texts.stat"
-#define PGAQO_DATA_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_data.stat"
-#define PGAQO_QUERIES_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_queries.stat"
-
-PG_FUNCTION_INFO_V1(aqo_query_stat);
-PG_FUNCTION_INFO_V1(aqo_query_texts);
-PG_FUNCTION_INFO_V1(aqo_data);
-PG_FUNCTION_INFO_V1(aqo_queries);
-PG_FUNCTION_INFO_V1(aqo_stat_remove);
-PG_FUNCTION_INFO_V1(aqo_qtexts_remove);
-PG_FUNCTION_INFO_V1(aqo_data_remove);
-PG_FUNCTION_INFO_V1(aqo_queries_remove);
-PG_FUNCTION_INFO_V1(aqo_enable_query);
-PG_FUNCTION_INFO_V1(aqo_disable_query);
-PG_FUNCTION_INFO_V1(aqo_queries_update);
-PG_FUNCTION_INFO_V1(aqo_reset);
-
-typedef enum {
-	QUERYID = 0, EXEC_TIME_AQO, EXEC_TIME, PLAN_TIME_AQO, PLAN_TIME,
-	EST_ERROR_AQO, EST_ERROR, NEXECS_AQO, NEXECS, TOTAL_NCOLS
-} aqo_stat_cols;
-
-typedef enum {
-	QT_QUERYID = 0, QT_QUERY_STRING, QT_TOTAL_NCOLS
-} aqo_qtexts_cols;
-
-typedef enum {
-	AD_FS = 0, AD_FSS, AD_NFEATURES, AD_FEATURES, AD_TARGETS, AD_RELIABILITY,
-	AD_OIDS, AD_TOTAL_NCOLS
-} aqo_data_cols;
-
-typedef enum {
-	AQ_QUERYID = 0, AQ_FS, AQ_LEARN_AQO, AQ_USE_AQO, AQ_AUTO_TUNING,
-	AQ_TOTAL_NCOLS
-} aqo_queries_cols;
-
-typedef void* (*form_record_t) (void *ctx, size_t *size);
-typedef void (*deform_record_t) (void *data, size_t size);
-
-bool aqo_use_file_storage;
-
-HTAB *stat_htab = NULL;
-HTAB *queries_htab = NULL;
-
-HTAB *qtexts_htab = NULL;
-dsa_area *qtext_dsa = NULL;
-
-HTAB *data_htab = NULL;
-dsa_area *data_dsa = NULL;
-
-/* Used to check data file consistency */
-static const uint32 PGAQO_FILE_HEADER = 123467589;
-static const uint32 PGAQO_PG_MAJOR_VERSION = PG_VERSION_NUM / 100;
-
-static void dsa_init(void);
-static int data_store(const char *filename, form_record_t callback,
-					  long nrecs, void *ctx);
-static void data_load(const char *filename, deform_record_t callback, void *ctx);
-static size_t _compute_data_dsa(const DataEntry *entry);
 /*
  * Update AQO statistics.
  *

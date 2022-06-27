@@ -1,7 +1,7 @@
 \set citizens	1000
 SET aqo.join_threshold = 0;
 SET aqo.mode = 'disabled';
-SET aqo.force_collect_stat = 'on';
+SET aqo.force_collect_stat = 'off';
 CREATE TABLE person (
     id serial PRIMARY KEY,
     age integer,
@@ -20,6 +20,7 @@ INSERT INTO person (id,age,gender,passport)
 	 FROM (SELECT *, 14+(id % 60) AS age FROM generate_series(1, :citizens) id) AS q1
 	);
 CREATE EXTENSION aqo;
+SET aqo.force_collect_stat = 'on';
 SELECT count(*) FROM person WHERE age<18;
  count 
 -------
