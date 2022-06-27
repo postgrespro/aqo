@@ -169,7 +169,6 @@ typedef enum
 }	AQO_MODE;
 
 extern int	aqo_mode;
-extern bool	aqo_enabled;
 extern bool	force_collect_stat;
 extern bool aqo_show_hash;
 extern bool aqo_show_details;

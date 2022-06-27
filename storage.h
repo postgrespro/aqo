@@ -82,8 +82,6 @@ typedef struct QueriesEntry
 	bool	auto_tuning;
 } QueriesEntry;
 
-extern bool aqo_use_file_storage;
-
 extern HTAB *stat_htab;
 extern HTAB *qtexts_htab;
 extern HTAB *queries_htab; /* TODO */
