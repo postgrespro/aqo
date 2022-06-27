@@ -137,30 +137,18 @@ call_default_planner(Query *parse,
 }
 
 /*
- * Check, that a 'CREATE EXTENSION aqo' command has been executed.
- * This function allows us to execute the get_extension_oid routine only once
- * at each backend.
- * If any AQO-related table is missed we will set aqo_enabled to false (see
- * a storage implementation module).
+ * Can AQO be used for the query?
  */
 static bool
-aqoIsEnabled(void)
+aqoIsEnabled(Query *parse)
 {
-	if (creating_extension)
-		/* Nothing to tell in this mode. */
+	if (creating_extension ||
+		(aqo_mode == AQO_MODE_DISABLED && !force_collect_stat) ||
+		(parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT &&
+		parse->commandType != CMD_UPDATE && parse->commandType != CMD_DELETE))
 		return false;
 
-	if (aqo_enabled)
-		/*
-		 * Fast path. Dropping should be detected by absence of any AQO-related
-		 * table.
-		 */
-		return true;
-
-	if (get_extension_oid("aqo", true) != InvalidOid)
-		aqo_enabled = true;
-
-	return aqo_enabled;
+	return true;
 }
 
 /*
@@ -186,12 +174,8 @@ aqo_planner(Query *parse,
 	  * the heap during planning. Transactions are synchronized between parallel
 	  * sections. See GetCurrentCommandId() comments also.
 	  */
-	if (!aqoIsEnabled() ||
-		(parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT &&
-		parse->commandType != CMD_UPDATE && parse->commandType != CMD_DELETE) ||
-		creating_extension ||
+	if (!aqoIsEnabled(parse) ||
 		IsInParallelMode() || IsParallelWorker() ||
-		(aqo_mode == AQO_MODE_DISABLED && !force_collect_stat) ||
 		strstr(application_name, "postgres_fdw") != NULL || /* Prevent distributed deadlocks */
 		strstr(application_name, "pgfdw:") != NULL || /* caused by fdw */
 		isQueryUsingSystemRelation(parse) ||

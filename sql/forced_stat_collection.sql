@@ -2,7 +2,7 @@
 
 SET aqo.join_threshold = 0;
 SET aqo.mode = 'disabled';
-SET aqo.force_collect_stat = 'on';
+SET aqo.force_collect_stat = 'off';
 
 CREATE TABLE person (
     id serial PRIMARY KEY,
@@ -24,6 +24,7 @@ INSERT INTO person (id,age,gender,passport)
 	);
 
 CREATE EXTENSION aqo;
+SET aqo.force_collect_stat = 'on';
 
 SELECT count(*) FROM person WHERE age<18;
 SELECT count(*) FROM person WHERE age<18 AND passport IS NOT NULL;

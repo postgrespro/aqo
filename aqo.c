@@ -36,8 +36,6 @@ void _PG_init(void);
 
 /* Strategy of determining feature space for new queries. */
 int		aqo_mode;
-bool	aqo_enabled = false; /* Signals that CREATE EXTENSION have executed and
-								all extension tables is ready for use. */
 bool	force_collect_stat;
 
 /*
@@ -216,18 +214,6 @@ _PG_init(void)
 							 NULL
 	);
 
-	DefineCustomBoolVariable(
-							 "aqo.use_file_storage",
-							 "Used for smooth transition from table storage",
-							 NULL,
-							 &aqo_use_file_storage,
-							 true,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL
-	);
 	DefineCustomIntVariable("aqo.join_threshold",
 							"Sets the threshold of number of JOINs in query beyond which AQO is used.",
 							NULL,

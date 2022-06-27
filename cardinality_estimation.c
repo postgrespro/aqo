@@ -22,6 +22,7 @@
 #include "aqo.h"
 #include "hash.h"
 #include "machine_learning.h"
+#include "storage.h"
 
 #ifdef AQO_DEBUG_PRINT
 static void
