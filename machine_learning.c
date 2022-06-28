@@ -48,10 +48,14 @@ OkNNr_allocate(int ncols)
 	int			i;
 
 	if (ncols > 0)
-		for (i = 0; i < aqo_K; ++i)
-			data->matrix[i] = palloc0(sizeof(double) * ncols);
+		for (i = 0; i < aqo_K; i++)
+			data->matrix[i] = palloc0(ncols * sizeof(double));
+	else
+		for (i = 0; i < aqo_K; i++)
+			data->matrix[i] = NULL;
 
 	data->cols = ncols;
+	data->rows  = -1;
 	return data;
 }
 

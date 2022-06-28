@@ -235,8 +235,8 @@ SELECT * FROM check_estimated_rows('
    SELECT *
    FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
    WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
-');
-SELECT count(*) FROM -- Learn on the query
+'); -- Learn on the query
+SELECT count(*) FROM
   (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1
 ;
 SELECT query_text FROM aqo_query_texts WHERE queryid <> 0; -- Check query
