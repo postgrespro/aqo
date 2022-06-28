@@ -93,7 +93,7 @@ predict_for_relation(List *clauses, List *selectivities, List *relsigns,
 		 */
 
 		/* Try to search in surrounding feature spaces for the same node */
-		if (!load_aqo_data(query_context.fspace_hash, *fss, data, NULL, use_wide_search))
+		if (!load_aqo_data(query_context.fspace_hash, *fss, data, NULL, use_wide_search, features))
 			result = -1;
 		else
 		{
