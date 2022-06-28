@@ -34,6 +34,7 @@ void _PG_init(void);
 /* Strategy of determining feature space for new queries. */
 int		aqo_mode = AQO_MODE_CONTROLLED;
 bool	force_collect_stat;
+bool	aqo_predict_with_few_neighbors;
 
 /*
  * Show special info in EXPLAIN mode.
@@ -71,7 +72,7 @@ int			auto_tuning_infinite_loop = 8;
 /* Machine learning parameters */
 
 /* The number of nearest neighbors which will be chosen for ML-operations */
-int			aqo_k = 3;
+int			aqo_k;
 double		log_selectivity_lower_bound = -30;
 
 /*
@@ -292,6 +293,29 @@ _PG_init(void)
 							NULL,
 							NULL
 	);
+
+	DefineCustomIntVariable("aqo.k_neighbors_threshold",
+							"Set the threshold of number of neighbors for predicting.",
+							NULL,
+							&aqo_k,
+							3,
+							1, INT_MAX / 1000,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
+	DefineCustomBoolVariable("aqo.predict_with_few_neighbors",
+							"Make prediction with less neighbors than we should have.",
+							 NULL,
+							 &aqo_predict_with_few_neighbors,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 lc_assign_hook,
+							 NULL);
 
 	prev_shmem_startup_hook						= shmem_startup_hook;
 	shmem_startup_hook							= aqo_init_shmem;

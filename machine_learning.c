@@ -74,7 +74,7 @@ fs_distance(double *a, double *b, int len)
 		res += (a[i] - b[i]) * (a[i] - b[i]);
 	}
 	if (len != 0)
-		res = sqrt(res / len);
+		res = sqrt(res);
 	return res;
 }
 
@@ -147,6 +147,9 @@ OkNNr_predict(OkNNrdata *data, double *features)
 	double	result = 0.;
 
 	Assert(data != NULL);
+
+	if (!aqo_predict_with_few_neighbors && data->rows < aqo_k)
+		return -1.;
 
 	for (i = 0; i < data->rows; ++i)
 		distances[i] = fs_distance(data->matrix[i], features, data->cols);
