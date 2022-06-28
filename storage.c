@@ -983,8 +983,10 @@ aqo_query_texts(PG_FUNCTION_ARGS)
 	hash_seq_init(&hash_seq, qtexts_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
+		char *ptr;
+
 		Assert(DsaPointerIsValid(entry->qtext_dp));
-		char *ptr = dsa_get_address(qtext_dsa, entry->qtext_dp);
+		ptr = dsa_get_address(qtext_dsa, entry->qtext_dp);
 		values[QT_QUERYID] = Int64GetDatum(entry->queryid);
 		values[QT_QUERY_STRING] = CStringGetTextDatum(ptr);
 		tuplestore_putvalues(tupstore, tupDesc, values, nulls);
@@ -1170,7 +1172,7 @@ build_knn_matrix(OkNNrdata *data, const OkNNrdata *temp_data)
 {
 	Assert(data->cols == temp_data->cols);
 
-	if (data->rows >= 0)
+	if (data->rows > 0)
 		/* trivial strategy - use first suitable record and ignore others */
 		return;
 
@@ -1201,8 +1203,7 @@ _fill_knn_data(const DataEntry *entry, List **reloids)
 	/* Check invariants */
 	Assert(entry->rows < aqo_K);
 	Assert(ptr != NULL);
-	Assert(entry->key.fs == ((data_key *)ptr)->fs &&
-		   entry->key.fss == ((data_key *)ptr)->fss);
+	Assert(entry->key.fss == ((data_key *)ptr)->fss);
 
 	ptr += sizeof(data_key);
 
@@ -1227,6 +1228,7 @@ _fill_knn_data(const DataEntry *entry, List **reloids)
 	Assert(offset <= sz);
 
 	if (reloids == NULL)
+		/* Isn't needed to load reloids list */
 		return data;
 
 	/* store list of relations. XXX: optimize ? */
@@ -1260,26 +1262,72 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 	dsa_init();
 
 	LWLockAcquire(&aqo_state->data_lock, LW_EXCLUSIVE);
-	entry = (DataEntry *) hash_search(data_htab, &key, HASH_FIND, &found);
 
-	if (!found)
-		goto end;
-
-	/* One entry with all correctly filled fields is found */
-	Assert(entry);
-	Assert(DsaPointerIsValid(entry->data_dp));
-
-	if (entry->cols != data->cols)
+	if (!wideSearch)
 	{
-		/* Collision happened? */
-		elog(LOG, "[AQO] Does a collision happened? Check it if possible (fs: %lu, fss: %d).",
-			 fs, fss);
+		entry = (DataEntry *) hash_search(data_htab, &key, HASH_FIND, &found);
+
+		if (!found)
+			goto end;
+
+		/* One entry with all correctly filled fields is found */
+		Assert(entry);
+		Assert(DsaPointerIsValid(entry->data_dp));
+
+		if (entry->cols != data->cols)
+		{
+			/* Collision happened? */
+			elog(LOG, "[AQO] Does a collision happened? Check it if possible (fs: %lu, fss: %d).",
+				 fs, fss);
+			found = false;
+			goto end;
+		}
+
+		temp_data = _fill_knn_data(entry, reloids);
+		build_knn_matrix(data, temp_data);
+	}
+	else
+	/* Iterate across all elements of the table. XXX: Maybe slow. */
+	{
+		HASH_SEQ_STATUS	hash_seq;
+		int				noids = -1;
+
 		found = false;
-		goto end;
+		hash_seq_init(&hash_seq, data_htab);
+		while ((entry = hash_seq_search(&hash_seq)) != NULL)
+		{
+			List *tmp_oids = NIL;
+
+			if (entry->key.fss != fss || entry->cols != data->cols)
+				continue;
+
+			temp_data = _fill_knn_data(entry, &tmp_oids);
+
+			if (data->rows > 0 && list_length(tmp_oids) != noids)
+			{
+				/* Dubious case. So log it and skip these data */
+				elog(LOG,
+					 "[AQO] different number depended oids for the same fss %d: "
+					 "%d and %d correspondingly.",
+					 fss, list_length(tmp_oids), noids);
+				Assert(noids >= 0);
+				list_free(tmp_oids);
+				continue;
+			}
+
+			noids = list_length(tmp_oids);
+
+			if (reloids != NULL && *reloids == NIL)
+				*reloids = tmp_oids;
+			else
+				list_free(tmp_oids);
+
+			build_knn_matrix(data, temp_data);
+			found = true;
+		}
 	}
 
-	temp_data = _fill_knn_data(entry, reloids);
-	build_knn_matrix(data, temp_data);
+	Assert(!found || (data->rows > 0 && data->rows <= aqo_K));
 end:
 	LWLockRelease(&aqo_state->data_lock);
 
@@ -1364,7 +1412,10 @@ aqo_data(PG_FUNCTION_ARGS)
 
 			elems = palloc(sizeof(*elems) * entry->nrels);
 			for(i = 0; i < entry->nrels; i++)
+			{
 				elems[i] = ObjectIdGetDatum(*(Oid *)ptr);
+				ptr += sizeof(Oid);
+			}
 
 			array = construct_array(elems, entry->nrels, OIDOID,
 									sizeof(Oid), true, TYPALIGN_INT);

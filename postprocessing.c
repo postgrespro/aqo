@@ -109,9 +109,8 @@ learn_agg_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 	uint64			fs = query_context.fspace_hash;
 	int				child_fss;
 	double			target;
-	OkNNrdata		data;
+	OkNNrdata	   *data = OkNNr_allocate(0);
 	int				fss;
-	int				i;
 
 	/*
 	 * Learn 'not executed' nodes only once, if no one another knowledge exists
@@ -125,13 +124,10 @@ learn_agg_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 								   NIL, NULL,NULL);
 	fss = get_grouped_exprs_hash(child_fss, aqo_node->grouping_exprs);
 
-	memset(&data, 0, sizeof(OkNNrdata));
-	for (i = 0; i < aqo_K; i++)
-		data.matrix[i] = NULL;
-
 	/* Critical section */
-	atomic_fss_learn_step(fs, fss, &data, NULL,
+	atomic_fss_learn_step(fs, fss, data, NULL,
 						  target, rfactor, rels->hrels, ctx->isTimedOut);
+	OkNNr_free(data);
 	/* End of critical section */
 }
 
