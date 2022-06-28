@@ -2,15 +2,21 @@ CREATE EXTENSION aqo;
 SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
-
+set aqo.show_hash = 'off';
+SET aqo.k_neighbors_threshold = 1;
+SET enable_nestloop = 'off';
+SET enable_mergejoin = 'off';
 SET enable_material = 'off';
 
 DROP TABLE IF EXISTS a,b CASCADE;
-CREATE TABLE a (x int);
-INSERT INTO a (x) SELECT mod(ival,10) FROM generate_series(1,1000) As ival;
 
-CREATE TABLE b (y int);
-INSERT INTO b (y) SELECT mod(ival + 1,10) FROM generate_series(1,1000) As ival;
+-- Create tables with correlated datas in columns
+CREATE TABLE a (x1 int, x2 int, x3 int);
+INSERT INTO a (x1, x2, x3) SELECT mod(ival,10), mod(ival,10), mod(ival,10) FROM generate_series(1,1000) As ival;
+
+CREATE TABLE b (y1 int, y2 int, y3 int);
+INSERT INTO b (y1, y2, y3) SELECT mod(ival + 1,10), mod(ival + 1,10), mod(ival + 1,10) FROM generate_series(1,1000) As ival;
+
 
 --
 -- Returns string-by-string explain of a query. Made for removing some strings
@@ -26,55 +32,111 @@ $$ LANGUAGE PLPGSQL;
 
 -- no one predicted rows. we use knowledge cardinalities of the query
 -- in the next queries with the same fss_hash
-SELECT str AS result
-FROM expln('
-SELECT x FROM A where x = 5;') AS str;
 
 SELECT str AS result
 FROM expln('
-SELECT x FROM A,B WHERE x = 5 AND A.x = B.y;') AS str
-; -- Find cardinality for SCAN A(x=5) from a neighbour class, created by the
--- query, executed above.
+SELECT x1,y1 FROM A,B WHERE x1 = 5 AND x2 = 5 AND A.x1 = B.y1;') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
 SELECT str AS result
 FROM expln('
-SELECT x, sum(x) FROM A,B WHERE y = 5 AND A.x = B.y group by(x);') AS str
-; -- Find the JOIN cardinality from a neighbour class.
+SELECT x1,y1 FROM A LEFT JOIN b ON A.x1 = B.y1 WHERE x1 = 5 AND x2 = 5;') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
--- cardinality 100 in the first Seq Scan on a
 SELECT str AS result
 FROM expln('
-SELECT x, sum(x) FROM A WHERE x = 5 group by(x);') AS str;
+SELECT x1,y1 FROM A,B WHERE x1 < 5 AND x2 < 5 AND A.x1 = B.y1;') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
--- no one predicted rows. we use knowledge cardinalities of the query
--- in the next queries with the same fss_hash
+--query contains nodes that have already been predicted
+
 SELECT str AS result
 FROM expln('
-SELECT x FROM A where x < 10 group by(x);') AS str
-WHERE str NOT LIKE '%Memory%';
--- cardinality 1000 in Seq Scan on a
+SELECT x1,y1 FROM A,B WHERE x1 < 10 AND x2 < 5 AND A.x1 = B.y1;') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+
 SELECT str AS result
 FROM expln('
-SELECT x,y FROM A,B WHERE x < 10 AND A.x = B.y;') AS str
-WHERE str NOT LIKE '%Memory%';
+SELECT x1,y1 FROM A,B WHERE x1 > 2 AND x2 > 2 AND A.x1 = B.y1;') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
--- cardinality 100 in Seq Scan on a and Seq Scan on b
 SELECT str AS result
 FROM expln('
-SELECT x FROM A,B where x < 10 and y > 10 group by(x);') AS str
-WHERE str NOT LIKE '%Memory%';
+SELECT x1,y1 FROM A,B WHERE x1 > 5 AND x2 > 5 AND x3 < 10 AND A.x1 = B.y1;') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
---
--- TODO:
--- Not executed case. What could we do better here?
---
 SELECT str AS result
 FROM expln('
-SELECT x,y FROM A,B WHERE x < 10 and y > 10 AND A.x = B.y;') AS str
-WHERE str NOT LIKE '%Memory%'
-;
+SELECT x1,y1 FROM A,B WHERE x1 < 5 AND x2 < 5 AND x3 < 10 AND A.x1 = B.y1;') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
-RESET enable_material;
-DROP TABLE a,b CASCADE;
-SELECT true FROM aqo_reset();
+--query contains nodes that have already been predicted
+
+SELECT str AS result
+FROM expln('
+SELECT x1,y1 FROM A,B WHERE x1 < 5 AND x2 < 4 AND x3 < 5 AND A.x1 = B.y1;') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+
+SELECT str AS result
+FROM expln('
+SELECT x1 FROM A,B WHERE x1 < 4 AND x3 > 1 GROUP BY(x1);') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+
+--query contains nodes that have already been predicted
+
+SELECT str AS result
+FROM expln('
+SELECT x1 FROM A,B WHERE x1 < 4 AND x3 > 1 GROUP BY(x1);') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+
+SELECT str AS result
+FROM expln('
+SELECT x1 FROM A,B WHERE x1 < 4 AND x3 > 2 GROUP BY(x1);') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+
+SELECT str AS result
+FROM expln('
+SELECT x1 FROM A,B WHERE x1 < 3 AND x2 < 5 AND x3 > 1 GROUP BY(x1);') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+
+SELECT str AS result
+FROM expln('
+SELECT x1 FROM A,B WHERE x1 > 1 AND x2 < 4 AND x3 > 1 GROUP BY(x1);') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+
+SELECT str AS result
+FROM expln('
+SELECT x1 FROM A,B WHERE x1 > 1 AND x2 < 4 AND x3 < 5 GROUP BY(x1);') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+
+SELECT str AS result
+FROM expln('
+SELECT x1 FROM A,B WHERE x1 < 4 AND x2 < 5 AND x3 > 1 and y1 > 2 GROUP BY(x1);') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+
+--query contains nodes that have already been predicted
+
+SELECT str AS result
+FROM expln('
+SELECT x1 FROM A,B WHERE x1 < 3 AND x2 < 4 AND x3 > 1 and y1 > 2 GROUP BY(x1);') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+
+CREATE TABLE c (z1 int, z2 int, z3 int);
+INSERT INTO c (z1, z2, z3) SELECT mod(ival + 1,10), mod(ival + 1,10), mod(ival + 1,10) FROM generate_series(1,1000) As ival;
+
+SELECT str AS result
+FROM expln('
+SELECT * FROM (a LEFT JOIN b ON a.x1 = b.y1) sc WHERE
+not exists (SELECT z1 FROM c WHERE sc.x1=c.z1 );') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+
+SELECT str AS result
+FROM expln('
+SELECT * FROM (A LEFT JOIN B ON A.x1 = B.y1) sc left join C on sc.x1=C.z1;') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+
+SELECT 1 FROM aqo_reset();
+DROP TABLE a;
+DROP TABLE b;
+DROP FUNCTION expln;
 DROP EXTENSION aqo CASCADE;
