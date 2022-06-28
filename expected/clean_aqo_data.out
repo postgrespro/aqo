@@ -11,10 +11,10 @@ SELECT * FROM a;
 (0 rows)
 
 SELECT 'a'::regclass::oid AS a_oid \gset
-SELECT aqo_cleanup();
- aqo_cleanup 
--------------
- (0,0)
+SELECT true FROM aqo_cleanup();
+ bool 
+------
+ t
 (1 row)
 
 /*
@@ -54,10 +54,10 @@ SELECT count(*) FROM aqo_query_stat WHERE
 (1 row)
 
 DROP TABLE a;
-SELECT aqo_cleanup();
- aqo_cleanup 
--------------
- (1,1)
+SELECT true FROM aqo_cleanup();
+ bool 
+------
+ t
 (1 row)
 
 /*
@@ -175,10 +175,10 @@ SELECT count(*) FROM aqo_query_stat WHERE
 (1 row)
 
 DROP TABLE a;
-SELECT aqo_cleanup();
- aqo_cleanup 
--------------
- (2,3)
+SELECT true FROM aqo_cleanup();
+ bool 
+------
+ t
 (1 row)
 
 /*
@@ -253,10 +253,10 @@ SELECT count(*) FROM aqo_query_stat WHERE
 (1 row)
 
 DROP TABLE b;
-SELECT aqo_cleanup();
- aqo_cleanup 
--------------
- (1,1)
+SELECT true FROM aqo_cleanup();
+ bool 
+------
+ t
 (1 row)
 
 -- lines corresponding to b_oid in theese tables deleted

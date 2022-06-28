@@ -540,7 +540,7 @@ SELECT * FROM check_estimated_rows('
         20 |     17
 (1 row)
 
-SELECT count(*) FROM -- Learn on the query
+SELECT count(*) FROM
   (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1
 ;
  count 
