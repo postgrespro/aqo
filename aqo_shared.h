@@ -35,6 +35,11 @@ typedef struct AQOSharedState
 	dsa_handle	qtexts_dsa_handler; /* DSA area for storing of query texts */
 	int			qtext_trancheid;
 	bool		qtexts_changed;
+
+	LWLock		data_lock; /* Lock for shared fields below */
+	dsa_handle	data_dsa_handler;
+	int			data_trancheid;
+	bool		data_changed;
 } AQOSharedState;
 
 

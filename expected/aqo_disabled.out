@@ -219,7 +219,7 @@ SELECT count(*) FROM aqo_queries WHERE query_hash <> fspace_hash; -- Should be z
 SELECT aqo_reset();
  aqo_reset 
 -----------
-         8
+        18
 (1 row)
 
 DROP EXTENSION aqo;

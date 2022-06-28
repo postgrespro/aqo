@@ -229,7 +229,7 @@ $fss_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_data;");
 my $pgb_fs_count = $node->safe_psql('postgres', "
 	SELECT count(*) FROM aqo_queries
 	WHERE fspace_hash IN (
-		SELECT fspace_hash FROM aqo_data
+		SELECT fs FROM aqo_data
 		WHERE
 			$aoid = ANY(oids) OR
 			$boid = ANY(oids) OR
@@ -243,7 +243,7 @@ $fs_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_queries;");
 my $pgb_fs_samples_count = $node->safe_psql('postgres', "
 	SELECT count(*) FROM aqo_query_texts
 	WHERE queryid IN (
-		SELECT fspace_hash FROM aqo_data
+		SELECT fs FROM aqo_data
 		WHERE
 			$aoid = ANY(oids) OR
 			$boid = ANY(oids) OR
@@ -258,7 +258,7 @@ is($pgb_fs_samples_count > 0, 1, "AQO query texts exists");
 my $pgb_stat_count = $node->safe_psql('postgres', "
 	SELECT count(*) FROM aqo_query_stat
 	WHERE queryid IN (
-		SELECT fspace_hash FROM aqo_data
+		SELECT fs FROM aqo_data
 		WHERE
 			$aoid = ANY(oids) OR
 			$boid = ANY(oids) OR

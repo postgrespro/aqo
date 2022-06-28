@@ -18,13 +18,13 @@ SELECT aqo_cleanup();
  */
 SELECT count(*) FROM aqo_data WHERE :a_oid=ANY(oids);
 SELECT count(*) FROM aqo_queries WHERE
-    aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids));
+    aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :a_oid=ANY(oids));
 SELECT count(*) FROM aqo_query_texts WHERE
     aqo_query_texts.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
-        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)));
+        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :a_oid=ANY(oids)));
 SELECT count(*) FROM aqo_query_stat WHERE
     aqo_query_stat.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
-        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)));
+        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :a_oid=ANY(oids)));
 
 DROP TABLE a;
 SELECT aqo_cleanup();
@@ -38,15 +38,15 @@ SELECT aqo_cleanup();
 */
 SELECT count(*) FROM aqo_data WHERE :a_oid=ANY(oids);
 SELECT count(*) FROM aqo_queries WHERE
-    aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)) AND
+    aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :a_oid=ANY(oids)) AND
         aqo_queries.fspace_hash = aqo_queries.query_hash;
 SELECT count(*) FROM aqo_query_texts WHERE
     aqo_query_texts.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
-        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)) AND
+        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :a_oid=ANY(oids)) AND
             aqo_queries.fspace_hash = aqo_queries.query_hash);
 SELECT count(*) FROM aqo_query_stat WHERE
     aqo_query_stat.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
-        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)) AND
+        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :a_oid=ANY(oids)) AND
             aqo_queries.fspace_hash = aqo_queries.query_hash);
 
 CREATE TABLE a();
@@ -70,23 +70,23 @@ SELECT 'b'::regclass::oid AS b_oid \gset
 -- new lines added to aqo_data
 SELECT count(*) FROM aqo_data WHERE :a_oid=ANY(oids);
 SELECT count(*) FROM aqo_queries WHERE
-    aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids));
+    aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :a_oid=ANY(oids));
 SELECT count(*) FROM aqo_query_texts WHERE
     aqo_query_texts.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
-        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)));
+        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :a_oid=ANY(oids)));
 SELECT count(*) FROM aqo_query_stat WHERE
     aqo_query_stat.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
-        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)));
+        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :a_oid=ANY(oids)));
 
 SELECT count(*) FROM aqo_data WHERE :b_oid=ANY(oids);
 SELECT count(*) FROM aqo_queries WHERE
-    aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :b_oid=ANY(oids));
+    aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :b_oid=ANY(oids));
 SELECT count(*) FROM aqo_query_texts WHERE
     aqo_query_texts.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
-        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :b_oid=ANY(oids)));
+        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :b_oid=ANY(oids)));
 SELECT count(*) FROM aqo_query_stat WHERE
     aqo_query_stat.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
-        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :b_oid=ANY(oids)));
+        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :b_oid=ANY(oids)));
 
 DROP TABLE a;
 SELECT aqo_cleanup();
@@ -99,29 +99,29 @@ SELECT aqo_cleanup();
  */
 SELECT count(*) FROM aqo_data WHERE :a_oid=ANY(oids);
 SELECT count(*) FROM aqo_queries WHERE
-    aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)) AND
+    aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :a_oid=ANY(oids)) AND
         aqo_queries.fspace_hash = aqo_queries.query_hash;
 SELECT count(*) FROM aqo_query_texts WHERE
     aqo_query_texts.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
-        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)) AND
+        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :a_oid=ANY(oids)) AND
             aqo_queries.fspace_hash = aqo_queries.query_hash);
 SELECT count(*) FROM aqo_query_stat WHERE
     aqo_query_stat.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
-        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :a_oid=ANY(oids)) AND
+        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :a_oid=ANY(oids)) AND
             aqo_queries.fspace_hash = aqo_queries.query_hash);
 
 -- lines corresponding to b_oid in all theese tables should remain
 SELECT count(*) FROM aqo_data WHERE :b_oid=ANY(oids);
 SELECT count(*) FROM aqo_queries WHERE
-    aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :b_oid=ANY(oids)) AND
+    aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :b_oid=ANY(oids)) AND
         aqo_queries.fspace_hash = aqo_queries.query_hash;
 SELECT count(*) FROM aqo_query_texts WHERE
     aqo_query_texts.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
-        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :b_oid=ANY(oids)) AND
+        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :b_oid=ANY(oids)) AND
             aqo_queries.fspace_hash = aqo_queries.query_hash);
 SELECT count(*) FROM aqo_query_stat WHERE
     aqo_query_stat.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
-        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :b_oid=ANY(oids)) AND
+        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :b_oid=ANY(oids)) AND
             aqo_queries.fspace_hash = aqo_queries.query_hash);
 
 DROP TABLE b;
@@ -130,15 +130,15 @@ SELECT aqo_cleanup();
 -- lines corresponding to b_oid in theese tables deleted
 SELECT count(*) FROM aqo_data WHERE :b_oid=ANY(oids);
 SELECT count(*) FROM aqo_queries WHERE
-    aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :b_oid=ANY(oids)) AND
+    aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :b_oid=ANY(oids)) AND
         aqo_queries.fspace_hash = aqo_queries.query_hash;
 SELECT count(*) FROM aqo_query_texts WHERE
     aqo_query_texts.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
-        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :b_oid=ANY(oids)) AND
+        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :b_oid=ANY(oids)) AND
             aqo_queries.fspace_hash = aqo_queries.query_hash);
 SELECT count(*) FROM aqo_query_stat WHERE
     aqo_query_stat.queryid = ANY(SELECT aqo_queries.query_hash FROM aqo_queries WHERE
-        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fspace_hash FROM aqo_data WHERE :b_oid=ANY(oids)) AND
+        aqo_queries.fspace_hash = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :b_oid=ANY(oids)) AND
             aqo_queries.fspace_hash = aqo_queries.query_hash);
 
 DROP EXTENSION aqo;

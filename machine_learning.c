@@ -125,6 +125,8 @@ OkNNr_predict(OkNNrdata *data, double *features)
 	double	w_sum;
 	double	result = 0.;
 
+	Assert(data != NULL);
+
 	for (i = 0; i < data->rows; ++i)
 		distances[i] = fs_distance(data->matrix[i], features, data->cols);
 

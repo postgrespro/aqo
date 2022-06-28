@@ -19,8 +19,9 @@ ALTER EXTENSION aqo SET SCHEMA test;
 SELECT count(*) FROM test;
 SELECT count(*) FROM test WHERE id < 10;
 
-SELECT query_text,learn_aqo, use_aqo, auto_tuning
+SELECT query_text, learn_aqo, use_aqo, auto_tuning
 FROM test.aqo_query_texts JOIN test.aqo_queries ON (queryid = query_hash)
+ORDER BY (md5(query_text))
 ; -- Check result. TODO: We want to find here both queries executed above
 
 -- Add schema which contains AQO to the end of search_path
@@ -29,8 +30,9 @@ SELECT set_config('search_path', current_setting('search_path') || ', test', fal
 SELECT count(*) FROM test;
 SELECT count(*) FROM test WHERE id < 10;
 
-SELECT query_text,learn_aqo, use_aqo, auto_tuning
+SELECT query_text, learn_aqo, use_aqo, auto_tuning
 FROM test.aqo_query_texts JOIN test.aqo_queries ON (queryid = query_hash)
+ORDER BY (md5(query_text))
 ; -- Check result.
 
 /*

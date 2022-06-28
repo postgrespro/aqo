@@ -46,7 +46,7 @@ SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
 DELETE FROM t WHERE x > 2;
 ANALYZE t;
 INSERT INTO t (x) (SELECT * FROM generate_series(3,5) AS x);
-TRUNCATE aqo_data;
+SELECT 1 FROM aqo_reset();
 
 SET statement_timeout = 800;
 SELECT *, pg_sleep(1) FROM t; -- Not learned
@@ -61,5 +61,6 @@ SELECT *, pg_sleep(1) FROM t; -- Get reliable data
 SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
 
 DROP TABLE t;
+SELECT 1 FROM aqo_reset();
 DROP EXTENSION aqo;
 DROP FUNCTION check_estimated_rows;

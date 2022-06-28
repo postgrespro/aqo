@@ -68,7 +68,12 @@ SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
 DELETE FROM t WHERE x > 2;
 ANALYZE t;
 INSERT INTO t (x) (SELECT * FROM generate_series(3,5) AS x);
-TRUNCATE aqo_data;
+SELECT 1 FROM aqo_reset();
+ ?column? 
+----------
+        1
+(1 row)
+
 SET statement_timeout = 800;
 SELECT *, pg_sleep(1) FROM t; -- Not learned
 NOTICE:  [AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data.
@@ -107,5 +112,11 @@ SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
 (1 row)
 
 DROP TABLE t;
+SELECT 1 FROM aqo_reset();
+ ?column? 
+----------
+        1
+(1 row)
+
 DROP EXTENSION aqo;
 DROP FUNCTION check_estimated_rows;

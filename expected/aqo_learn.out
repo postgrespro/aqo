@@ -252,7 +252,7 @@ WHERE aqt1.query_text = aqt2.query_text AND aqt1.queryid <> aqt2.queryid;
 -- Fix the state of the AQO data
 SELECT min(reliability),sum(nfeatures),query_text
 FROM aqo_data ad, aqo_query_texts aqt
-WHERE aqt.queryid = ad.fspace_hash
+WHERE aqt.queryid = ad.fs
 GROUP BY (query_text) ORDER BY (md5(query_text))
 ;
    min   | sum |                                       query_text                                       
@@ -524,8 +524,8 @@ SELECT * FROM check_estimated_rows('
         20 |     17
 (1 row)
 
-SELECT count(*) FROM
-  (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
+SELECT count(*) FROM -- Learn on the query
+  (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1
 ;
  count 
 -------
@@ -557,8 +557,8 @@ SELECT * FROM check_estimated_rows(
 (1 row)
 
 SELECT count(*) FROM
-  (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
-; -- Learn on a new query with one join (cardinality of this join AQO extracted from previous 3-join query)
+  (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1
+; -- Learn on a query with one join
  count 
 -------
      2
@@ -572,7 +572,7 @@ SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1;');
 (1 row)
 
 SELECT count(*) FROM
-  (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
+  (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1
 ; -- Learn on the query without any joins now
  count 
 -------
@@ -587,7 +587,7 @@ SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1 t1 JOIN aqo_test1 AS
 (1 row)
 
 SELECT count(*) FROM
-  (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
+  (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1
 ; -- See one more query in the AQO knowledge base
  count 
 -------
@@ -610,7 +610,7 @@ SELECT * FROM check_estimated_rows('
          1 |      1
 (1 row)
 
-SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
  count 
 -------
      5
@@ -626,7 +626,7 @@ SELECT * FROM check_estimated_rows('
         20 |     19
 (1 row)
 
-SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
  count 
 -------
      6
@@ -643,7 +643,7 @@ SELECT * FROM check_estimated_rows('
         20 |     20
 (1 row)
 
-SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
  count 
 -------
      7
@@ -661,7 +661,7 @@ SELECT * FROM check_estimated_rows('
          2 |      4
 (1 row)
 
-SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
  count 
 -------
      7
@@ -678,7 +678,7 @@ SELECT * FROM check_estimated_rows('
          2 |      4
 (1 row)
 
-SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
  count 
 -------
      8
@@ -694,7 +694,7 @@ SELECT * FROM check_estimated_rows('
          1 |      1
 (1 row)
 
-SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
  count 
 -------
      9
@@ -710,7 +710,7 @@ DROP TABLE aqo_test1;
 SELECT aqo_reset();
  aqo_reset 
 -----------
-        18
+        44
 (1 row)
 
 DROP EXTENSION aqo;
