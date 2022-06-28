@@ -257,11 +257,8 @@ extern bool update_query(uint64 qhash, uint64 fhash,
 						 bool learn_aqo, bool use_aqo, bool auto_tuning);
 extern bool load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 						 bool isSafe);
-extern bool load_fss(uint64 fs, int fss, OkNNrdata *data, List **reloids,
-					 bool wideSearch);
 extern bool update_fss_ext(uint64 fs, int fss, OkNNrdata *data,
 						   List *reloids, bool isTimedOut);
-extern bool update_fss(uint64 fs, int fss, OkNNrdata *data, List *reloids);
 extern bool my_index_insert(Relation indexRelation,	Datum *values, bool *isnull,
 							ItemPointer heap_t_ctid, Relation heapRelation,
 							IndexUniqueCheck checkUnique);

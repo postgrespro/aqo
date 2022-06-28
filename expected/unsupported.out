@@ -595,4 +595,10 @@ ORDER BY (md5(query_text),error) DESC;
 -------+------------
 (0 rows)
 
+SELECT 1 FROM aqo_reset();
+ ?column? 
+----------
+        1
+(1 row)
+
 DROP EXTENSION aqo;

@@ -133,7 +133,7 @@ WHERE aqt1.query_text = aqt2.query_text AND aqt1.queryid <> aqt2.queryid;
 -- Fix the state of the AQO data
 SELECT min(reliability),sum(nfeatures),query_text
 FROM aqo_data ad, aqo_query_texts aqt
-WHERE aqt.queryid = ad.fspace_hash
+WHERE aqt.queryid = ad.fs
 GROUP BY (query_text) ORDER BY (md5(query_text))
 ;
 
@@ -229,9 +229,9 @@ SELECT * FROM check_estimated_rows('
    SELECT *
    FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
    WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
-'); -- Learn on the query
-SELECT count(*) FROM
-  (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
+');
+SELECT count(*) FROM -- Learn on the query
+  (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1
 ;
 SELECT query_text FROM aqo_query_texts WHERE queryid <> 0; -- Check query
 
@@ -240,19 +240,19 @@ SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1;');
 SELECT * FROM check_estimated_rows(
   'SELECT * FROM aqo_test1 AS t1, aqo_test1 AS t2 WHERE t1.a = t2.b');
 SELECT count(*) FROM
-  (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
-; -- Learn on a new query with one join (cardinality of this join AQO extracted from previous 3-join query)
+  (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1
+; -- Learn on a query with one join
 
 SET aqo.join_threshold = 0;
 SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1;');
 SELECT count(*) FROM
-  (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
+  (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1
 ; -- Learn on the query without any joins now
 
 SET aqo.join_threshold = 1;
 SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1 t1 JOIN aqo_test1 AS t2 USING (a)');
 SELECT count(*) FROM
-  (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1
+  (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1
 ; -- See one more query in the AQO knowledge base
 
 SELECT * FROM check_estimated_rows('WITH selected AS (SELECT * FROM aqo_test1 t1) SELECT count(*) FROM selected');
@@ -261,14 +261,14 @@ SELECT * FROM check_estimated_rows('
     SELECT * FROM aqo_test1 t1 JOIN aqo_test1 AS t2 USING (a)
   ) SELECT count(*) FROM selected')
 ;
-SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
 
 -- InitPlan
 SELECT * FROM check_estimated_rows('
   SELECT * FROM aqo_test1 AS t1 WHERE t1.a IN (
     SELECT t2.a FROM aqo_test1 AS t2 JOIN aqo_test1 AS t3 ON (t2.b = t3.a)
   )');
-SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
 
 -- SubPlan
 SELECT * FROM check_estimated_rows('
@@ -276,7 +276,7 @@ SELECT * FROM check_estimated_rows('
     SELECT avg(t2.a) FROM aqo_test1 AS t2 JOIN aqo_test1 AS t3 ON (t2.b = t3.a) AND (t2.a = t1.a)
   ) FROM aqo_test1 AS t1;
 ');
-SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
 
 -- Subquery
 SET aqo.join_threshold = 3;
@@ -285,21 +285,21 @@ SELECT * FROM check_estimated_rows('
     (SELECT t2.a FROM aqo_test1 AS t2 JOIN aqo_test1 AS t3 ON (t2.b = t3.a)) q1
   WHERE q1.a*t1.a = t1.a + 15;
 '); -- Two JOINs, ignore it
-SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
 SET aqo.join_threshold = 2;
 SELECT * FROM check_estimated_rows('
   SELECT * FROM aqo_test1 AS t1,
     (SELECT t2.a FROM aqo_test1 AS t2 JOIN aqo_test1 AS t3 ON (t2.b = t3.a)) q1
   WHERE q1.a*t1.a = t1.a + 15;
 '); -- One JOIN from subquery, another one from the query
-SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
 
 SELECT * FROM check_estimated_rows('
   WITH selected AS (
     SELECT t2.a FROM aqo_test1 t1 JOIN aqo_test1 AS t2 USING (a)
   ) SELECT count(*) FROM aqo_test1 t3, selected WHERE selected.a = t3.a')
 ; -- One JOIN extracted from CTE, another - from a FROM part of the query
-SELECT count(*) FROM (SELECT fspace_hash FROM aqo_data GROUP BY (fspace_hash)) AS q1; -- +1
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
 
 DROP FUNCTION check_estimated_rows;
 RESET aqo.join_threshold;

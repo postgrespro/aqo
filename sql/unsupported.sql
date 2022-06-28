@@ -172,4 +172,5 @@ FROM aqo_cardinality_error(true) cef, aqo_query_texts aqt
 WHERE aqt.queryid = cef.id
 ORDER BY (md5(query_text),error) DESC;
 
+SELECT 1 FROM aqo_reset();
 DROP EXTENSION aqo;
