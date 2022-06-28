@@ -34,14 +34,9 @@
 #define AQO_DATA_COLUMNS	(7)
 HTAB *deactivated_queries = NULL;
 
-static ArrayType *form_matrix(double **matrix, int nrows, int ncols);
-static int deform_matrix(Datum datum, double **matrix);
-
-static void deform_vector(Datum datum, double *vector, int *nelems);
+static ArrayType *form_matrix(double *matrix, int nrows, int ncols);
 
 #define FormVectorSz(v_name)			(form_vector((v_name), (v_name ## _size)))
-#define DeformVectorSz(datum, v_name)	(deform_vector((datum), (v_name), &(v_name ## _size)))
-
 
 static bool my_simple_heap_update(Relation relation,
 								  ItemPointer otid,
@@ -318,7 +313,7 @@ bool
 load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids, bool isSafe)
 {
 	if (isSafe && (!aqo_learn_statement_timeout || !lc_has_fss(fs, fss)))
-		return load_fss(fs, fss, data, reloids, true);
+		return load_aqo_data(fs, fss, data, reloids, false);
 	else
 	{
 		Assert(aqo_learn_statement_timeout);
@@ -326,418 +321,34 @@ load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids, bool isSafe)
 	}
 }
 
-/*
- * Return list of reloids on which
- */
-static void
-build_knn_matrix(Datum *values, bool *nulls, OkNNrdata *data)
-{
-	int nrows;
-
-	Assert(DatumGetInt32(values[2]) == data->cols);
-
-	if (data->rows >= 0)
-		/* trivial strategy - use first suitable record and ignore others */
-		return;
-
-	if (data->cols > 0)
-		/*
-		 * The case than an object hasn't any filters and selectivities
-		 */
-		data->rows = deform_matrix(values[3], data->matrix);
-
-	deform_vector(values[4], data->targets, &nrows);
-	Assert(data->rows < 0 || data->rows == nrows);
-	data->rows = nrows;
-
-	deform_vector(values[6], data->rfactors, &nrows);
-	Assert(data->rows == nrows);
-}
-
-/*
- * Loads KNN matrix for the feature subspace (fss) from table aqo_data.
- * If wideSearch is true, search row by an unique value of (fs, fss)
- * If wideSearch is false - search rows across all fs values and try to build a
- * KNN matrix by merging of existed matrixes with some algorithm.
- * In the case of successful search, initializes the data variable and list of
- * reloids.
- *
- * Returns false if any data not found, true otherwise.
- */
-bool
-load_fss(uint64 fs, int fss, OkNNrdata *data, List **reloids, bool wideSearch)
-{
-	Relation		hrel;
-	Relation		irel;
-	HeapTuple		tuple;
-	TupleTableSlot *slot;
-	bool			shouldFree;
-	IndexScanDesc	scan;
-	ScanKeyData		key[2];
-	Datum			values[AQO_DATA_COLUMNS];
-	bool			isnull[AQO_DATA_COLUMNS];
-	bool			success = false;
-	int				keycount = 0;
-	List		   *oids = NIL;
-
-	if (!open_aqo_relation(NULL, "aqo_data", "aqo_fss_access_idx",
-						   AccessShareLock, &hrel, &irel))
-		return false;
-
-	if (wideSearch)
-	{
-		/* Full scan key. Only one row wanted */
-		ScanKeyInit(&key[keycount++], 1, BTEqualStrategyNumber, F_INT8EQ,
-					Int64GetDatum(fs));
-		ScanKeyInit(&key[keycount++], 2, BTEqualStrategyNumber, F_INT4EQ,
-					Int32GetDatum(fss));
-	}
-	else
-		/* Pass along the index and get all tuples with the same fss */
-		ScanKeyInit(&key[keycount++],  2, BTEqualStrategyNumber, F_INT4EQ,
-					Int32GetDatum(fss));
-
-	scan = index_beginscan(hrel, irel, SnapshotSelf, keycount, 0);
-	index_rescan(scan, key, keycount, NULL, 0);
-	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
-	data->rows = -1; /* Attention! Use as a sign of nonentity */
-
-	/*
-	 * Iterate along all tuples found and prepare knn model
-	 */
-	while (index_getnext_slot(scan, ForwardScanDirection, slot))
-	{
-		ArrayType  *array;
-		Datum	   *vals;
-		int			nrows;
-		int			i;
-		bool		should_skip = false;
-		List 	   *temp_oids = NIL;
-
-		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
-		Assert(shouldFree != true);
-		heap_deform_tuple(tuple, hrel->rd_att, values, isnull);
-
-		/* Filter obviously unfamiliar tuples */
-
-		if (DatumGetInt32(values[2]) != data->cols)
-		{
-			if (wideSearch)
-			{
-				/*
-				 * Looks like a hash collision, but it is so unlikely in a single
-				 * fs, that we will LOG this fact and return immediately.
-				 */
-				elog(LOG, "[AQO] Unexpected number of features for hash (" \
-					 UINT64_FORMAT", %d):\
-					 expected %d features, obtained %d",
-					 fs, fss, data->cols, DatumGetInt32(values[2]));
-				Assert(success == false);
-				break;
-			}
-			else
-				/* Go to the next tuple */
-				continue;
-		}
-
-		/* Decompose list of oids which the data depend on */
-		array = DatumGetArrayTypePCopy(PG_DETOAST_DATUM(values[5]));
-		deconstruct_array(array, OIDOID, sizeof(Oid), true,
-						  TYPALIGN_INT, &vals, NULL, &nrows);
-
-		if (data->rows >= 0 && list_length(oids) != nrows)
-		{
-			/* Dubious case. So log it and skip these data */
-			elog(LOG,
-				 "[AQO] different number depended oids for the same fss %d: "
-				 "%d and %d correspondingly.",
-				 fss, list_length(oids), nrows);
-			should_skip = true;
-		}
-		else
-		{
-			for (i = 0; i < nrows; i++)
-			{
-				Oid reloid = DatumGetObjectId(vals[i]);
-
-				if (!OidIsValid(reloid))
-					elog(ERROR, "[AQO] Impossible OID in the knowledge base.");
-
-				if (data->rows >= 0 && !list_member_oid(oids, reloid))
-				{
-					elog(LOG,
-						 "[AQO] Oid set for two records with equal fss %d don't match.",
-						 fss);
-					should_skip = true;
-					break;
-				}
-				temp_oids = lappend_oid(temp_oids, reloid);
-			}
-		}
-		pfree(vals);
-		pfree(array);
-
-		if (!should_skip)
-		{
-			if (data->rows < 0)
-				oids = copyObject(temp_oids);
-			build_knn_matrix(values, isnull, data);
-		}
-
-		if (temp_oids != NIL)
-		 	pfree(temp_oids);
-
-		/*
-		 * It's OK, guess, because if something happened during merge of
-		 * matrixes an ERROR will be thrown.
-		 */
-		if (data->rows > 0)
-			success = true;
-	}
-
-	if (success && reloids != NULL)
-		/* return list of reloids, if needed */
-		*reloids = oids;
-
-	ExecDropSingleTupleTableSlot(slot);
-	index_endscan(scan);
-	index_close(irel, AccessShareLock);
-	table_close(hrel, AccessShareLock);
-
-	return success;
-}
-
 bool
 update_fss_ext(uint64 fs, int fss, OkNNrdata *data, List *reloids,
 			   bool isTimedOut)
 {
 	if (!isTimedOut)
-		return update_fss(fs, fss, data, reloids);
+		return aqo_data_store(fs, fss, data, reloids);
 	else
 		return lc_update_fss(fs, fss, data, reloids);
-}
-
-/*
- * Updates the specified line in the specified feature subspace.
- * Returns false if the operation failed, true otherwise.
- *
- * 'fss_hash' specifies the feature subspace 'nrows' x 'ncols' is the shape
- * of 'matrix' 'targets' is vector of size 'nrows'
- *
- * Necessary to prevent waiting for another transaction to commit in index
- * insertion or heap update.
- *
- * Caller guaranteed that no one AQO process insert or update this data row.
- */
-bool
-update_fss(uint64 fs, int fss, OkNNrdata *data, List *reloids)
-{
-	Relation	hrel;
-	Relation	irel;
-	SnapshotData snap;
-	TupleTableSlot *slot;
-	TupleDesc	tupDesc;
-	HeapTuple	tuple,
-				nw_tuple;
-	Datum		values[AQO_DATA_COLUMNS];
-	bool		isnull[AQO_DATA_COLUMNS];
-	bool		replace[AQO_DATA_COLUMNS] = { false, false, false, true, true, false, true };
-	bool		shouldFree;
-	bool		find_ok = false;
-	bool		update_indexes;
-	IndexScanDesc scan;
-	ScanKeyData	key[2];
-	bool result = true;
-
-	/* Couldn't allow to write if xact must be read-only. */
-	if (XactReadOnly)
-		return false;
-
-	if (!open_aqo_relation(NULL, "aqo_data",
-						   "aqo_fss_access_idx",
-						   RowExclusiveLock, &hrel, &irel))
-		return false;
-
-	memset(isnull, 0, sizeof(bool) * AQO_DATA_COLUMNS);
-	tupDesc = RelationGetDescr(hrel);
-	InitDirtySnapshot(snap);
-	scan = index_beginscan(hrel, irel, &snap, 2, 0);
-	ScanKeyInit(&key[0], 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(fs));
-	ScanKeyInit(&key[1], 2, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fss));
-
-	index_rescan(scan, key, 2, NULL, 0);
-
-	slot = MakeSingleTupleTableSlot(tupDesc, &TTSOpsBufferHeapTuple);
-	find_ok = index_getnext_slot(scan, ForwardScanDirection, slot);
-
-	if (!find_ok)
-	{
-		values[0] = Int64GetDatum(fs);
-		values[1] = Int32GetDatum(fss);
-		values[2] = Int32GetDatum(data->cols);
-
-		if (data->cols > 0)
-			values[3] = PointerGetDatum(form_matrix(data->matrix, data->rows, data->cols));
-		else
-			isnull[3] = true;
-
-		values[4] = PointerGetDatum(form_vector(data->targets, data->rows));
-
-		/* Serialize list of reloids. Only once. */
-		if (reloids != NIL)
-		{
-			int nrows = list_length(reloids);
-			ListCell   *lc;
-			Datum	   *elems;
-			ArrayType  *array;
-			int			i = 0;
-
-			elems = palloc(sizeof(*elems) * nrows);
-			foreach (lc, reloids)
-				elems[i++] = ObjectIdGetDatum(lfirst_oid(lc));
-
-			array = construct_array(elems, nrows, OIDOID, sizeof(Oid), true,
-									TYPALIGN_INT);
-			values[5] = PointerGetDatum(array);
-			pfree(elems);
-		}
-		else
-			/* XXX: Is it really possible? */
-			isnull[5] = true;
-
-		values[6] = PointerGetDatum(form_vector(data->rfactors, data->rows));
-		tuple = heap_form_tuple(tupDesc, values, isnull);
-
-		/*
-		 * Don't use PG_TRY() section because of dirty snapshot and caller atomic
-		 * prerequisities guarantees to us that no one concurrent insertion can
-		 * exists.
-		 */
-		simple_heap_insert(hrel, tuple);
-		my_index_insert(irel, values, isnull, &(tuple->t_self),
-						hrel, UNIQUE_CHECK_YES);
-	}
-	else if (!TransactionIdIsValid(snap.xmin) && !TransactionIdIsValid(snap.xmax))
-	{
-		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
-		Assert(shouldFree != true);
-		heap_deform_tuple(tuple, hrel->rd_att, values, isnull);
-
-		if (data->cols > 0)
-			values[3] = PointerGetDatum(form_matrix(data->matrix, data->rows, data->cols));
-		else
-			isnull[3] = true;
-
-		values[4] = PointerGetDatum(form_vector(data->targets, data->rows));
-		values[6] = PointerGetDatum(form_vector(data->rfactors, data->rows));
-		nw_tuple = heap_modify_tuple(tuple, tupDesc, values, isnull, replace);
-		if (my_simple_heap_update(hrel, &(nw_tuple->t_self), nw_tuple,
-															&update_indexes))
-		{
-			if (update_indexes)
-				my_index_insert(irel, values, isnull, &(nw_tuple->t_self),
-								hrel, UNIQUE_CHECK_YES);
-			result = true;
-		}
-		else
-		{
-			/*
-			 * Ooops, somebody concurrently updated the tuple. It is possible
-			 * only in the case of changes made by third-party code.
-			 */
-			elog(ERROR, "AQO data piece ("UINT64_FORMAT" %d) concurrently"
-				 " updated by a stranger backend.",
-				 fs, fss);
-			result = false;
-		}
-	}
-	else
-	{
-		/*
-		 * Concurrent update was made. To prevent deadlocks refuse to update.
-		 */
-		result = false;
-	}
-
-	ExecDropSingleTupleTableSlot(slot);
-	index_endscan(scan);
-	index_close(irel, RowExclusiveLock);
-	table_close(hrel, RowExclusiveLock);
-
-	CommandCounterIncrement();
-	return result;
-}
-
-/*
- * Expands matrix from storage into simple C-array.
- */
-int
-deform_matrix(Datum datum, double **matrix)
-{
-	ArrayType  *array = DatumGetArrayTypePCopy(PG_DETOAST_DATUM(datum));
-	int			nelems;
-	Datum	   *values;
-	int			rows = 0;
-	int			cols;
-	int			i,
-				j;
-
-	deconstruct_array(array,
-					  FLOAT8OID, 8, FLOAT8PASSBYVAL, 'd',
-					  &values, NULL, &nelems);
-	if (nelems != 0)
-	{
-		rows = ARR_DIMS(array)[0];
-		cols = ARR_DIMS(array)[1];
-		for (i = 0; i < rows; ++i)
-			for (j = 0; j < cols; ++j)
-				matrix[i][j] = DatumGetFloat8(values[i * cols + j]);
-	}
-	pfree(values);
-	pfree(array);
-	return rows;
-}
-
-/*
- * Expands vector from storage into simple C-array.
- * Also returns its number of elements.
- */
-void
-deform_vector(Datum datum, double *vector, int *nelems)
-{
-	ArrayType  *array = DatumGetArrayTypePCopy(PG_DETOAST_DATUM(datum));
-	Datum	   *values;
-	int			i;
-
-	deconstruct_array(array,
-					  FLOAT8OID, 8, FLOAT8PASSBYVAL, 'd',
-					  &values, NULL, nelems);
-	for (i = 0; i < *nelems; ++i)
-		vector[i] = DatumGetFloat8(values[i]);
-	pfree(values);
-	pfree(array);
 }
 
 /*
  * Forms ArrayType object for storage from simple C-array matrix.
  */
 ArrayType *
-form_matrix(double **matrix, int nrows, int ncols)
+form_matrix(double *matrix, int nrows, int ncols)
 {
 	Datum	   *elems;
 	ArrayType  *array;
-	int			dims[2];
+	int			dims[2] = {nrows, ncols};
 	int			lbs[2];
 	int			i,
 				j;
 
-	dims[0] = nrows;
-	dims[1] = ncols;
 	lbs[0] = lbs[1] = 1;
 	elems = palloc(sizeof(*elems) * nrows * ncols);
 	for (i = 0; i < nrows; ++i)
 		for (j = 0; j < ncols; ++j)
-			elems[i * ncols + j] = Float8GetDatum(matrix[i][j]);
+			elems[i * ncols + j] = Float8GetDatum(matrix[i * ncols + j]);
 
 	array = construct_md_array(elems, NULL, 2, dims, lbs,
 							   FLOAT8OID, 8, FLOAT8PASSBYVAL, 'd');
@@ -894,33 +505,29 @@ add_deactivated_query(uint64 query_hash)
 
 #define PGAQO_STAT_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_statistics.stat"
 #define PGAQO_TEXT_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_query_texts.stat"
+#define PGAQO_DATA_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pgaqo_data.stat"
 
 PG_FUNCTION_INFO_V1(aqo_query_stat);
-//PG_FUNCTION_INFO_V1(aqo_stat_reset); // ?
 PG_FUNCTION_INFO_V1(aqo_query_texts);
+PG_FUNCTION_INFO_V1(aqo_data);
 PG_FUNCTION_INFO_V1(aqo_stat_remove);
 PG_FUNCTION_INFO_V1(aqo_qtexts_remove);
-//PG_FUNCTION_INFO_V1(aqo_qtexts_reset); // ?
+PG_FUNCTION_INFO_V1(aqo_data_remove);
 PG_FUNCTION_INFO_V1(aqo_reset);
 
 typedef enum {
-	QUERYID = 0,
-	EXEC_TIME_AQO,
-	EXEC_TIME,
-	PLAN_TIME_AQO,
-	PLAN_TIME,
-	EST_ERROR_AQO,
-	EST_ERROR,
-	NEXECS_AQO,
-	NEXECS,
-	TOTAL_NCOLS
+	QUERYID = 0, EXEC_TIME_AQO, EXEC_TIME, PLAN_TIME_AQO, PLAN_TIME,
+	EST_ERROR_AQO, EST_ERROR, NEXECS_AQO, NEXECS, TOTAL_NCOLS
 } aqo_stat_cols;
 
 typedef enum {
-	QT_QUERYID = 0,
-	QT_QUERY_STRING,
-	QT_TOTAL_NCOLS
+	QT_QUERYID = 0, QT_QUERY_STRING, QT_TOTAL_NCOLS
 } aqo_qtexts_cols;
+
+typedef enum {
+	AD_FS = 0, AD_FSS, AD_NFEATURES, AD_FEATURES, AD_TARGETS, AD_RELIABILITY,
+	AD_OIDS, AD_TOTAL_NCOLS
+} aqo_data_cols;
 
 typedef void* (*form_record_t) (void *ctx, size_t *size);
 typedef void (*deform_record_t) (void *data, size_t size);
@@ -929,11 +536,12 @@ bool aqo_use_file_storage;
 
 HTAB *stat_htab = NULL;
 HTAB *queries_htab = NULL; /* TODO */
-HTAB *data_htab = NULL; /* TODO */
 
 HTAB *qtexts_htab = NULL;
 dsa_area *qtext_dsa = NULL;
-/* TODO: think about how to keep query texts. */
+
+HTAB *data_htab = NULL;
+dsa_area *data_dsa = NULL;
 
 /* Used to check data file consistency */
 static const uint32 PGAQO_FILE_HEADER = 123467589;
@@ -943,7 +551,7 @@ static void dsa_init(void);
 static int data_store(const char *filename, form_record_t callback,
 					  long nrecs, void *ctx);
 static void data_load(const char *filename, deform_record_t callback, void *ctx);
-
+static size_t _compute_data_dsa(const DataEntry *entry);
 /*
  * Update AQO statistics.
  *
@@ -1180,7 +788,7 @@ _form_qtext_record_cb(void *ctx, size_t *size)
 	memcpy(ptr, &entry->queryid, sizeof(entry->queryid));
 	ptr += sizeof(entry->queryid);
 	memcpy(ptr, query_string, strlen(query_string) + 1);
-	return memcpy(palloc(*size), data, *size);
+	return data;
 }
 
 void
@@ -1207,6 +815,72 @@ aqo_qtexts_flush(void)
 
 end:
 	LWLockRelease(&aqo_state->qtexts_lock);
+}
+
+/*
+ * Getting a hash table iterator, return a newly allocated memory chunk and its
+ * size for subsequent writing into storage.
+ */
+static void *
+_form_data_record_cb(void *ctx, size_t *size)
+{
+	HASH_SEQ_STATUS	   *hash_seq = (HASH_SEQ_STATUS *) ctx;
+	DataEntry		   *entry;
+	char			   *data;
+	char			   *ptr,
+					   *dsa_ptr;
+	size_t				sz;
+
+	entry = hash_seq_search(hash_seq);
+	if (entry == NULL)
+		return NULL;
+
+	/* Size of data is DataEntry (without DSA pointer) plus size of DSA chunk */
+	sz = offsetof(DataEntry, data_dp) + _compute_data_dsa(entry);
+	ptr = data = palloc(sz);
+
+	/* Put the data into the chunk */
+
+	/* Plane copy of all bytes of hash table entry */
+	memcpy(ptr, entry, offsetof(DataEntry, data_dp));
+	ptr += offsetof(DataEntry, data_dp);
+
+	Assert(DsaPointerIsValid(entry->data_dp));
+	dsa_ptr = (char *) dsa_get_address(data_dsa, entry->data_dp);
+	Assert((sz - (ptr - data)) == _compute_data_dsa(entry));
+	memcpy(ptr, dsa_ptr, sz - (ptr - data));
+	*size = sz;
+	return data;
+}
+
+void
+aqo_data_flush(void)
+{
+	HASH_SEQ_STATUS	hash_seq;
+	int				ret;
+	long			entries;
+
+	dsa_init();
+	LWLockAcquire(&aqo_state->data_lock, LW_SHARED);
+
+	if (!aqo_state->data_changed)
+		/* XXX: mull over forced mode. */
+		goto end;
+
+	entries = hash_get_num_entries(data_htab);
+	hash_seq_init(&hash_seq, data_htab);
+	ret = data_store(PGAQO_DATA_FILE, _form_data_record_cb, entries,
+					 (void *) &hash_seq);
+	if (ret != 0)
+		/*
+		 * Something happened and storing procedure hasn't finished walking
+		 * along all records of the hash table.
+		 */
+		hash_seq_term(&hash_seq);
+	else
+		aqo_state->data_changed = false;
+end:
+	LWLockRelease(&aqo_state->data_lock);
 }
 
 static int
@@ -1248,13 +922,13 @@ data_store(const char *filename, form_record_t callback,
 
 	(void) durable_rename(tmpfile, filename, LOG);
 	pfree(tmpfile);
-	elog(DEBUG2, "[AQO] %d records stored in file %s.", counter, filename);
+	elog(LOG, "[AQO] %d records stored in file %s.", counter, filename);
 	return 0;
 
 error:
 	ereport(LOG,
 			(errcode_for_file_access(),
-			 errmsg("could not write file \"%s\": %m", tmpfile)));
+			 errmsg("could not write AQO file \"%s\": %m", tmpfile)));
 
 	if (file)
 		FreeFile(file);
@@ -1293,7 +967,6 @@ aqo_stat_load(void)
 
 	LWLockRelease(&aqo_state->stat_lock);
 }
-
 
 static void
 _deform_qtexts_record_cb(void *data, size_t size)
@@ -1343,6 +1016,51 @@ aqo_qtexts_load(void)
 	}
 }
 
+/*
+ * Getting a data chunk from a caller, add a record into the 'ML data'
+ * shmem hash table. Allocate and fill DSA chunk for variadic part of the data.
+ */
+static void
+_deform_data_record_cb(void *data, size_t size)
+{
+	bool		found;
+	DataEntry  *fentry = (DataEntry *) data; /*Depends on a platform? */
+	DataEntry  *entry;
+	size_t		sz;
+	char	   *ptr = (char *) data,
+			   *dsa_ptr;
+
+	Assert(LWLockHeldByMeInMode(&aqo_state->data_lock, LW_EXCLUSIVE));
+	entry = (DataEntry *) hash_search(data_htab, &fentry->key,
+										   HASH_ENTER, &found);
+	Assert(!found);
+
+	/* Copy fixed-size part of entry byte-by-byte even with caves */
+	memcpy(entry, fentry, offsetof(DataEntry, data_dp));
+	ptr += offsetof(DataEntry, data_dp);
+
+	sz = _compute_data_dsa(entry);
+	Assert(sz + offsetof(DataEntry, data_dp) == size);
+	entry->data_dp = dsa_allocate(data_dsa, sz);
+	Assert(DsaPointerIsValid(entry->data_dp));
+	dsa_ptr = (char *) dsa_get_address(data_dsa, entry->data_dp);
+	memcpy(dsa_ptr, ptr, sz);
+}
+
+void
+aqo_data_load(void)
+{
+	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
+	Assert(data_dsa != NULL);
+
+	LWLockAcquire(&aqo_state->data_lock, LW_EXCLUSIVE);
+	Assert(hash_get_num_entries(data_htab) == 0);
+	data_load(PGAQO_DATA_FILE, _deform_data_record_cb, NULL);
+
+	aqo_state->data_changed = false; /* mem data is consistent with disk */
+	LWLockRelease(&aqo_state->data_lock);
+}
+
 static void
 data_load(const char *filename, deform_record_t callback, void *ctx)
 {
@@ -1385,7 +1103,7 @@ data_load(const char *filename, deform_record_t callback, void *ctx)
 	FreeFile(file);
 	unlink(filename);
 
-	elog(DEBUG2, "[AQO] %ld records loaded from file %s.", num, filename);
+	elog(LOG, "[AQO] %ld records loaded from file %s.", num, filename);
 	return;
 
 read_error:
@@ -1407,6 +1125,7 @@ static void
 on_shmem_shutdown(int code, Datum arg)
 {
 	aqo_qtexts_flush();
+	aqo_data_flush();
 }
 
 /*
@@ -1422,22 +1141,34 @@ dsa_init()
 	if (qtext_dsa)
 		return;
 
+	Assert(data_dsa == NULL && data_dsa == NULL);
 	old_context = MemoryContextSwitchTo(TopMemoryContext);
 	LWLockAcquire(&aqo_state->lock, LW_EXCLUSIVE);
 
 	if (aqo_state->qtexts_dsa_handler == DSM_HANDLE_INVALID)
 	{
+		Assert(aqo_state->data_dsa_handler == DSM_HANDLE_INVALID);
+
 		qtext_dsa = dsa_create(aqo_state->qtext_trancheid);
 		dsa_pin(qtext_dsa);
 		aqo_state->qtexts_dsa_handler = dsa_get_handle(qtext_dsa);
 
+		data_dsa = dsa_create(aqo_state->data_trancheid);
+		dsa_pin(data_dsa);
+		aqo_state->data_dsa_handler = dsa_get_handle(data_dsa);
+
 		/* Load and initialize quuery texts hash table */
 		aqo_qtexts_load();
+		aqo_data_load();
 	}
 	else
+	{
 		qtext_dsa = dsa_attach(aqo_state->qtexts_dsa_handler);
+		data_dsa = dsa_attach(aqo_state->data_dsa_handler);
+	}
 
 	dsa_pin_mapping(qtext_dsa);
+	dsa_pin_mapping(data_dsa);
 	MemoryContextSwitchTo(old_context);
 	LWLockRelease(&aqo_state->lock);
 
@@ -1607,6 +1338,426 @@ aqo_qtexts_reset(void)
 	return num_remove;
 }
 
+static size_t
+_compute_data_dsa(const DataEntry *entry)
+{
+	size_t	size = sizeof(data_key); /* header's size */
+
+	size += sizeof(double) * entry->rows * entry->cols; /* matrix */
+	size += 2 * sizeof(double) * entry->rows; /* targets, rfactors */
+
+	/* Calculate memory size needed to store relation names */
+	size += entry->nrels * sizeof(Oid);
+	return size;
+}
+
+/*
+ * Insert new record or update existed in the AQO data storage.
+ * Return true if data was changed.
+ */
+bool
+aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
+{
+	DataEntry  *entry;
+	bool		found;
+	data_key	key = {.fs = fs, .fss = fss};
+	int			i;
+	char	   *ptr;
+	ListCell   *lc;
+	size_t		size;
+
+	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
+
+	dsa_init();
+
+	LWLockAcquire(&aqo_state->data_lock, LW_EXCLUSIVE);
+	entry = (DataEntry *) hash_search(data_htab, &key, HASH_ENTER, &found);
+
+	/* Initialize entry on first usage */
+	if (!found)
+	{
+		entry->cols = data->cols;
+		entry->rows = data->rows;
+		entry->nrels = list_length(reloids);
+
+		size = _compute_data_dsa(entry);
+		entry->data_dp = dsa_allocate0(data_dsa, size);
+		Assert(DsaPointerIsValid(entry->data_dp));
+	}
+
+	Assert(DsaPointerIsValid(entry->data_dp));
+	Assert(entry->rows <= data->rows); /* Reserved for the future features */
+
+	if (entry->cols != data->cols || entry->nrels != list_length(reloids))
+	{
+		/* Collision happened? */
+		elog(LOG, "[AQO] Does a collision happened? Check it if possible (fs: %lu, fss: %d).",
+			 fs, fss);
+		goto end;
+	}
+
+	if (entry->rows < data->rows)
+	{
+		entry->rows = data->rows;
+		size = _compute_data_dsa(entry);
+
+		/* Need to re-allocate DSA chunk */
+		dsa_free(data_dsa, entry->data_dp);
+		entry->data_dp = dsa_allocate0(data_dsa, size);
+		Assert(DsaPointerIsValid(entry->data_dp));
+	}
+	ptr = (char *) dsa_get_address(data_dsa, entry->data_dp);
+
+	/*
+	 * Copy AQO data into allocated DSA segment
+	 */
+
+	memcpy(ptr, &key, sizeof(data_key)); /* Just for debug */
+	ptr += sizeof(data_key);
+	if (entry->cols > 0)
+	{
+		for (i = 0; i < entry->rows; i++)
+		{
+			memcpy(ptr, data->matrix[i], sizeof(double) * data->cols);
+			ptr += sizeof(double) * data->cols;
+		}
+	}
+	/* copy targets into DSM storage */
+	memcpy(ptr, data->targets, sizeof(double) * entry->rows);
+	ptr += sizeof(double) * entry->rows;
+	/* copy rfactors into DSM storage */
+	memcpy(ptr, data->rfactors, sizeof(double) * entry->rows);
+	ptr += sizeof(double) * entry->rows;
+	/* store list of relations. XXX: optimize ? */
+	foreach(lc, reloids)
+	{
+		Oid reloid = lfirst_oid(lc);
+
+		memcpy(ptr, &reloid, sizeof(Oid));
+		ptr += sizeof(Oid);
+	}
+
+	aqo_state->data_changed = true;
+end:
+	LWLockRelease(&aqo_state->data_lock);
+	return aqo_state->data_changed;
+}
+
+static void
+build_knn_matrix(OkNNrdata *data, const OkNNrdata *temp_data)
+{
+	Assert(data->cols == temp_data->cols);
+
+	if (data->rows >= 0)
+		/* trivial strategy - use first suitable record and ignore others */
+		return;
+
+	memcpy(data, temp_data, sizeof(OkNNrdata));
+	if (data->cols > 0)
+	{
+		int i;
+
+		for (i = 0; i < data->rows; i++)
+			memcpy(data->matrix[i], temp_data->matrix[i], data->cols * sizeof(double));
+	}
+}
+
+static OkNNrdata *
+_fill_knn_data(const DataEntry *entry, List **reloids)
+{
+	OkNNrdata *data;
+	char	   *ptr;
+	int			i;
+	size_t		offset;
+	size_t		sz = _compute_data_dsa(entry);
+
+	data = OkNNr_allocate(entry->cols);
+	data->rows = entry->rows;
+
+	ptr = (char *) dsa_get_address(data_dsa, entry->data_dp);
+
+	/* Check invariants */
+	Assert(entry->rows < aqo_K);
+	Assert(ptr != NULL);
+	Assert(entry->key.fs == ((data_key *)ptr)->fs &&
+		   entry->key.fss == ((data_key *)ptr)->fss);
+
+	ptr += sizeof(data_key);
+
+	if (entry->cols > 0)
+	{
+		for (i = 0; i < entry->rows; i++)
+		{
+			memcpy(data->matrix[i], ptr, sizeof(double) * data->cols);
+			ptr += sizeof(double) * data->cols;
+		}
+	}
+	/* copy targets from DSM storage */
+	memcpy(data->targets, ptr, sizeof(double) * entry->rows);
+	ptr += sizeof(double) * entry->rows;
+	offset = ptr - (char *) dsa_get_address(data_dsa, entry->data_dp);
+	Assert(offset < sz);
+
+	/* copy rfactors from DSM storage */
+	memcpy(data->rfactors, ptr, sizeof(double) * entry->rows);
+	ptr += sizeof(double) * entry->rows;
+	offset = ptr - (char *) dsa_get_address(data_dsa, entry->data_dp);
+	Assert(offset <= sz);
+
+	if (reloids == NULL)
+		return data;
+
+	/* store list of relations. XXX: optimize ? */
+	for (i = 0; i < entry->nrels; i++)
+	{
+		*reloids = lappend_oid(*reloids, ObjectIdGetDatum(*(Oid*)ptr));
+		ptr += sizeof(Oid);
+	}
+	Assert(ptr - (char *) dsa_get_address(data_dsa, entry->data_dp) == sz);
+	return data;
+}
+
+/*
+ * Return on feature subspace, unique defined by its class (fs) and hash value
+ * (fss).
+ * If reloids is NULL, skip loading of this list.
+ * If wideSearch is true - make seqscan on the hash table to see for relevant
+ * data across neighbours.
+ */
+bool
+load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
+			  bool wideSearch)
+{
+	DataEntry  *entry;
+	bool		found;
+	data_key	key = {.fs = fs, .fss = fss};
+	OkNNrdata  *temp_data;
+
+	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
+
+	dsa_init();
+
+	LWLockAcquire(&aqo_state->data_lock, LW_EXCLUSIVE);
+	entry = (DataEntry *) hash_search(data_htab, &key, HASH_FIND, &found);
+
+	if (!found)
+		goto end;
+
+	/* One entry with all correctly filled fields is found */
+	Assert(entry);
+	Assert(DsaPointerIsValid(entry->data_dp));
+
+	if (entry->cols != data->cols)
+	{
+		/* Collision happened? */
+		elog(LOG, "[AQO] Does a collision happened? Check it if possible (fs: %lu, fss: %d).",
+			 fs, fss);
+		found = false;
+		goto end;
+	}
+
+	temp_data = _fill_knn_data(entry, reloids);
+	build_knn_matrix(data, temp_data);
+end:
+	LWLockRelease(&aqo_state->data_lock);
+
+	return found;
+}
+
+Datum
+aqo_data(PG_FUNCTION_ARGS)
+{
+	ReturnSetInfo	   *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	TupleDesc			tupDesc;
+	MemoryContext		per_query_ctx;
+	MemoryContext		oldcontext;
+	Tuplestorestate	   *tupstore;
+	Datum				values[AD_TOTAL_NCOLS];
+	bool				nulls[AD_TOTAL_NCOLS];
+	HASH_SEQ_STATUS		hash_seq;
+	DataEntry		   *entry;
+
+	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
+
+	/* check to see if caller supports us returning a tuplestore */
+	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("set-valued function called in context that cannot accept a set")));
+	if (!(rsinfo->allowedModes & SFRM_Materialize))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("materialize mode required, but it is not allowed in this context")));
+
+	/* Switch into long-lived context to construct returned data structures */
+	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
+	oldcontext = MemoryContextSwitchTo(per_query_ctx);
+
+	/* Build a tuple descriptor for our result type */
+	if (get_call_result_type(fcinfo, NULL, &tupDesc) != TYPEFUNC_COMPOSITE)
+		elog(ERROR, "return type must be a row type");
+	Assert(tupDesc->natts == AD_TOTAL_NCOLS);
+
+	tupstore = tuplestore_begin_heap(true, false, work_mem);
+	rsinfo->returnMode = SFRM_Materialize;
+	rsinfo->setResult = tupstore;
+	rsinfo->setDesc = tupDesc;
+
+	MemoryContextSwitchTo(oldcontext);
+
+	dsa_init();
+	memset(nulls, 0, AD_TOTAL_NCOLS);
+	LWLockAcquire(&aqo_state->data_lock, LW_SHARED);
+	hash_seq_init(&hash_seq, data_htab);
+	while ((entry = hash_seq_search(&hash_seq)) != NULL)
+	{
+		char *ptr;
+
+		values[AD_FS] = Int64GetDatum(entry->key.fs);
+		values[AD_FSS] = Int64GetDatum(entry->key.fss);
+		values[AD_NFEATURES] = Int32GetDatum(entry->cols);
+
+		/* Fill values from the DSA data chunk */
+		Assert(DsaPointerIsValid(entry->data_dp));
+		ptr = dsa_get_address(data_dsa, entry->data_dp);
+		Assert(entry->key.fs == ((data_key*)ptr)->fs && entry->key.fss == ((data_key*)ptr)->fss);
+		ptr += sizeof(data_key);
+
+		if (entry->cols > 0)
+		values[AD_FEATURES] = PointerGetDatum(form_matrix((double *)ptr, entry->rows, entry->cols));
+		else
+			nulls[AD_FEATURES] = true;
+
+		ptr += sizeof(double) * entry->rows * entry->cols;
+		values[AD_TARGETS] = PointerGetDatum(form_vector((double *)ptr, entry->rows));
+		ptr += sizeof(double) * entry->rows;
+		values[AD_RELIABILITY] = PointerGetDatum(form_vector((double *)ptr, entry->rows));
+		ptr += sizeof(double) * entry->rows;
+
+		if (entry->nrels > 0)
+		{
+			Datum	   *elems;
+			ArrayType  *array;
+			int			i;
+
+			elems = palloc(sizeof(*elems) * entry->nrels);
+			for(i = 0; i < entry->nrels; i++)
+				elems[i] = ObjectIdGetDatum(*(Oid *)ptr);
+
+			array = construct_array(elems, entry->nrels, OIDOID,
+									sizeof(Oid), true, TYPALIGN_INT);
+			values[AD_OIDS] = PointerGetDatum(array);
+			pfree(elems);
+		}
+		else
+			nulls[AD_OIDS] = true;
+
+		tuplestore_putvalues(tupstore, tupDesc, values, nulls);
+	}
+
+	LWLockRelease(&aqo_state->data_lock);
+	tuplestore_donestoring(tupstore);
+	return (Datum) 0;
+}
+
+static long
+_aqo_data_clean(uint64 fs)
+{
+	HASH_SEQ_STATUS	hash_seq;
+	DataEntry	   *entry;
+	long			removed = 0;
+
+	Assert(LWLockHeldByMe(&aqo_state->data_lock));
+	hash_seq_init(&hash_seq, data_htab);
+	while ((entry = hash_seq_search(&hash_seq)) != NULL)
+	{
+		if (entry->key.fs != fs)
+			continue;
+
+		Assert(DsaPointerIsValid(entry->data_dp));
+		dsa_free(data_dsa, entry->data_dp);
+		if (hash_search(data_htab, &entry->key, HASH_REMOVE, NULL) == NULL)
+			elog(ERROR, "[AQO] hash table corrupted");
+		removed++;
+	}
+
+	return removed;
+}
+
+Datum
+aqo_data_remove(PG_FUNCTION_ARGS)
+{
+	data_key	key;
+	bool		found;
+	DataEntry  *entry;
+
+	dsa_init();
+
+	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
+	LWLockAcquire(&aqo_state->data_lock, LW_EXCLUSIVE);
+
+	if (PG_ARGISNULL(1))
+	{
+		/* Remove all feature subspaces from the space */
+		found = (_aqo_data_clean((uint64) PG_GETARG_INT64(0)) > 0);
+		goto end;
+	}
+
+	key.fs = (uint64) PG_GETARG_INT64(0);
+	key.fss = PG_GETARG_INT32(1);
+
+	/*
+	 * Look for a record with this queryid. DSA fields must be freed before
+	 * deletion of the record.
+	 */
+	entry = (DataEntry *) hash_search(qtexts_htab, &key, HASH_FIND, &found);
+	if (!found)
+		goto end;
+
+	/* Free DSA memory, allocated foro this record */
+	Assert(DsaPointerIsValid(entry->data_dp));
+	dsa_free(data_dsa, entry->data_dp);
+
+	(void) hash_search(data_htab, &key, HASH_REMOVE, &found);
+	Assert(found);
+end:
+	if (found)
+		aqo_state->data_changed = true;
+	LWLockRelease(&aqo_state->data_lock);
+	PG_RETURN_BOOL(found);
+}
+
+static long
+aqo_data_reset(void)
+{
+	HASH_SEQ_STATUS	hash_seq;
+	DataEntry	   *entry;
+	long			num_remove = 0;
+	long			num_entries;
+
+	dsa_init();
+
+	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
+	LWLockAcquire(&aqo_state->data_lock, LW_EXCLUSIVE);
+	num_entries = hash_get_num_entries(data_htab);
+	hash_seq_init(&hash_seq, data_htab);
+	while ((entry = hash_seq_search(&hash_seq)) != NULL)
+	{
+		Assert(DsaPointerIsValid(entry->data_dp));
+		dsa_free(data_dsa, entry->data_dp);
+		if (hash_search(data_htab, &entry->key, HASH_REMOVE, NULL) == NULL)
+			elog(ERROR, "[AQO] hash table corrupted");
+		num_remove++;
+	}
+	aqo_state->data_changed = true;
+	LWLockRelease(&aqo_state->data_lock);
+	Assert(num_remove == num_entries);
+
+	/* TODO: clean disk storage */
+
+	return num_remove;
+}
+
 Datum
 aqo_reset(PG_FUNCTION_ARGS)
 {
@@ -1614,5 +1765,6 @@ aqo_reset(PG_FUNCTION_ARGS)
 
 	counter += aqo_stat_reset();
 	counter += aqo_qtexts_reset();
+	counter += aqo_data_reset();
 	PG_RETURN_INT64(counter);
 }

@@ -27,6 +27,7 @@ AQOSharedState *aqo_state = NULL;
 HTAB *fss_htab = NULL;
 static int aqo_htab_max_items = 1000;
 static int fs_max_items = 1000; /* Max number of different feature spaces in ML model */
+static int fss_max_items = 10000;
 static uint32 temp_storage_size = 1024 * 1024 * 10; /* Storage size, in bytes */
 static dsm_segment *seg = NULL;
 
@@ -181,6 +182,7 @@ aqo_init_shmem(void)
 	fss_htab = NULL;
 	stat_htab = NULL;
 	qtexts_htab = NULL;
+	data_htab = NULL;
 
 	LWLockAcquire(AddinShmemInitLock, LW_EXCLUSIVE);
 	aqo_state = ShmemInitStruct("AQO", sizeof(AQOSharedState), &found);
@@ -190,12 +192,17 @@ aqo_init_shmem(void)
 
 		LWLockInitialize(&aqo_state->lock, LWLockNewTrancheId());
 		aqo_state->dsm_handler = DSM_HANDLE_INVALID;
+
 		aqo_state->qtexts_dsa_handler = DSM_HANDLE_INVALID;
 		aqo_state->qtext_trancheid = LWLockNewTrancheId();
 		aqo_state->qtexts_changed = false;
+		aqo_state->data_dsa_handler = DSM_HANDLE_INVALID;
+		aqo_state->data_trancheid = LWLockNewTrancheId();
+		aqo_state->data_changed = false;
 
 		LWLockInitialize(&aqo_state->stat_lock, LWLockNewTrancheId());
 		LWLockInitialize(&aqo_state->qtexts_lock, LWLockNewTrancheId());
+		LWLockInitialize(&aqo_state->data_lock, LWLockNewTrancheId());
 	}
 
 	info.keysize = sizeof(htab_key);
@@ -218,17 +225,25 @@ aqo_init_shmem(void)
 								fs_max_items, fs_max_items,
 								&info, HASH_ELEM | HASH_BLOBS);
 
+	/* Shared memory hash table for the data */
+	info.keysize = sizeof(data_key);
+	info.entrysize = sizeof(DataEntry);
+	data_htab = ShmemInitHash("AQO Data HTAB",
+							  fss_max_items, fss_max_items,
+							  &info, HASH_ELEM | HASH_BLOBS);
+
 	LWLockRelease(AddinShmemInitLock);
 	LWLockRegisterTranche(aqo_state->lock.tranche, "AQO");
 	LWLockRegisterTranche(aqo_state->stat_lock.tranche, "AQO Stat Lock Tranche");
 	LWLockRegisterTranche(aqo_state->qtexts_lock.tranche, "AQO QTexts Lock Tranche");
 	LWLockRegisterTranche(aqo_state->qtext_trancheid, "AQO Query Texts Tranche");
-
+	LWLockRegisterTranche(aqo_state->data_lock.tranche, "AQO Data Lock Tranche");
+	LWLockRegisterTranche(aqo_state->data_trancheid, "AQO Data Tranche");
 
 	if (!IsUnderPostmaster)
 	{
 		before_shmem_exit(on_shmem_shutdown, (Datum) 0);
-		aqo_stat_load();
+		aqo_stat_load(); /* Doesn't use DSA, so can be loaded in postmaster */
 	}
 }
 
@@ -249,6 +264,9 @@ aqo_memsize(void)
 	size = MAXALIGN(sizeof(AQOSharedState));
 	size = add_size(size, hash_estimate_size(aqo_htab_max_items, sizeof(htab_entry)));
 	size = add_size(size, hash_estimate_size(fs_max_items, sizeof(AQOSharedState)));
+	size = add_size(size, hash_estimate_size(fs_max_items, sizeof(StatEntry)));
+	size = add_size(size, hash_estimate_size(fs_max_items, sizeof(QueryTextEntry)));
+	size = add_size(size, hash_estimate_size(fss_max_items, sizeof(DataEntry)));
 
 	return size;
 }

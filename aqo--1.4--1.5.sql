@@ -60,35 +60,31 @@ RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'aqo_query_stat'
 LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
 
+CREATE FUNCTION aqo_data(
+  OUT fs			bigint,
+  OUT fss			integer,
+  OUT nfeatures		integer,
+  OUT features		double precision[][],
+  OUT targets		double precision[],
+  OUT reliability	double precision[],
+  OUT oids			integer[]
+)
+RETURNS SETOF record
+AS 'MODULE_PATHNAME', 'aqo_data'
+LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
+CREATE FUNCTION aqo_data_remove(fs bigint, fss int) RETURNS bool
+AS 'MODULE_PATHNAME'
+LANGUAGE C PARALLEL SAFE;
+
 CREATE VIEW aqo_query_stat AS SELECT * FROM aqo_query_stat();
 CREATE VIEW aqo_query_texts AS SELECT * FROM aqo_query_texts();
+CREATE VIEW aqo_data AS SELECT * FROM aqo_data();
 
 CREATE FUNCTION aqo_stat_remove(fs bigint) RETURNS bool
 AS 'MODULE_PATHNAME'
 LANGUAGE C STRICT PARALLEL SAFE;
 
---
--- Re-create the aqo_data table.
--- The oids array contains oids of permanent tables only. It is used for cleanup
--- ML knowledge base from queries that refer to removed tables.
---
-CREATE TABLE aqo_data (
-	fspace_hash	 bigint NOT NULL REFERENCES aqo_queries ON DELETE CASCADE,
-	fsspace_hash int NOT NULL,
-	nfeatures	 int NOT NULL,
-	features	 double precision[][],
-	targets		 double precision[],
-
-	-- oids of permanent tables only. It is used for cleanup
-	-- ML knowledge base from queries that refer to removed tables.
-	oids		 oid [] DEFAULT NULL,
-
-	reliability	 double precision []
-);
-CREATE UNIQUE INDEX aqo_fss_access_idx ON aqo_data (fspace_hash, fsspace_hash);
-
 INSERT INTO aqo_queries VALUES (0, false, false, 0, false);
--- INSERT INTO aqo_query_texts VALUES (0, 'COMMON feature space (do not delete!)');
 -- a virtual query for COMMON feature space
 
 CREATE TRIGGER aqo_queries_invalidate AFTER UPDATE OR DELETE OR TRUNCATE
@@ -155,29 +151,30 @@ COMMENT ON FUNCTION aqo_execution_time(boolean) IS
 CREATE OR REPLACE FUNCTION aqo_drop_class(queryid bigint)
 RETURNS integer AS $$
 DECLARE
-  fs bigint;
+  lfs bigint;
   num integer;
 BEGIN
   IF (queryid = 0) THEN
     raise EXCEPTION '[AQO] Cannot remove basic class %.', queryid;
   END IF;
 
-  SELECT fspace_hash FROM aqo_queries WHERE (query_hash = queryid) INTO fs;
+  SELECT fspace_hash FROM aqo_queries WHERE (query_hash = queryid) INTO lfs;
 
-  IF (fs IS NULL) THEN
+  IF (lfs IS NULL) THEN
     raise WARNING '[AQO] Nothing to remove for the class %.', queryid;
     RETURN 0;
   END IF;
 
-  IF (fs <> queryid) THEN
+  IF (lfs <> queryid) THEN
     raise WARNING '[AQO] Removing query class has non-generic feature space value: id = %, fs = %.', queryid, fs;
   END IF;
 
-  SELECT count(*) FROM aqo_data WHERE fspace_hash = fs INTO num;
+  SELECT count(*) FROM aqo_data WHERE fs = lfs INTO num;
 
   DELETE FROM aqo_queries WHERE query_hash = queryid;
   PERFORM aqo_stat_remove(queryid);
   PERFORM aqo_qtexts_remove(queryid);
+  PERFORM aqo_data_remove(lfs, NULL);
   RETURN num;
 END;
 $$ LANGUAGE plpgsql;
@@ -195,28 +192,29 @@ COMMENT ON FUNCTION aqo_drop_class(bigint) IS
 CREATE OR REPLACE FUNCTION aqo_cleanup(OUT nfs integer, OUT nfss integer)
 AS $$
 DECLARE
-  fs bigint;
-  fss integer;
+  lfs bigint;
+  lfss integer;
 BEGIN
   -- Save current number of rows
   SELECT count(*) FROM aqo_queries INTO nfs;
   SELECT count(*) FROM aqo_data INTO nfss;
 
-  FOR fs,fss IN SELECT q1.fs,q1.fss FROM (
-                     SELECT fspace_hash fs, fsspace_hash fss, unnest(oids) AS reloid
+  FOR lfs,lfss IN SELECT q1.fs,q1.fss FROM (
+                     SELECT fs, fss, unnest(oids) AS reloid
                      FROM aqo_data) AS q1
                      WHERE q1.reloid NOT IN (SELECT oid FROM pg_class)
                      GROUP BY (q1.fs,q1.fss)
   LOOP
-    IF (fs = 0) THEN
-      DELETE FROM aqo_data WHERE fsspace_hash = fss;
-      continue;
-    END IF;
+--    IF (fs = 0) THEN
+--      DELETE FROM aqo_data WHERE fsspace_hash = fss;
+--      continue;
+--    END IF;
 
     -- Remove ALL feature space if one of oids isn't exists
-    DELETE FROM aqo_queries WHERE fspace_hash = fs;
-    PERFORM * FROM aqo_stat_remove(fs);
-    PERFORM * FROM aqo_qtexts_remove(fs);
+    DELETE FROM aqo_queries WHERE fspace_hash = lfs;
+    PERFORM aqo_stat_remove(lfs);
+    PERFORM aqo_qtexts_remove(lfs);
+	PERFORM aqo_data_remove(lfs, NULL);
   END LOOP;
 
   -- Calculate difference with previous state of knowledge base

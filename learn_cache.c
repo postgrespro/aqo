@@ -274,7 +274,7 @@ lc_flush_data(void)
 		Assert(delta > 0);
 		ptr += delta;
 		size -= delta;
-		update_fss(hdr->key.fs, hdr->key.fss, &data, reloids);
+		aqo_data_store(hdr->key.fs, hdr->key.fss, &data, reloids);
 
 		if (!hash_search(fss_htab, (void *) &hdr->key, HASH_REMOVE, NULL))
 			elog(ERROR, "[AQO] Flush: local ML cache is corrupted.");

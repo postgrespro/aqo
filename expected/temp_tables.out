@@ -17,8 +17,8 @@ SELECT count(*) FROM tt AS t1, tt AS t2;
 (1 row)
 
 SELECT * FROM aqo_data;
- fspace_hash | fsspace_hash | nfeatures | features | targets | oids | reliability 
--------------+--------------+-----------+----------+---------+------+-------------
+ fs | fss | nfeatures | features | targets | reliability | oids 
+----+-----+-----------+----------+---------+-------------+------
 (0 rows)
 
 -- Should be stored in the ML base

@@ -1,8 +1,11 @@
 #ifndef STORAGE_H
 #define STORAGE_H
 
+#include "nodes/pg_list.h"
 #include "utils/array.h"
 #include "utils/dsa.h" /* Public structs have links to DSA memory blocks */
+
+#include "machine_learning.h"
 
 #define STAT_SAMPLE_SIZE	(20)
 
@@ -41,9 +44,32 @@ typedef struct QueryTextEntry
 {
 	uint64	queryid;
 
-	/* Link to DSA-allocated momory block. Can be shared across backends */
+	/* Link to DSA-allocated memory block. Can be shared across backends */
 	dsa_pointer qtext_dp;
 } QueryTextEntry;
+
+typedef struct data_key
+{
+	uint64	fs;
+	int64	fss; /* just for alignment */
+} data_key;
+
+typedef struct DataEntry
+{
+	data_key key;
+
+	/* defines a size and data placement in the DSA memory block */
+	int cols; /* aka nfeatures */
+	int rows; /* aka number of equations */
+	int nrels;
+
+	/*
+	 * Link to DSA-allocated memory block. Can be shared across backends.
+	 * Contains:
+ 	 * matrix[][], targets[], reliability[], oids.
+	 */
+	dsa_pointer data_dp;
+} DataEntry;
 
 extern bool aqo_use_file_storage;
 
@@ -60,6 +86,11 @@ extern void aqo_stat_load(void);
 extern bool aqo_qtext_store(uint64 queryid, const char *query_string);
 extern void aqo_qtexts_flush(void);
 extern void aqo_qtexts_load(void);
+
+extern bool aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids);
+extern bool load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids);
+extern void aqo_data_flush(void);
+extern void aqo_data_load(void);
 /* Utility routines */
 extern ArrayType *form_vector(double *vector, int nrows);
 
