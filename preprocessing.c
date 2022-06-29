@@ -295,15 +295,34 @@ ignore_query_settings:
 		 * concurrent addition from another backend we will try to restart
 		 * preprocessing routine.
 		 */
-		aqo_queries_store(query_context.query_hash, query_context.fspace_hash,
+		if (aqo_queries_store(query_context.query_hash, query_context.fspace_hash,
 						  query_context.learn_aqo, query_context.use_aqo,
-						  query_context.auto_tuning);
+						  query_context.auto_tuning))
+		{
+			/*
+			 * Add query text into the ML-knowledge base. Just for further
+			 * analysis. In the case of cached plans we may have NULL query text.
+			 */
+			if (!aqo_qtext_store(query_context.query_hash, query_string))
+			{
+				Assert(0); /* panic only on debug installation */
+				elog(ERROR, "[AQO] Impossible situation was detected. Maybe not enough of shared memory?");
+			}
+		}
+		else
+		{
+			/*
+			 * In the case of problems (shmem overflow, as a typical issue) -
+			 * disable AQO for the query class.
+			 */
+			disable_aqo_for_query();
 
-		/*
-		 * Add query text into the ML-knowledge base. Just for further
-		 * analysis. In the case of cached plans we may have NULL query text.
-		 */
-		aqo_qtext_store(query_context.query_hash, query_string);
+			/*
+			 * Switch AQO to controlled mode. In this mode we wouldn't add new
+			 * query classes, just use and learn on existed set.
+			 */
+			aqo_mode = AQO_MODE_CONTROLLED;
+		}
 	}
 
 	if (force_collect_stat)

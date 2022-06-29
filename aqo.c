@@ -208,7 +208,34 @@ _PG_init(void)
 							0,
 							NULL,
 							NULL,
-							NULL);
+							NULL
+	);
+
+	DefineCustomIntVariable("aqo.fs_max_items",
+							"Max number of feature spaces that AQO can operate with.",
+							NULL,
+							&fs_max_items,
+							1000,
+							1, INT_MAX,
+							PGC_SUSET,
+							0,
+							NULL,
+							NULL,
+							NULL
+	);
+
+	DefineCustomIntVariable("aqo.fss_max_items",
+							"Max number of feature subspaces that AQO can operate with.",
+							NULL,
+							&fss_max_items,
+							1000,
+							0, INT_MAX,
+							PGC_SUSET,
+							0,
+							NULL,
+							NULL,
+							NULL
+	);
 
 	prev_shmem_startup_hook						= shmem_startup_hook;
 	shmem_startup_hook							= aqo_init_shmem;
