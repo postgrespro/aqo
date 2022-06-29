@@ -26,8 +26,8 @@ shmem_startup_hook_type prev_shmem_startup_hook = NULL;
 AQOSharedState *aqo_state = NULL;
 HTAB *fss_htab = NULL;
 static int aqo_htab_max_items = 1000;
-static int fs_max_items = 1000; /* Max number of different feature spaces in ML model */
-static int fss_max_items = 10000;
+int fs_max_items = 1; /* Max number of different feature spaces in ML model */
+int fss_max_items = 1; /* Max number of different feature subspaces in ML model */
 static uint32 temp_storage_size = 1024 * 1024 * 10; /* Storage size, in bytes */
 static dsm_segment *seg = NULL;
 
@@ -217,30 +217,26 @@ aqo_init_shmem(void)
 
 	info.keysize = sizeof(((StatEntry *) 0)->queryid);
 	info.entrysize = sizeof(StatEntry);
-	stat_htab = ShmemInitHash("AQO Stat HTAB",
-							  fs_max_items, fs_max_items,
+	stat_htab = ShmemInitHash("AQO Stat HTAB", 64, fs_max_items,
 							  &info, HASH_ELEM | HASH_BLOBS);
 
 	/* Init shared memory table for query texts */
 	info.keysize = sizeof(((QueryTextEntry *) 0)->queryid);
 	info.entrysize = sizeof(QueryTextEntry);
-	qtexts_htab = ShmemInitHash("AQO Query Texts HTAB",
-								fs_max_items, fs_max_items,
+	qtexts_htab = ShmemInitHash("AQO Query Texts HTAB", 64, fs_max_items,
 								&info, HASH_ELEM | HASH_BLOBS);
 
 	/* Shared memory hash table for the data */
 	info.keysize = sizeof(data_key);
 	info.entrysize = sizeof(DataEntry);
-	data_htab = ShmemInitHash("AQO Data HTAB",
-							  fss_max_items, fss_max_items,
+	data_htab = ShmemInitHash("AQO Data HTAB", 64, fss_max_items,
 							  &info, HASH_ELEM | HASH_BLOBS);
 
 	/* Shared memory hash table for queries */
 	info.keysize = sizeof(((QueriesEntry *) 0)->queryid);
 	info.entrysize = sizeof(QueriesEntry);
-	queries_htab = ShmemInitHash("AQO Queries HTAB",
-							  fs_max_items, fs_max_items,
-							  &info, HASH_ELEM | HASH_BLOBS);
+	queries_htab = ShmemInitHash("AQO Queries HTAB", 64, fs_max_items,
+								 &info, HASH_ELEM | HASH_BLOBS);
 
 	LWLockRelease(AddinShmemInitLock);
 	LWLockRegisterTranche(aqo_state->lock.tranche, "AQO");

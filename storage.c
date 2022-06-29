@@ -204,10 +204,10 @@ add_deactivated_query(uint64 queryid)
 /*
  * Update AQO statistics.
  *
- * Add a record (and replace old, if all stat slots is full) to stat slot for
- * a query class.
+ * Add a record (or update an existed) to stat storage for the query class.
  * Returns a copy of stat entry, allocated in current memory context. Caller is
  * in charge to free this struct after usage.
+ * If stat hash table is full, return NULL and log this fact.
  */
 StatEntry *
 aqo_stat_store(uint64 queryid, bool use_aqo,
@@ -216,16 +216,36 @@ aqo_stat_store(uint64 queryid, bool use_aqo,
 	StatEntry  *entry;
 	bool		found;
 	int			pos;
+	bool		tblOverflow;
+	HASHACTION	action;
 
 	Assert(stat_htab);
 
 	LWLockAcquire(&aqo_state->stat_lock, LW_EXCLUSIVE);
-	entry = (StatEntry *) hash_search(stat_htab, &queryid, HASH_ENTER, &found);
+	tblOverflow = hash_get_num_entries(stat_htab) < fs_max_items ? false : true;
+	action = tblOverflow ? HASH_FIND : HASH_ENTER;
+	entry = (StatEntry *) hash_search(stat_htab, &queryid, action, &found);
 
 	/* Initialize entry on first usage */
 	if (!found)
 	{
-		uint64 qid = entry->queryid;
+		uint64 qid;
+
+		if (action == HASH_FIND)
+		{
+			/*
+			 * Hash table is full. To avoid possible problems - don't try to add
+			 * more, just exit
+			 */
+			LWLockRelease(&aqo_state->stat_lock);
+			ereport(LOG,
+				(errcode(ERRCODE_OUT_OF_MEMORY),
+				 errmsg("[AQO] Stat storage is full. No more feature spaces can be added."),
+				 errhint("Increase value of aqo.fs_max_items on restart of the instance")));
+			return NULL;
+		}
+
+		qid = entry->queryid;
 		memset(entry, 0, sizeof(StatEntry));
 		entry->queryid = qid;
 	}
@@ -907,6 +927,8 @@ aqo_qtext_store(uint64 queryid, const char *query_string)
 {
 	QueryTextEntry *entry;
 	bool			found;
+	bool			tblOverflow;
+	HASHACTION		action;
 
 	Assert(!LWLockHeldByMe(&aqo_state->qtexts_lock));
 
@@ -916,7 +938,12 @@ aqo_qtext_store(uint64 queryid, const char *query_string)
 	dsa_init();
 
 	LWLockAcquire(&aqo_state->qtexts_lock, LW_EXCLUSIVE);
-	entry = (QueryTextEntry *) hash_search(qtexts_htab, &queryid, HASH_ENTER,
+
+	/* Check hash table overflow */
+	tblOverflow = hash_get_num_entries(qtexts_htab) < fs_max_items ? false : true;
+	action = tblOverflow ? HASH_FIND : HASH_ENTER;
+
+	entry = (QueryTextEntry *) hash_search(qtexts_htab, &queryid, action,
 										   &found);
 
 	/* Initialize entry on first usage */
@@ -924,6 +951,20 @@ aqo_qtext_store(uint64 queryid, const char *query_string)
 	{
 		size_t size = strlen(query_string) + 1;
 		char *strptr;
+
+		if (action == HASH_FIND)
+		{
+			/*
+			 * Hash table is full. To avoid possible problems - don't try to add
+			 * more, just exit
+			 */
+			LWLockRelease(&aqo_state->qtexts_lock);
+			ereport(LOG,
+				(errcode(ERRCODE_OUT_OF_MEMORY),
+				 errmsg("[AQO] Query texts storage is full. No more feature spaces can be added."),
+				 errhint("Increase value of aqo.fs_max_items on restart of the instance")));
+			return false;
+		}
 
 		entry->queryid = queryid;
 		entry->qtext_dp = dsa_allocate(qtext_dsa, size);
@@ -933,7 +974,7 @@ aqo_qtext_store(uint64 queryid, const char *query_string)
 		aqo_state->qtexts_changed = true;
 	}
 	LWLockRelease(&aqo_state->qtexts_lock);
-	return !found;
+	return true;
 }
 
 Datum
@@ -1089,17 +1130,38 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	char	   *ptr;
 	ListCell   *lc;
 	size_t		size;
+	bool			tblOverflow;
+	HASHACTION		action;
 
 	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
 
 	dsa_init();
 
 	LWLockAcquire(&aqo_state->data_lock, LW_EXCLUSIVE);
-	entry = (DataEntry *) hash_search(data_htab, &key, HASH_ENTER, &found);
+
+	/* Check hash table overflow */
+	tblOverflow = hash_get_num_entries(data_htab) < fss_max_items ? false : true;
+	action = tblOverflow ? HASH_FIND : HASH_ENTER;
+
+	entry = (DataEntry *) hash_search(data_htab, &key, action, &found);
 
 	/* Initialize entry on first usage */
 	if (!found)
 	{
+		if (action == HASH_FIND)
+		{
+			/*
+			 * Hash table is full. To avoid possible problems - don't try to add
+			 * more, just exit
+			 */
+			LWLockRelease(&aqo_state->data_lock);
+			ereport(LOG,
+				(errcode(ERRCODE_OUT_OF_MEMORY),
+				 errmsg("[AQO] Data storage is full. No more data can be added."),
+				 errhint("Increase value of aqo.fss_max_items on restart of the instance")));
+			return false;
+		}
+
 		entry->cols = data->cols;
 		entry->rows = data->rows;
 		entry->nrels = list_length(reloids);
@@ -1603,11 +1665,13 @@ aqo_queries_remove(PG_FUNCTION_ARGS)
 }
 
 bool
-aqo_queries_store(uint64 queryid, uint64 fs, bool learn_aqo,
-				  bool use_aqo, bool auto_tuning)
+aqo_queries_store(uint64 queryid,
+				  uint64 fs, bool learn_aqo, bool use_aqo, bool auto_tuning)
 {
 	QueriesEntry   *entry;
 	bool			found;
+	bool		tblOverflow;
+	HASHACTION	action;
 
 	Assert(queries_htab);
 
@@ -1616,8 +1680,29 @@ aqo_queries_store(uint64 queryid, uint64 fs, bool learn_aqo,
 		   use_aqo == false && auto_tuning == false));
 
 	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
-	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, HASH_ENTER,
+
+	/* Check hash table overflow */
+	tblOverflow = hash_get_num_entries(queries_htab) < fs_max_items ? false : true;
+	action = tblOverflow ? HASH_FIND : HASH_ENTER;
+
+	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, action,
 										 &found);
+
+		/* Initialize entry on first usage */
+	if (!found && action == HASH_FIND)
+	{
+		/*
+		 * Hash table is full. To avoid possible problems - don't try to add
+		 * more, just exit
+		 */
+		LWLockRelease(&aqo_state->queries_lock);
+		ereport(LOG,
+			(errcode(ERRCODE_OUT_OF_MEMORY),
+			 errmsg("[AQO] Queries storage is full. No more feature spaces can be added."),
+			 errhint("Increase value of aqo.fs_max_items on restart of the instance")));
+		return false;
+	}
+
 	entry->fs = fs;
 	entry->learn_aqo = learn_aqo;
 	entry->use_aqo = use_aqo;

@@ -50,6 +50,8 @@ extern shmem_startup_hook_type prev_shmem_startup_hook;
 extern AQOSharedState *aqo_state;
 extern HTAB *fss_htab;
 
+extern int fs_max_items; /* Max number of feature spaces that AQO can operate */
+extern int fss_max_items;
 
 extern Size aqo_memsize(void);
 extern void reset_dsm_cache(void);
