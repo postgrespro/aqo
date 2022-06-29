@@ -131,6 +131,11 @@ lappend_uint64(List *list, uint64 datum)
 	return list;
 }
 
+/*
+ * Remove element from a list and free the memory which was allocated to it.
+ * Looks unconventional, but we unconventionally allocate memory on append, so
+ * it maybe ok.
+ */
 List *
 ldelete_uint64(List *list, uint64 datum)
 {
@@ -140,6 +145,7 @@ ldelete_uint64(List *list, uint64 datum)
 	{
 		if (*((uint64 *)lfirst(cell)) == datum)
 		{
+			pfree(lfirst(cell));
 			list = list_delete_ptr(list, lfirst(cell));
 			return list;
 		}
