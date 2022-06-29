@@ -305,22 +305,6 @@ get_aqo_schema(void)
 }
 
 /*
- * Init userlock
- */
-void
-init_lock_tag(LOCKTAG *tag, uint64 key1, int32 key2)
-{
-	uint32 key = key1 % UINT32_MAX;
-
-	tag->locktag_field1 = AQO_MODULE_MAGIC;
-	tag->locktag_field2 = key;
-	tag->locktag_field3 = (uint32) key2;
-	tag->locktag_field4 = 0;
-	tag->locktag_type = LOCKTAG_USERLOCK;
-	tag->locktag_lockmethodid = USER_LOCKMETHOD;
-}
-
-/*
  * AQO is really needed for any activity?
  */
 bool
