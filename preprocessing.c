@@ -166,7 +166,6 @@ aqo_planner(Query *parse,
 			ParamListInfo boundParams)
 {
 	bool			query_is_stored = false;
-	LOCKTAG			tag;
 	MemoryContext	oldCxt;
 
 	 /*
@@ -331,13 +330,6 @@ ignore_query_settings:
 	if (!query_is_stored && (query_context.adding_query || force_collect_stat))
 	{
 		/*
-		 * find-add query and query text must be atomic operation to prevent
-		 * concurrent insertions.
-		 */
-		init_lock_tag(&tag, query_context.query_hash, 0);
-		LockAcquire(&tag, ExclusiveLock, false, false);
-
-		/*
 		 * Add query into the AQO knowledge base. To process an error with
 		 * concurrent addition from another backend we will try to restart
 		 * preprocessing routine.
@@ -351,8 +343,6 @@ ignore_query_settings:
 		 * analysis. In the case of cached plans we may have NULL query text.
 		 */
 		aqo_qtext_store(query_context.query_hash, query_string);
-
-		LockRelease(&tag, ExclusiveLock, false);
 	}
 
 	if (force_collect_stat)

@@ -89,18 +89,11 @@ atomic_fss_learn_step(uint64 fs, int fss, OkNNrdata *data,
 					  double *features, double target, double rfactor,
 					  List *reloids, bool isTimedOut)
 {
-	LOCKTAG		tag;
-
-	init_lock_tag(&tag, fs, fss);
-	LockAcquire(&tag, ExclusiveLock, false, false);
-
 	if (!load_fss_ext(fs, fss, data, NULL, !isTimedOut))
 		data->rows = 0;
 
 	data->rows = OkNNr_learn(data, features, target, rfactor);
 	update_fss_ext(fs, fss, data, reloids, isTimedOut);
-
-	LockRelease(&tag, ExclusiveLock, false);
 }
 
 static void
@@ -721,7 +714,6 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	StatEntry			   *stat;
 	instr_time				endtime;
 	EphemeralNamedRelation	enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
-	LOCKTAG					tag;
 
 	cardinality_sum_errors = 0.;
 	cardinality_num_objects = 0;
@@ -775,10 +767,6 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	else
 		cardinality_error = -1;
 
-	/* Prevent concurrent updates. */
-	init_lock_tag(&tag, query_context.query_hash, query_context.fspace_hash);
-	LockAcquire(&tag, ExclusiveLock, false, false);
-
 	if (query_context.collect_stat)
 	{
 		/* Write AQO statistics to the aqo_query_stat table */
@@ -796,9 +784,6 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 			pfree(stat);
 		}
 	}
-
-	/* Allow concurrent queries to update this feature space. */
-	LockRelease(&tag, ExclusiveLock, false);
 
 	selectivity_cache_clear();
 	cur_classes = ldelete_uint64(cur_classes, query_context.query_hash);
