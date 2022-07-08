@@ -346,6 +346,8 @@ aqo_query_stat(PG_FUNCTION_ARGS)
 	hash_seq_init(&hash_seq, stat_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
+		memset(nulls, 0, TOTAL_NCOLS + 1);
+
 		values[QUERYID] = Int64GetDatum(entry->queryid);
 		values[NEXECS] = Int64GetDatum(entry->execs_without_aqo);
 		values[NEXECS_AQO] = Int64GetDatum(entry->execs_with_aqo);
@@ -1263,7 +1265,7 @@ _fill_knn_data(const DataEntry *entry, List **reloids)
 	ptr = (char *) dsa_get_address(data_dsa, entry->data_dp);
 
 	/* Check invariants */
-	Assert(entry->rows < aqo_K);
+	Assert(entry->rows <= aqo_K);
 	Assert(ptr != NULL);
 	Assert(entry->key.fss == ((data_key *)ptr)->fss);
 
@@ -1438,12 +1440,13 @@ aqo_data(PG_FUNCTION_ARGS)
 	MemoryContextSwitchTo(oldcontext);
 
 	dsa_init();
-	memset(nulls, 0, AD_TOTAL_NCOLS);
 	LWLockAcquire(&aqo_state->data_lock, LW_SHARED);
 	hash_seq_init(&hash_seq, data_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
 		char *ptr;
+
+		memset(nulls, 0, AD_TOTAL_NCOLS);
 
 		values[AD_FS] = Int64GetDatum(entry->key.fs);
 		values[AD_FSS] = Int64GetDatum(entry->key.fss);
@@ -1632,11 +1635,12 @@ aqo_queries(PG_FUNCTION_ARGS)
 
 	MemoryContextSwitchTo(oldcontext);
 
-	memset(nulls, 0, AQ_TOTAL_NCOLS + 1);
 	LWLockAcquire(&aqo_state->queries_lock, LW_SHARED);
 	hash_seq_init(&hash_seq, queries_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
+		memset(nulls, 0, AQ_TOTAL_NCOLS + 1);
+		
 		values[AQ_QUERYID] = Int64GetDatum(entry->queryid);
 		values[AQ_FS] = Int64GetDatum(entry->fs);
 		values[AQ_LEARN_AQO] = BoolGetDatum(entry->learn_aqo);
