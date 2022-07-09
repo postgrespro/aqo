@@ -158,6 +158,9 @@ OkNNr_predict(OkNNrdata *data, double *features)
 
 	Assert(data != NULL);
 
+	if (!aqo_predict_with_few_neighbors && data->rows < aqo_k)
+		return -1.;
+
 	for (i = 0; i < data->rows; ++i)
 		distances[i] = fs_distance(data->matrix[i], features, data->cols);
 

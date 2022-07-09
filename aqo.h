@@ -211,6 +211,7 @@ extern double auto_tuning_exploration;
 extern int	auto_tuning_max_iterations;
 extern int	auto_tuning_infinite_loop;
 extern double auto_tuning_convergence_error;
+extern bool aqo_predict_with_few_neighbors;
 
 /* Machine learning parameters */
 
