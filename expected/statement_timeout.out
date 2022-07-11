@@ -91,7 +91,7 @@ ERROR:  canceling statement due to statement timeout
 SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
  check_estimated_rows 
 ----------------------
-                    2
+                    4
 (1 row)
 
 SET statement_timeout = 800;

@@ -211,8 +211,8 @@ ORDER BY res;
 (TABLE aqo_queries_dump EXCEPT TABLE aqo_queries)
 UNION ALL
 (TABLE aqo_queries EXCEPT TABLE aqo_queries_dump);
- queryid | fs | learn_aqo | use_aqo | auto_tuning 
----------+----+-----------+---------+-------------
+ queryid | fs | learn_aqo | use_aqo | auto_tuning | smart_timeout | count_increase_timeout 
+---------+----+-----------+---------+-------------+---------------+------------------------
 (0 rows)
 
 -- Update aqo_queries with dump data.
@@ -234,8 +234,8 @@ ORDER BY res;
 (TABLE aqo_queries_dump EXCEPT TABLE aqo_queries)
 UNION ALL
 (TABLE aqo_queries EXCEPT TABLE aqo_queries_dump);
- queryid | fs | learn_aqo | use_aqo | auto_tuning 
----------+----+-----------+---------+-------------
+ queryid | fs | learn_aqo | use_aqo | auto_tuning | smart_timeout | count_increase_timeout 
+---------+----+-----------+---------+-------------+---------------+------------------------
 (0 rows)
 
 --
