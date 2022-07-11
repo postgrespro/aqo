@@ -199,7 +199,14 @@ typedef struct QueryContextData
 
 	instr_time	start_execution_time;
 	double		planning_time;
+	int64		smart_timeout;
+	int64		count_increase_timeout;
 } QueryContextData;
+
+/*
+ * Indicator for using smart statement timeout for query
+ */
+extern bool change_flex_timeout;
 
 struct StatEntry;
 
@@ -249,6 +256,7 @@ extern ExplainOnePlan_hook_type prev_ExplainOnePlan_hook;
 extern ExplainOneNode_hook_type prev_ExplainOneNode_hook;
 
 extern void ppi_hook(ParamPathInfo *ppi);
+extern int aqo_statement_timeout;
 
 /* Hash functions */
 void get_eclasses(List *clauselist, int *nargs, int **args_hash,
@@ -296,6 +304,9 @@ extern double *selectivity_cache_find_global_relid(int clause_hash,
 extern void selectivity_cache_clear(void);
 
 extern bool IsQueryDisabled(void);
+
+extern bool update_query_timeout(uint64 queryid, int64 smart_timeout);
+extern double get_mean(double *elems, int nelems);
 
 extern List *cur_classes;
 #endif
