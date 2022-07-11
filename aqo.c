@@ -35,6 +35,7 @@ void _PG_init(void);
 int		aqo_mode = AQO_MODE_CONTROLLED;
 bool	force_collect_stat;
 bool	aqo_predict_with_few_neighbors;
+int 	aqo_statement_timeout;
 
 /*
  * Show special info in EXPLAIN mode.
@@ -48,6 +49,7 @@ bool	aqo_predict_with_few_neighbors;
  */
 bool	aqo_show_hash;
 bool	aqo_show_details;
+bool	change_flex_timeout;
 
 /* GUC variables */
 static const struct config_enum_entry format_options[] = {
@@ -287,6 +289,17 @@ _PG_init(void)
 							NULL,
 							NULL
 	);
+	DefineCustomIntVariable("aqo.statement_timeout",
+							"Time limit on learning.",
+							NULL,
+							&aqo_statement_timeout,
+							0,
+							0, INT_MAX,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
 
 	DefineCustomIntVariable("aqo.min_neighbors_for_predicting",
 							"Set how many neighbors the cardinality prediction will be calculated",
