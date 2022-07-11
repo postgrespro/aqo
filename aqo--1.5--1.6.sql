@@ -3,9 +3,12 @@
 -- complain if script is sourced in psql, rather than via CREATE EXTENSION
 \echo Use "ALTER EXTENSION aqo UPDATE TO '1.6'" to load this file. \quit
 
+DROP VIEW aqo_queries;
+
 DROP FUNCTION aqo_enable_query;
 DROP FUNCTION aqo_disable_query;
 DROP FUNCTION aqo_cleanup;
+DROP FUNCTION aqo_queries;
 
 CREATE FUNCTION aqo_enable_class(queryid bigint)
 RETURNS void
@@ -30,3 +33,21 @@ AS 'MODULE_PATHNAME', 'aqo_cleanup'
 LANGUAGE C STRICT VOLATILE;
 COMMENT ON FUNCTION aqo_cleanup() IS
 'Remove unneeded rows from the AQO ML storage';
+
+/*
+ * VIEWs to discover AQO data.
+ */
+CREATE FUNCTION aqo_queries (
+  OUT queryid		bigint,
+  OUT fs			bigint,
+  OUT learn_aqo		boolean,
+  OUT use_aqo		boolean,
+  OUT auto_tuning	boolean,
+  OUT smart_timeout bigint,
+  OUT count_increase_timeout bigint
+)
+RETURNS SETOF record
+AS 'MODULE_PATHNAME', 'aqo_queries'
+LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
+
+CREATE VIEW aqo_queries AS SELECT * FROM aqo_queries();
