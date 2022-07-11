@@ -56,7 +56,7 @@ typedef enum {
 } aqo_data_cols;
 
 typedef enum {
-	AQ_QUERYID = 0, AQ_FS, AQ_LEARN_AQO, AQ_USE_AQO, AQ_AUTO_TUNING,
+	AQ_QUERYID = 0, AQ_FS, AQ_LEARN_AQO, AQ_USE_AQO, AQ_AUTO_TUNING, AQ_SMART_TIMEOUT, AQ_COUNT_INCREASE_TIMEOUT,
 	AQ_TOTAL_NCOLS
 } aqo_queries_cols;
 
@@ -1646,6 +1646,8 @@ aqo_queries(PG_FUNCTION_ARGS)
 		values[AQ_LEARN_AQO] = BoolGetDatum(entry->learn_aqo);
 		values[AQ_USE_AQO] = BoolGetDatum(entry->use_aqo);
 		values[AQ_AUTO_TUNING] = BoolGetDatum(entry->auto_tuning);
+		values[AQ_SMART_TIMEOUT] = Int64GetDatum(entry->smart_timeout);
+		values[AQ_COUNT_INCREASE_TIMEOUT] = Int64GetDatum(entry->count_increase_timeout);
 		tuplestore_putvalues(tupstore, tupDesc, values, nulls);
 	}
 
@@ -1711,6 +1713,8 @@ aqo_queries_store(uint64 queryid,
 	entry->learn_aqo = learn_aqo;
 	entry->use_aqo = use_aqo;
 	entry->auto_tuning = auto_tuning;
+	entry->smart_timeout = (int64) aqo_statement_timeout;
+	entry->count_increase_timeout = 0;
 
 	LWLockRelease(&aqo_state->queries_lock);
 	return true;
@@ -1817,9 +1821,55 @@ aqo_queries_find(uint64 queryid, QueryContextData *ctx)
 		ctx->learn_aqo = entry->learn_aqo;
 		ctx->use_aqo = entry->use_aqo;
 		ctx->auto_tuning = entry->auto_tuning;
+		ctx->smart_timeout = entry->smart_timeout;
+		ctx->count_increase_timeout = entry->count_increase_timeout;
 	}
 	LWLockRelease(&aqo_state->queries_lock);
 	return found;
+}
+
+/*
+ * Function for update and save value of smart statement timeout
+ * for query in aqu_queries table
+ */
+bool
+update_query_timeout(uint64 queryid, int64 smart_timeout)
+{
+	QueriesEntry   *entry;
+	bool			found;
+	bool		tblOverflow;
+	HASHACTION	action;
+
+	Assert(queries_htab);
+
+	/* Guard for default feature space */
+	Assert(queryid != 0);
+
+	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
+
+	/* Check hash table overflow */
+	tblOverflow = hash_get_num_entries(queries_htab) < fs_max_items ? false : true;
+	action = tblOverflow ? HASH_FIND : HASH_ENTER;
+
+	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, action,
+										 &found);
+
+		/* Initialize entry on first usage */
+	if (!found && action == HASH_FIND)
+	{
+		/*
+		 * Hash table is full. To avoid possible problems - don't try to add
+		 * more, just exit
+		 */
+		LWLockRelease(&aqo_state->queries_lock);
+		return false;
+	}
+
+	entry->smart_timeout = smart_timeout;
+	entry->count_increase_timeout = entry->count_increase_timeout + 1;
+
+	LWLockRelease(&aqo_state->queries_lock);
+	return true;
 }
 
 /*

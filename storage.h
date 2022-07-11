@@ -80,6 +80,9 @@ typedef struct QueriesEntry
 	bool	learn_aqo;
 	bool	use_aqo;
 	bool	auto_tuning;
+
+	int64	smart_timeout;
+	int64	count_increase_timeout;
 } QueriesEntry;
 
 extern HTAB *stat_htab;

@@ -25,7 +25,9 @@ CREATE FUNCTION aqo_queries (
   OUT fs			bigint,
   OUT learn_aqo		boolean,
   OUT use_aqo		boolean,
-  OUT auto_tuning	boolean
+  OUT auto_tuning	boolean,
+  OUT smart_timeout bigint,
+  OUT count_increase_timeout bigint
 )
 RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'aqo_queries'

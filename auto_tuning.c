@@ -26,17 +26,15 @@
  */
 double auto_tuning_convergence_error = 0.01;
 
-static double get_mean(double *elems, int nelems);
 static double get_estimation(double *elems, int nelems);
 static bool is_stable(double *elems, int nelems);
 static bool converged_cq(double *elems, int nelems);
 static bool is_in_infinite_loop_cq(double *elems, int nelems);
 
-
 /*
  * Returns mean value of the array of doubles.
  */
-static double
+double
 get_mean(double *elems, int nelems)
 {
 	double	sum = 0;

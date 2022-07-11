@@ -35,6 +35,7 @@ void _PG_init(void);
 /* Strategy of determining feature space for new queries. */
 int		aqo_mode;
 bool	force_collect_stat;
+int 	aqo_statement_timeout;
 
 /*
  * Show special info in EXPLAIN mode.
@@ -48,6 +49,7 @@ bool	force_collect_stat;
  */
 bool	aqo_show_hash;
 bool	aqo_show_details;
+bool	change_flex_timeout;
 
 /* GUC variables */
 static const struct config_enum_entry format_options[] = {
@@ -236,6 +238,18 @@ _PG_init(void)
 							NULL,
 							NULL
 	);
+
+	DefineCustomIntVariable("aqo.statement_timeout",
+							"Time limit on learning.",
+							NULL,
+							&aqo_statement_timeout,
+							0,
+							0, INT_MAX,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
 
 	prev_shmem_startup_hook						= shmem_startup_hook;
 	shmem_startup_hook							= aqo_init_shmem;

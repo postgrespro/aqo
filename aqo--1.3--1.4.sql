@@ -4,6 +4,8 @@
 \echo Use "ALTER EXTENSION aqo UPDATE TO '1.4'" to load this file. \quit
 
 ALTER TABLE public.aqo_data ADD COLUMN reliability double precision [];
+ALTER TABLE public.aqo_queries ADD COLUMN smart_timeout bigint;
+ALTER TABLE public.aqo_queries ADD COLUMN count_increase_timeout bigint;
 
 DROP FUNCTION public.top_error_queries(int);
 

@@ -237,6 +237,8 @@ aqo_planner(Query *parse,
 				elog(ERROR, "unrecognized mode in AQO: %d", aqo_mode);
 				break;
 		}
+		query_context.count_increase_timeout = 0;
+		query_context.smart_timeout = 0;
 	}
 	else /* Query class exists in a ML knowledge base. */
 	{
