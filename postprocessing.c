@@ -44,6 +44,8 @@ typedef struct
 
 static double cardinality_sum_errors;
 static int	cardinality_num_objects;
+static int64 max_timeout_value;
+static int64 growth_rate = 3;
 
 /*
  * Store an AQO-related query data into the Query Environment structure.
@@ -625,15 +627,46 @@ aqo_timeout_handler(void)
 	ctx.learn = query_context.learn_aqo;
 	ctx.isTimedOut = true;
 
-	elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data.");
+	if (aqo_statement_timeout == 0)
+		elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data.");
+	else
+		elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data. Timeout is %ld", max_timeout_value);
+
 	learnOnPlanState(timeoutCtl.queryDesc->planstate, (void *) &ctx);
 	MemoryContextSwitchTo(oldctx);
+}
+
+/*
+ * Function for updating smart statement timeout
+ */
+static int64
+increase_smart_timeout()
+{
+	int64 smart_timeout_fin_time = (query_context.smart_timeout + 1) * pow(growth_rate, query_context.count_increase_timeout);
+
+	if (query_context.smart_timeout == max_timeout_value && !update_query_timeout(query_context.query_hash, smart_timeout_fin_time))
+		elog(NOTICE, "[AQO] Timeout is not updated!");
+
+	return smart_timeout_fin_time;
 }
 
 static bool
 set_timeout_if_need(QueryDesc *queryDesc)
 {
-	TimestampTz	fin_time;
+	int64 fintime = (int64) get_timeout_finish_time(STATEMENT_TIMEOUT)-1;
+
+	if (aqo_learn_statement_timeout && aqo_statement_timeout > 0)
+	{
+		max_timeout_value = Min(query_context.smart_timeout, (int64) aqo_statement_timeout);
+		if (max_timeout_value > fintime)
+		{
+			max_timeout_value = fintime;
+		}
+	}
+	else
+	{
+		max_timeout_value = fintime;
+	}
 
 	if (IsParallelWorker())
 		/*
@@ -663,8 +696,7 @@ set_timeout_if_need(QueryDesc *queryDesc)
 	else
 		Assert(!get_timeout_active(timeoutCtl.id));
 
-	fin_time = get_timeout_finish_time(STATEMENT_TIMEOUT);
-	enable_timeout_at(timeoutCtl.id, fin_time - 1);
+	enable_timeout_at(timeoutCtl.id, (TimestampTz) max_timeout_value);
 
 	/* Save pointer to queryDesc to use at learning after a timeout interruption. */
 	timeoutCtl.queryDesc = queryDesc;
@@ -720,6 +752,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	instr_time				endtime;
 	EphemeralNamedRelation	enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
 	MemoryContext oldctx = MemoryContextSwitchTo(AQOLearnMemCtx);
+	double error = .0;
 
 	cardinality_sum_errors = 0.;
 	cardinality_num_objects = 0;
@@ -788,6 +821,16 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 			/* Store all learn data into the AQO service relations. */
 			if (!query_context.adding_query && query_context.auto_tuning)
 				automatical_query_tuning(query_context.query_hash, stat);
+
+			error = stat->est_error_aqo[stat->cur_stat_slot_aqo-1] - cardinality_sum_errors/(1 + cardinality_num_objects);
+
+			if ( aqo_learn_statement_timeout && aqo_statement_timeout > 0 && error >= 0.1)
+			{
+				int64 fintime = increase_smart_timeout();
+				elog(NOTICE, "[AQO] Time limit for execution of the statement was increased. Current timeout is %ld", fintime);
+			}
+
+			pfree(stat);
 		}
 	}
 
