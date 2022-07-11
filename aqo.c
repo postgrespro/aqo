@@ -238,6 +238,19 @@ _PG_init(void)
 							NULL
 	);
 
+	DefineCustomIntVariable("aqo.max_size",
+							"Query max size in aqo_query_texts.",
+							NULL,
+							&max_size,
+							1000,
+							0, INT_MAX,
+							PGC_SUSET,
+							0,
+							NULL,
+							NULL,
+							NULL
+	);
+
 	prev_shmem_startup_hook						= shmem_startup_hook;
 	shmem_startup_hook							= aqo_init_shmem;
 	prev_planner_hook							= planner_hook;

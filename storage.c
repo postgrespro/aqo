@@ -969,6 +969,7 @@ aqo_qtext_store(uint64 queryid, const char *query_string)
 		}
 
 		entry->queryid = queryid;
+		size = size > max_size ? max_size : size;
 		entry->qtext_dp = dsa_allocate(qtext_dsa, size);
 		Assert(DsaPointerIsValid(entry->qtext_dp));
 		strptr = (char *) dsa_get_address(qtext_dsa, entry->qtext_dp);
