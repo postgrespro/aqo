@@ -100,6 +100,9 @@ typedef struct QueriesEntry
 	bool	learn_aqo;
 	bool	use_aqo;
 	bool	auto_tuning;
+
+	int64	smart_timeout;
+	int64	count_increase_timeout;
 } QueriesEntry;
 
 /*
@@ -112,6 +115,8 @@ typedef struct AqoQueriesNullArgs
 	bool	learn_aqo_is_null;
 	bool	use_aqo_is_null;
 	bool	auto_tuning_is_null;
+	int64	smart_timeout;
+	int64	count_increase_timeout;
 } AqoQueriesNullArgs;
 
 /*
