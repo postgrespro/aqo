@@ -238,10 +238,10 @@ _PG_init(void)
 							NULL
 	);
 
-	DefineCustomIntVariable("aqo.max_size",
+	DefineCustomIntVariable("aqo.querytext_max_size",
 							"Query max size in aqo_query_texts.",
 							NULL,
-							&max_size,
+							&querytext_max_size,
 							1000,
 							0, INT_MAX,
 							PGC_SUSET,

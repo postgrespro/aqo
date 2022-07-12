@@ -64,6 +64,8 @@ typedef void* (*form_record_t) (void *ctx, size_t *size);
 typedef void (*deform_record_t) (void *data, size_t size);
 
 
+int querytext_max_size = 1000;
+
 HTAB *stat_htab = NULL;
 HTAB *queries_htab = NULL;
 HTAB *qtexts_htab = NULL;
@@ -934,7 +936,7 @@ aqo_qtext_store(uint64 queryid, const char *query_string)
 
 	Assert(!LWLockHeldByMe(&aqo_state->qtexts_lock));
 
-	if (query_string == NULL)
+	if (query_string == NULL || querytext_max_size == 0)
 		return false;
 
 	dsa_init();
@@ -969,7 +971,7 @@ aqo_qtext_store(uint64 queryid, const char *query_string)
 		}
 
 		entry->queryid = queryid;
-		size = size > max_size ? max_size : size;
+		size = size > querytext_max_size ? querytext_max_size : size;
 		entry->qtext_dp = dsa_allocate(qtext_dsa, size);
 		Assert(DsaPointerIsValid(entry->qtext_dp));
 		strptr = (char *) dsa_get_address(qtext_dsa, entry->qtext_dp);
@@ -1641,7 +1643,7 @@ aqo_queries(PG_FUNCTION_ARGS)
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
 		memset(nulls, 0, AQ_TOTAL_NCOLS + 1);
-		
+
 		values[AQ_QUERYID] = Int64GetDatum(entry->queryid);
 		values[AQ_FS] = Int64GetDatum(entry->fs);
 		values[AQ_LEARN_AQO] = BoolGetDatum(entry->learn_aqo);
