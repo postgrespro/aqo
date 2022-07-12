@@ -61,10 +61,11 @@ typedef enum {
 } aqo_queries_cols;
 
 typedef void* (*form_record_t) (void *ctx, size_t *size);
-typedef void (*deform_record_t) (void *data, size_t size);
+typedef bool (*deform_record_t) (void *data, size_t size);
 
 
 int querytext_max_size = 1000;
+int dsm_size_max = 100; /* in MB */
 
 HTAB *stat_htab = NULL;
 HTAB *queries_htab = NULL;
@@ -642,7 +643,7 @@ error:
 	return -1;
 }
 
-static void
+static bool
 _deform_stat_record_cb(void *data, size_t size)
 {
 	bool		found;
@@ -656,24 +657,35 @@ _deform_stat_record_cb(void *data, size_t size)
 	entry = (StatEntry *) hash_search(stat_htab, &queryid, HASH_ENTER, &found);
 	Assert(!found);
 	memcpy(entry, data, sizeof(StatEntry));
+	return true;
 }
 
 void
 aqo_stat_load(void)
 {
-	long	entries;
-
 	Assert(!LWLockHeldByMe(&aqo_state->stat_lock));
 
 	LWLockAcquire(&aqo_state->stat_lock, LW_EXCLUSIVE);
-	entries = hash_get_num_entries(stat_htab);
-	Assert(entries == 0);
+
+	/* Load on postmaster sturtup. So no any concurrent actions possible here. */
+	Assert(hash_get_num_entries(stat_htab) == 0);
+
 	data_load(PGAQO_STAT_FILE, _deform_stat_record_cb, NULL);
 
 	LWLockRelease(&aqo_state->stat_lock);
 }
 
-static void
+static bool
+_check_dsa_validity(dsa_pointer ptr)
+{
+	if (DsaPointerIsValid(ptr))
+		return true;
+
+	elog(LOG, "[AQO] DSA Pointer isn't valid. Is the memory limit exceeded?");
+	return false;
+}
+
+static bool
 _deform_qtexts_record_cb(void *data, size_t size)
 {
 	bool			found;
@@ -690,9 +702,19 @@ _deform_qtexts_record_cb(void *data, size_t size)
 	Assert(!found);
 
 	entry->qtext_dp = dsa_allocate(qtext_dsa, len);
-	Assert(DsaPointerIsValid(entry->qtext_dp));
+	if (!_check_dsa_validity(entry->qtext_dp))
+	{
+		/*
+		 * DSA stuck into problems. Rollback changes. Return false in belief
+		 * that caller recognize it and don't try to call us more.
+		 */
+		(void) hash_search(qtexts_htab, &queryid, HASH_REMOVE, NULL);
+		return false;
+	}
+
 	strptr = (char *) dsa_get_address(qtext_dsa, entry->qtext_dp);
 	strlcpy(strptr, query_string, len);
+	return true;
 }
 
 void
@@ -705,7 +727,15 @@ aqo_qtexts_load(void)
 	Assert(qtext_dsa != NULL);
 
 	LWLockAcquire(&aqo_state->qtexts_lock, LW_EXCLUSIVE);
-	Assert(hash_get_num_entries(qtexts_htab) == 0);
+
+	if (hash_get_num_entries(qtexts_htab) != 0)
+	{
+		/* Someone have done it concurrently. */
+		elog(LOG, "[AQO] Another backend have loaded query texts concurrently.");
+		LWLockRelease(&aqo_state->qtexts_lock);
+		return;
+	}
+
 	data_load(PGAQO_TEXT_FILE, _deform_qtexts_record_cb, NULL);
 
 	/* Check existence of default feature space */
@@ -725,7 +755,7 @@ aqo_qtexts_load(void)
  * Getting a data chunk from a caller, add a record into the 'ML data'
  * shmem hash table. Allocate and fill DSA chunk for variadic part of the data.
  */
-static void
+static bool
 _deform_data_record_cb(void *data, size_t size)
 {
 	bool		found;
@@ -737,7 +767,7 @@ _deform_data_record_cb(void *data, size_t size)
 
 	Assert(LWLockHeldByMeInMode(&aqo_state->data_lock, LW_EXCLUSIVE));
 	entry = (DataEntry *) hash_search(data_htab, &fentry->key,
-										   HASH_ENTER, &found);
+									  HASH_ENTER, &found);
 	Assert(!found);
 
 	/* Copy fixed-size part of entry byte-by-byte even with caves */
@@ -747,9 +777,20 @@ _deform_data_record_cb(void *data, size_t size)
 	sz = _compute_data_dsa(entry);
 	Assert(sz + offsetof(DataEntry, data_dp) == size);
 	entry->data_dp = dsa_allocate(data_dsa, sz);
-	Assert(DsaPointerIsValid(entry->data_dp));
+
+	if (!_check_dsa_validity(entry->data_dp))
+	{
+		/*
+		 * DSA stuck into problems. Rollback changes. Return false in belief
+		 * that caller recognize it and don't try to call us more.
+		 */
+		(void) hash_search(data_htab, &fentry->key, HASH_REMOVE, NULL);
+		return false;
+	}
+
 	dsa_ptr = (char *) dsa_get_address(data_dsa, entry->data_dp);
 	memcpy(dsa_ptr, ptr, sz);
+	return true;
 }
 
 void
@@ -759,14 +800,22 @@ aqo_data_load(void)
 	Assert(data_dsa != NULL);
 
 	LWLockAcquire(&aqo_state->data_lock, LW_EXCLUSIVE);
-	Assert(hash_get_num_entries(data_htab) == 0);
+
+	if (hash_get_num_entries(data_htab) != 0)
+	{
+		/* Someone have done it concurrently. */
+		elog(LOG, "[AQO] Another backend have loaded query data concurrently.");
+		LWLockRelease(&aqo_state->data_lock);
+		return;
+	}
+
 	data_load(PGAQO_DATA_FILE, _deform_data_record_cb, NULL);
 
 	aqo_state->data_changed = false; /* mem data is consistent with disk */
 	LWLockRelease(&aqo_state->data_lock);
 }
 
-static void
+static bool
 _deform_queries_record_cb(void *data, size_t size)
 {
 	bool			found;
@@ -780,20 +829,22 @@ _deform_queries_record_cb(void *data, size_t size)
 	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, HASH_ENTER, &found);
 	Assert(!found);
 	memcpy(entry, data, sizeof(QueriesEntry));
+	return true;
 }
 
 void
 aqo_queries_load(void)
 {
-	long	entries;
 	bool	found;
 	uint64	queryid = 0;
 
 	Assert(!LWLockHeldByMe(&aqo_state->queries_lock));
 
 	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
-	entries = hash_get_num_entries(queries_htab);
-	Assert(entries == 0);
+
+	/* Load on postmaster sturtup. So no any concurrent actions possible here. */
+	Assert(hash_get_num_entries(queries_htab) == 0);
+
 	data_load(PGAQO_QUERIES_FILE, _deform_queries_record_cb, NULL);
 
 	/* Check existence of default feature space */
@@ -836,14 +887,23 @@ data_load(const char *filename, deform_record_t callback, void *ctx)
 	{
 		void   *data;
 		size_t	size;
+		bool	res;
 
 		if (fread(&size, sizeof(size), 1, file) != 1)
 			goto read_error;
 		data = palloc(size);
 		if (fread(data, size, 1, file) != 1)
 			goto read_error;
-		callback(data, size);
+		res = callback(data, size);
 		pfree(data);
+
+		if (!res)
+		{
+			/* Error detected. Do not try to read tails of the storage. */
+			elog(LOG, "[AQO] Because of an error skip %ld storage records.",
+				 num - i);
+			break;
+		}
 	}
 
 	FreeFile(file);
@@ -896,11 +956,15 @@ dsa_init()
 		Assert(aqo_state->data_dsa_handler == DSM_HANDLE_INVALID);
 
 		qtext_dsa = dsa_create(aqo_state->qtext_trancheid);
+		Assert(qtext_dsa != NULL);
+
+		if (dsm_size_max > 0)
+			dsa_set_size_limit(qtext_dsa, dsm_size_max * 1024 * 1024);
+
 		dsa_pin(qtext_dsa);
 		aqo_state->qtexts_dsa_handler = dsa_get_handle(qtext_dsa);
 
-		data_dsa = dsa_create(aqo_state->data_trancheid);
-		dsa_pin(data_dsa);
+		data_dsa = qtext_dsa;
 		aqo_state->data_dsa_handler = dsa_get_handle(data_dsa);
 
 		/* Load and initialize query texts hash table */
@@ -910,11 +974,10 @@ dsa_init()
 	else
 	{
 		qtext_dsa = dsa_attach(aqo_state->qtexts_dsa_handler);
-		data_dsa = dsa_attach(aqo_state->data_dsa_handler);
+		data_dsa = qtext_dsa;
 	}
 
 	dsa_pin_mapping(qtext_dsa);
-	dsa_pin_mapping(data_dsa);
 	MemoryContextSwitchTo(old_context);
 	LWLockRelease(&aqo_state->lock);
 
@@ -973,7 +1036,17 @@ aqo_qtext_store(uint64 queryid, const char *query_string)
 		entry->queryid = queryid;
 		size = size > querytext_max_size ? querytext_max_size : size;
 		entry->qtext_dp = dsa_allocate(qtext_dsa, size);
-		Assert(DsaPointerIsValid(entry->qtext_dp));
+
+		if (!_check_dsa_validity(entry->qtext_dp))
+		{
+			/*
+			 * DSA stuck into problems. Rollback changes. Return false in belief
+			 * that caller recognize it and don't try to call us more.
+			 */
+			(void) hash_search(qtexts_htab, &queryid, HASH_REMOVE, NULL);
+			return false;
+		}
+
 		strptr = (char *) dsa_get_address(qtext_dsa, entry->qtext_dp);
 		strlcpy(strptr, query_string, size);
 		aqo_state->qtexts_changed = true;
@@ -1173,7 +1246,16 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 
 		size = _compute_data_dsa(entry);
 		entry->data_dp = dsa_allocate0(data_dsa, size);
-		Assert(DsaPointerIsValid(entry->data_dp));
+
+		if (!_check_dsa_validity(entry->data_dp))
+		{
+			/*
+			 * DSA stuck into problems. Rollback changes. Return false in belief
+			 * that caller recognize it and don't try to call us more.
+			 */
+			(void) hash_search(data_htab, &key, HASH_REMOVE, NULL);
+			return false;
+		}
 	}
 
 	Assert(DsaPointerIsValid(entry->data_dp));
@@ -1195,7 +1277,16 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 		/* Need to re-allocate DSA chunk */
 		dsa_free(data_dsa, entry->data_dp);
 		entry->data_dp = dsa_allocate0(data_dsa, size);
-		Assert(DsaPointerIsValid(entry->data_dp));
+
+		if (!_check_dsa_validity(entry->data_dp))
+		{
+			/*
+			 * DSA stuck into problems. Rollback changes. Return false in belief
+			 * that caller recognize it and don't try to call us more.
+			 */
+			(void) hash_search(data_htab, &key, HASH_REMOVE, NULL);
+			return false;
+		}
 	}
 	ptr = (char *) dsa_get_address(data_dsa, entry->data_dp);
 

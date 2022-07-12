@@ -198,7 +198,6 @@ aqo_init_shmem(void)
 		aqo_state->qtext_trancheid = LWLockNewTrancheId();
 		aqo_state->qtexts_changed = false;
 		aqo_state->data_dsa_handler = DSM_HANDLE_INVALID;
-		aqo_state->data_trancheid = LWLockNewTrancheId();
 		aqo_state->data_changed = false;
 		aqo_state->queries_changed = false;
 
@@ -244,7 +243,6 @@ aqo_init_shmem(void)
 	LWLockRegisterTranche(aqo_state->qtexts_lock.tranche, "AQO QTexts Lock Tranche");
 	LWLockRegisterTranche(aqo_state->qtext_trancheid, "AQO Query Texts Tranche");
 	LWLockRegisterTranche(aqo_state->data_lock.tranche, "AQO Data Lock Tranche");
-	LWLockRegisterTranche(aqo_state->data_trancheid, "AQO Data Tranche");
 	LWLockRegisterTranche(aqo_state->queries_lock.tranche, "AQO Queries Lock Tranche");
 
 	if (!IsUnderPostmaster)

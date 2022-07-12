@@ -38,7 +38,6 @@ typedef struct AQOSharedState
 
 	LWLock		data_lock; /* Lock for shared fields below */
 	dsa_handle	data_dsa_handler;
-	int			data_trancheid;
 	bool		data_changed;
 
 	LWLock		queries_lock;  /* lock for access to queries storage */
@@ -52,7 +51,6 @@ extern HTAB *fss_htab;
 
 extern int fs_max_items; /* Max number of feature spaces that AQO can operate */
 extern int fss_max_items;
-extern int querytext_max_size;
 
 extern Size aqo_memsize(void);
 extern void reset_dsm_cache(void);

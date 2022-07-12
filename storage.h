@@ -83,6 +83,7 @@ typedef struct QueriesEntry
 } QueriesEntry;
 
 extern int querytext_max_size;
+extern int dsm_size_max;
 
 extern HTAB *stat_htab;
 extern HTAB *qtexts_htab;
