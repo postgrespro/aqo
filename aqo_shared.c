@@ -28,7 +28,6 @@ HTAB *fss_htab = NULL;
 static int aqo_htab_max_items = 1000;
 int fs_max_items = 1; /* Max number of different feature spaces in ML model */
 int fss_max_items = 1; /* Max number of different feature subspaces in ML model */
-int max_size = 1000;
 static uint32 temp_storage_size = 1024 * 1024 * 10; /* Storage size, in bytes */
 static dsm_segment *seg = NULL;
 

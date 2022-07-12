@@ -52,7 +52,7 @@ extern HTAB *fss_htab;
 
 extern int fs_max_items; /* Max number of feature spaces that AQO can operate */
 extern int fss_max_items;
-extern int max_size;
+extern int querytext_max_size;
 
 extern Size aqo_memsize(void);
 extern void reset_dsm_cache(void);

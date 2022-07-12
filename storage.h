@@ -82,6 +82,8 @@ typedef struct QueriesEntry
 	bool	auto_tuning;
 } QueriesEntry;
 
+extern int querytext_max_size;
+
 extern HTAB *stat_htab;
 extern HTAB *qtexts_htab;
 extern HTAB *queries_htab; /* TODO */
