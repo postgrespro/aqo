@@ -234,10 +234,17 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	{
 		MemoryContext old_ctx_m;
 
+		selectivities = list_concat(
+							get_selectivities(root, param_clauses, rel->relid,
+											  JOIN_INNER, NULL),
+							get_selectivities(root, rel->baserestrictinfo,
+											  rel->relid,
+											  JOIN_INNER, NULL));
+
+		/* Make specific copy of clauses with mutated subplans */
 		allclauses = list_concat(aqo_get_clauses(root, param_clauses),
 								 aqo_get_clauses(root, rel->baserestrictinfo));
-		selectivities = get_selectivities(root, allclauses, rel->relid,
-										  JOIN_INNER, NULL);
+
 		rte = planner_rt_fetch(rel->relid, root);
 		get_eclasses(allclauses, &nargs, &args_hash, &eclass_hash);
 
