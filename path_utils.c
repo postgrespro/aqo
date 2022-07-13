@@ -443,18 +443,16 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 		case T_ForeignPath:
 			/* The same as in the default case */
 		default:
-			cur = list_concat(aqo_get_clauses(root,
-											  path->parent->baserestrictinfo),
+			cur = list_concat(list_copy(path->parent->baserestrictinfo),
 							  path->param_info ?
-							  aqo_get_clauses(root,
-											  path->param_info->ppi_clauses) :
-							  NIL);
+							  path->param_info->ppi_clauses : NIL);
 			if (path->param_info)
 				cur_sel = get_selectivities(root, cur, path->parent->relid,
 											JOIN_INNER, NULL);
 			else
 				cur_sel = get_selectivities(root, cur, 0, JOIN_INNER, NULL);
 			*selectivities = cur_sel;
+			cur = aqo_get_clauses(root, cur);
 			return cur;
 			break;
 	}
