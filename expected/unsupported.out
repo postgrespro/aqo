@@ -579,11 +579,23 @@ ORDER BY (md5(query_text),error) DESC;
            |                 ON q1.x = q2.x+1;
 (12 rows)
 
-DROP TABLE t,t1 CASCADE;
-SELECT aqo_cleanup();
- aqo_cleanup 
--------------
- (12,42)
+DROP TABLE t,t1 CASCADE; -- delete all tables used in the test
+SELECT count(*) FROM aqo_data; -- Just to detect some changes in the logic. May some false positives really bother us here?
+ count 
+-------
+    42
+(1 row)
+
+SELECT * FROM aqo_cleanup();
+ nfs | nfss 
+-----+------
+  12 |   42
+(1 row)
+
+SELECT count(*) FROM aqo_data; -- No one row should be returned
+ count 
+-------
+     0
 (1 row)
 
 -- Look for any remaining queries in the ML storage.

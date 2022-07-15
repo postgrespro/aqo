@@ -8,23 +8,23 @@ CREATE TABLE pt();
 -- Ignore queries with the only temp tables
 SELECT count(*) FROM tt;
 SELECT count(*) FROM tt AS t1, tt AS t2;
-SELECT * FROM aqo_data;
+SELECT query_text FROM aqo_query_texts; -- Default row should be returned
 
 -- Should be stored in the ML base
 SELECT count(*) FROM pt;
 SELECT count(*) FROM pt, tt;
 SELECT count(*) FROM pt AS pt1, tt AS tt1, tt AS tt2, pt AS pt2;
-SELECT count(*) FROM aqo_data;
+SELECT count(*) FROM aqo_data; -- Don't bother about false negatives because of trivial query plans
 
 DROP TABLE tt;
-SELECT aqo_cleanup();
-SELECT count(*) FROM aqo_data; -- Should be the same as above
+SELECT * FROM aqo_cleanup();
+SELECT count(*) FROM aqo_data; -- Should return the same as previous call above
 DROP TABLE pt;
-SELECT aqo_cleanup();
+SELECT * FROM aqo_cleanup();
 SELECT count(*) FROM aqo_data; -- Should be 0
 SELECT query_text FROM aqo_queries aq LEFT JOIN aqo_query_texts aqt
 ON aq.queryid = aqt.queryid
-ORDER BY (md5(query_text)); -- TODO: should contain just one row
+ORDER BY (md5(query_text)); -- The only the common class is returned
 
 -- Test learning on temporary table
 CREATE TABLE pt AS SELECT x AS x, (x % 10) AS y FROM generate_series(1,100) AS x;

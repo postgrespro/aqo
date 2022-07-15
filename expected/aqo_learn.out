@@ -236,10 +236,10 @@ SELECT count(*) FROM tmp1;
 (1 row)
 
 -- Remove data on some unneeded instances of tmp1 table.
-SELECT aqo_cleanup();
- aqo_cleanup 
--------------
- (9,18)
+SELECT * FROM aqo_cleanup();
+ nfs | nfss 
+-----+------
+   9 |   18
 (1 row)
 
 -- Result of the query below should be empty

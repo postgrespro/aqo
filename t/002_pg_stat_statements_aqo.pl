@@ -28,7 +28,7 @@ my $res;
 my $total_classes;
 $node->start();
  # ERROR: AQO allow to load library only on startup
-print "create extantion aqo";
+print "Create extension aqo";
 $node->psql('postgres', "CREATE EXTENSION aqo");
 $node->psql('postgres', "CREATE EXTENSION pg_stat_statements");
 print "create preload libraries";

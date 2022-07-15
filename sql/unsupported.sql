@@ -162,9 +162,11 @@ FROM aqo_cardinality_error(true) cef, aqo_query_texts aqt
 WHERE aqt.queryid = cef.id
 ORDER BY (md5(query_text),error) DESC;
 
-DROP TABLE t,t1 CASCADE;
+DROP TABLE t,t1 CASCADE; -- delete all tables used in the test
 
-SELECT aqo_cleanup();
+SELECT count(*) FROM aqo_data; -- Just to detect some changes in the logic. May some false positives really bother us here?
+SELECT * FROM aqo_cleanup();
+SELECT count(*) FROM aqo_data; -- No one row should be returned
 
 -- Look for any remaining queries in the ML storage.
 SELECT to_char(error, '9.99EEEE')::text AS error, query_text

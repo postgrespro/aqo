@@ -55,4 +55,11 @@ SELECT query_text FROM aqo_query_texts ORDER BY (md5(query_text));
  SELECT count(*) FROM person WHERE age<18 AND passport IS NOT NULL;
 (3 rows)
 
+DROP TABLE person;
+SELECT 1 FROM aqo_reset(); -- Full remove of ML data before the end
+ ?column? 
+----------
+        1
+(1 row)
+
 DROP EXTENSION aqo;

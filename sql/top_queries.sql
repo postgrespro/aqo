@@ -11,7 +11,7 @@ SET aqo.force_collect_stat = 'on';
 --
 CREATE TEMP TABLE ttt AS SELECT count(*) AS cnt FROM generate_series(1,10);
 CREATE TABLE ttp AS SELECT count(*) AS cnt FROM generate_series(1,10);
-SELECT count(*) AS cnt FROM ttt WHERE cnt % 100 = 0;
+SELECT count(*) AS cnt FROM ttt WHERE cnt % 100 = 0; -- Ignore it
 SELECT count(*) AS cnt FROM ttp WHERE cnt % 100 = 0;
 SELECT num FROM aqo_execution_time(true); -- Just for checking, return zero.
 SELECT num FROM aqo_execution_time(false);

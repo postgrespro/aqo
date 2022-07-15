@@ -165,6 +165,7 @@ is($res, 3);
 #
 # ##############################################################################
 
+$node->safe_psql('postgres', "SELECT aqo_reset()");
 $node->safe_psql('postgres', "DROP EXTENSION aqo");
 $node->safe_psql('postgres', "CREATE EXTENSION aqo");
 
@@ -272,8 +273,8 @@ $node->safe_psql('postgres', "
 	DROP TABLE	pgbench_accounts, pgbench_branches, pgbench_tellers,
 				pgbench_history CASCADE;");
 
-# Clean unneeded AQO knowledge
-$node->safe_psql('postgres', "SELECT public.aqo_cleanup()");
+# Remove unnecessary AQO knowledge
+$node->safe_psql('postgres', "SELECT * FROM aqo_cleanup()");
 
 # Calculate total number of rows in AQO-related tables.
 my $new_fs_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_queries;");
