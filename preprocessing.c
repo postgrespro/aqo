@@ -406,7 +406,8 @@ typedef struct AQOPreWalkerCtx
 
 /*
  * Examine a fully-parsed query, and return TRUE iff any relation underlying
- * the query is a system relation or no one relation touched by the query.
+ * the query is a system relation or no one permanent (non-temporary) relation
+ * touched by the query.
  */
 static bool
 isQueryUsingSystemRelation(Query *query)
@@ -497,11 +498,17 @@ isQueryUsingSystemRelation_walker(Node *node, void *context)
 				bool		is_catalog = IsCatalogRelation(rel);
 				bool		is_aqo_rel = IsAQORelation(rel);
 
-				table_close(rel, AccessShareLock);
 				if (is_catalog || is_aqo_rel)
+				{
+					table_close(rel, AccessShareLock);
 					return true;
+				}
 
-				ctx->trivQuery = false;
+				if (rel->rd_rel->relpersistence != RELPERSISTENCE_TEMP)
+					/* Plane non TEMP table */
+					ctx->trivQuery = false;
+
+				table_close(rel, AccessShareLock);
 			}
 			else if (rte->rtekind == RTE_FUNCTION)
 			{

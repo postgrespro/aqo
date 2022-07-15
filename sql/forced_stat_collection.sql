@@ -36,4 +36,6 @@ ON aq.queryid = aqs.queryid;
 
 SELECT query_text FROM aqo_query_texts ORDER BY (md5(query_text));
 
+DROP TABLE person;
+SELECT 1 FROM aqo_reset(); -- Full remove of ML data before the end
 DROP EXTENSION aqo;

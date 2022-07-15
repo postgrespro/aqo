@@ -59,7 +59,7 @@ CREATE FUNCTION aqo_query_stat(
   OUT planning_time_without_aqo		double precision[],
   OUT cardinality_error_with_aqo	double precision[],
   OUT cardinality_error_without_aqo	double precision[],
-  OUT executions_with_aqo			bigint,
+  OUT executions_with_aqo bigint,
   OUT executions_without_aqo		bigint
 )
 RETURNS SETOF record
@@ -190,38 +190,8 @@ COMMENT ON FUNCTION aqo_drop_class(bigint) IS
 -- Returns number of deleted rows from aqo_queries and aqo_data tables.
 --
 CREATE OR REPLACE FUNCTION aqo_cleanup(OUT nfs integer, OUT nfss integer)
-AS $$
-DECLARE
-  lfs bigint;
-  lfss integer;
-BEGIN
-  -- Save current number of rows
-  SELECT count(*) FROM aqo_queries INTO nfs;
-  SELECT count(*) FROM aqo_data INTO nfss;
-
-  FOR lfs,lfss IN SELECT q1.fs,q1.fss FROM (
-                     SELECT fs, fss, unnest(oids) AS reloid
-                     FROM aqo_data) AS q1
-                     WHERE q1.reloid NOT IN (SELECT oid FROM pg_class)
-                     GROUP BY (q1.fs,q1.fss)
-  LOOP
---    IF (fs = 0) THEN
---      DELETE FROM aqo_data WHERE fsspace_hash = fss;
---      continue;
---    END IF;
-
-    -- Remove ALL feature space if one of oids isn't exists
-    PERFORM aqo_queries_remove(lfs);
-    PERFORM aqo_stat_remove(lfs);
-    PERFORM aqo_qtexts_remove(lfs);
-	PERFORM aqo_data_remove(lfs, NULL);
-  END LOOP;
-
-  -- Calculate difference with previous state of knowledge base
-  nfs := nfs - (SELECT count(*) FROM aqo_queries);
-  nfss := nfss - (SELECT count(*) FROM aqo_data);
-END;
-$$ LANGUAGE plpgsql;
+AS 'MODULE_PATHNAME'
+LANGUAGE C STRICT VOLATILE;
 
 COMMENT ON FUNCTION aqo_cleanup() IS
 'Remove unneeded rows from the AQO ML storage';

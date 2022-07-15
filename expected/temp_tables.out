@@ -16,10 +16,11 @@ SELECT count(*) FROM tt AS t1, tt AS t2;
      0
 (1 row)
 
-SELECT * FROM aqo_data;
- fs | fss | nfeatures | features | targets | reliability | oids 
-----+-----+-----------+----------+---------+-------------+------
-(0 rows)
+SELECT query_text FROM aqo_query_texts; -- Default row should be returned
+              query_text               
+---------------------------------------
+ COMMON feature space (do not delete!)
+(1 row)
 
 -- Should be stored in the ML base
 SELECT count(*) FROM pt;
@@ -40,30 +41,30 @@ SELECT count(*) FROM pt AS pt1, tt AS tt1, tt AS tt2, pt AS pt2;
      0
 (1 row)
 
-SELECT count(*) FROM aqo_data;
+SELECT count(*) FROM aqo_data; -- Don't bother about false negatives because of trivial query plans
  count 
 -------
     10
 (1 row)
 
 DROP TABLE tt;
-SELECT aqo_cleanup();
- aqo_cleanup 
--------------
- (0,0)
+SELECT * FROM aqo_cleanup();
+ nfs | nfss 
+-----+------
+   0 |    0
 (1 row)
 
-SELECT count(*) FROM aqo_data; -- Should be the same as above
+SELECT count(*) FROM aqo_data; -- Should return the same as previous call above
  count 
 -------
     10
 (1 row)
 
 DROP TABLE pt;
-SELECT aqo_cleanup();
- aqo_cleanup 
--------------
- (3,10)
+SELECT * FROM aqo_cleanup();
+ nfs | nfss 
+-----+------
+   3 |   10
 (1 row)
 
 SELECT count(*) FROM aqo_data; -- Should be 0
@@ -74,13 +75,11 @@ SELECT count(*) FROM aqo_data; -- Should be 0
 
 SELECT query_text FROM aqo_queries aq LEFT JOIN aqo_query_texts aqt
 ON aq.queryid = aqt.queryid
-ORDER BY (md5(query_text)); -- TODO: should contain just one row
-                query_text                
-------------------------------------------
- SELECT count(*) FROM tt AS t1, tt AS t2;
+ORDER BY (md5(query_text)); -- The only the common class is returned
+              query_text               
+---------------------------------------
  COMMON feature space (do not delete!)
- SELECT count(*) FROM tt;
-(3 rows)
+(1 row)
 
 -- Test learning on temporary table
 CREATE TABLE pt AS SELECT x AS x, (x % 10) AS y FROM generate_series(1,100) AS x;

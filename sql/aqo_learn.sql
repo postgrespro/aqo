@@ -124,7 +124,7 @@ WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
 SELECT count(*) FROM tmp1;
 
 -- Remove data on some unneeded instances of tmp1 table.
-SELECT aqo_cleanup();
+SELECT * FROM aqo_cleanup();
 
 -- Result of the query below should be empty
 SELECT * FROM aqo_query_texts aqt1, aqo_query_texts aqt2

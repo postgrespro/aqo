@@ -87,6 +87,11 @@ static int data_store(const char *filename, form_record_t callback,
 static void data_load(const char *filename, deform_record_t callback, void *ctx);
 static size_t _compute_data_dsa(const DataEntry *entry);
 
+static bool _aqo_stat_remove(uint64 queryid);
+static bool _aqo_queries_remove(uint64 queryid);
+static bool _aqo_qtexts_remove(uint64 queryid);
+static bool _aqo_data_remove(data_key *key);
+
 PG_FUNCTION_INFO_V1(aqo_query_stat);
 PG_FUNCTION_INFO_V1(aqo_query_texts);
 PG_FUNCTION_INFO_V1(aqo_data);
@@ -99,6 +104,7 @@ PG_FUNCTION_INFO_V1(aqo_enable_query);
 PG_FUNCTION_INFO_V1(aqo_disable_query);
 PG_FUNCTION_INFO_V1(aqo_queries_update);
 PG_FUNCTION_INFO_V1(aqo_reset);
+PG_FUNCTION_INFO_V1(aqo_cleanup);
 
 
 bool
@@ -393,18 +399,13 @@ aqo_stat_reset(void)
 	return num_remove;
 }
 
+
 Datum
 aqo_stat_remove(PG_FUNCTION_ARGS)
 {
-	uint64		queryid = (uint64) PG_GETARG_INT64(0);
-	StatEntry   *entry;
-	bool		removed;
+	uint64	queryid = (uint64) PG_GETARG_INT64(0);
 
-	LWLockAcquire(&aqo_state->stat_lock, LW_EXCLUSIVE);
-	entry = (StatEntry *) hash_search(stat_htab, &queryid, HASH_REMOVE, NULL);
-	removed = (entry) ? true : false;
-	LWLockRelease(&aqo_state->stat_lock);
-	PG_RETURN_BOOL(removed);
+	PG_RETURN_BOOL(_aqo_stat_remove(queryid));
 }
 
 static void *
@@ -1116,10 +1117,47 @@ aqo_query_texts(PG_FUNCTION_ARGS)
 	return (Datum) 0;
 }
 
-Datum
-aqo_qtexts_remove(PG_FUNCTION_ARGS)
+static bool
+_aqo_stat_remove(uint64 queryid)
 {
-	uint64			queryid = (uint64) PG_GETARG_INT64(0);
+	bool		found;
+
+	Assert(!LWLockHeldByMe(&aqo_state->stat_lock));
+	LWLockAcquire(&aqo_state->stat_lock, LW_EXCLUSIVE);
+	(void) hash_search(stat_htab, &queryid, HASH_FIND, &found);
+
+	if (found)
+	{
+		(void) hash_search(stat_htab, &queryid, HASH_REMOVE, NULL);
+		aqo_state->stat_changed = true;
+	}
+
+	LWLockRelease(&aqo_state->stat_lock);
+	return found;
+}
+
+static bool
+_aqo_queries_remove(uint64 queryid)
+{
+	bool	found;
+
+	Assert(!LWLockHeldByMe(&aqo_state->queries_lock));
+	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
+	(void) hash_search(queries_htab, &queryid, HASH_FIND, &found);
+
+	if (found)
+	{
+		(void) hash_search(queries_htab, &queryid, HASH_REMOVE, NULL);
+		aqo_state->queries_changed = true;
+	}
+
+	LWLockRelease(&aqo_state->queries_lock);
+	return found;
+}
+
+static bool
+_aqo_qtexts_remove(uint64 queryid)
+{
 	bool			found = false;
 	QueryTextEntry *entry;
 
@@ -1132,19 +1170,54 @@ aqo_qtexts_remove(PG_FUNCTION_ARGS)
 	 * Look for a record with this queryid. DSA fields must be freed before
 	 * deletion of the record.
 	 */
-	entry = (QueryTextEntry *) hash_search(qtexts_htab, &queryid, HASH_FIND, &found);
-	if (!found)
-		goto end;
+	entry = (QueryTextEntry *) hash_search(qtexts_htab, &queryid, HASH_FIND,
+										   &found);
+	if (found)
+	{
+		/* Free DSA memory, allocated for this record */
+		Assert(DsaPointerIsValid(entry->qtext_dp));
+		dsa_free(qtext_dsa, entry->qtext_dp);
 
-	/* Free DSA memory, allocated foro this record */
-	Assert(DsaPointerIsValid(entry->qtext_dp));
-	dsa_free(qtext_dsa, entry->qtext_dp);
+		(void) hash_search(qtexts_htab, &queryid, HASH_REMOVE, NULL);
+		aqo_state->qtexts_changed = true;
+	}
 
-	(void) hash_search(qtexts_htab, &queryid, HASH_REMOVE, &found);
-	Assert(found);
-end:
 	LWLockRelease(&aqo_state->qtexts_lock);
-	PG_RETURN_BOOL(found);
+	return found;
+}
+
+static bool
+_aqo_data_remove(data_key *key)
+{
+	DataEntry  *entry;
+	bool		found;
+
+	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
+	LWLockAcquire(&aqo_state->data_lock, LW_EXCLUSIVE);
+
+	entry = (DataEntry *) hash_search(data_htab, key, HASH_FIND, &found);
+	if (found)
+	{
+		/* Free DSA memory, allocated for this record */
+		Assert(DsaPointerIsValid(entry->data_dp));
+		dsa_free(data_dsa, entry->data_dp);
+		entry->data_dp = InvalidDsaPointer;
+
+		if (hash_search(data_htab, key, HASH_REMOVE, NULL) == NULL)
+			elog(PANIC, "[AQO] Inconsistent data hash table");
+		aqo_state->data_changed = true;
+	}
+
+	LWLockRelease(&aqo_state->data_lock);
+	return found;
+}
+
+Datum
+aqo_qtexts_remove(PG_FUNCTION_ARGS)
+{
+	uint64			queryid = (uint64) PG_GETARG_INT64(0);
+
+	PG_RETURN_BOOL(_aqo_qtexts_remove(queryid));
 }
 
 static long
@@ -1599,7 +1672,9 @@ _aqo_data_clean(uint64 fs)
 	DataEntry	   *entry;
 	long			removed = 0;
 
-	Assert(LWLockHeldByMe(&aqo_state->data_lock));
+	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
+	LWLockAcquire(&aqo_state->data_lock, LW_EXCLUSIVE);
+
 	hash_seq_init(&hash_seq, data_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
@@ -1608,11 +1683,13 @@ _aqo_data_clean(uint64 fs)
 
 		Assert(DsaPointerIsValid(entry->data_dp));
 		dsa_free(data_dsa, entry->data_dp);
+		entry->data_dp = InvalidDsaPointer;
 		if (hash_search(data_htab, &entry->key, HASH_REMOVE, NULL) == NULL)
 			elog(ERROR, "[AQO] hash table corrupted");
 		removed++;
 	}
 
+	LWLockRelease(&aqo_state->data_lock);
 	return removed;
 }
 
@@ -1621,42 +1698,19 @@ aqo_data_remove(PG_FUNCTION_ARGS)
 {
 	data_key	key;
 	bool		found;
-	DataEntry  *entry;
 
 	dsa_init();
-
-	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
-	LWLockAcquire(&aqo_state->data_lock, LW_EXCLUSIVE);
 
 	if (PG_ARGISNULL(1))
 	{
 		/* Remove all feature subspaces from the space */
 		found = (_aqo_data_clean((uint64) PG_GETARG_INT64(0)) > 0);
-		goto end;
+		return found;
 	}
 
 	key.fs = (uint64) PG_GETARG_INT64(0);
 	key.fss = PG_GETARG_INT32(1);
-
-	/*
-	 * Look for a record with this queryid. DSA fields must be freed before
-	 * deletion of the record.
-	 */
-	entry = (DataEntry *) hash_search(qtexts_htab, &key, HASH_FIND, &found);
-	if (!found)
-		goto end;
-
-	/* Free DSA memory, allocated foro this record */
-	Assert(DsaPointerIsValid(entry->data_dp));
-	dsa_free(data_dsa, entry->data_dp);
-
-	(void) hash_search(data_htab, &key, HASH_REMOVE, &found);
-	Assert(found);
-end:
-	if (found)
-		aqo_state->data_changed = true;
-	LWLockRelease(&aqo_state->data_lock);
-	PG_RETURN_BOOL(found);
+	PG_RETURN_BOOL(_aqo_data_remove(&key));
 }
 
 static long
@@ -1751,15 +1805,9 @@ aqo_queries(PG_FUNCTION_ARGS)
 Datum
 aqo_queries_remove(PG_FUNCTION_ARGS)
 {
-	uint64			queryid = (uint64) PG_GETARG_INT64(0);
-	QueriesEntry   *entry;
-	bool			removed;
+	uint64	queryid = (uint64) PG_GETARG_INT64(0);
 
-	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
-	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, HASH_REMOVE, NULL);
-	removed = (entry) ? true : false;
-	LWLockRelease(&aqo_state->queries_lock);
-	PG_RETURN_BOOL(removed);
+	PG_RETURN_BOOL(_aqo_queries_remove(queryid));
 }
 
 bool
@@ -1963,4 +2011,196 @@ aqo_reset(PG_FUNCTION_ARGS)
 	counter += aqo_data_reset();
 	counter += aqo_queries_reset();
 	PG_RETURN_INT64(counter);
+}
+
+#include "utils/syscache.h"
+
+/*
+ * Scan aqo_queries. For each FS lookup aqo_data records: detect a record, where
+ * list of oids links to deleted tables.
+ * If
+ *
+ * Scan aqo_data hash table. Detect a record, where list of oids links to
+ * deleted tables. If gentle is TRUE, remove this record only. Another case,
+ * remove all records with the same (not default) fs from aqo_data.
+ * Scan aqo_queries. If no one record in aqo_data exists for this fs - remove
+ * the record from aqo_queries, aqo_query_stat and aqo_query_texts.
+ */
+static void
+cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
+{
+	HASH_SEQ_STATUS	hash_seq;
+	QueriesEntry   *entry;
+
+	/* Call it because we might touch DSA segments during the cleanup */
+	dsa_init();
+
+	*fs_num = 0;
+	*fss_num = 0;
+
+	/*
+	 * It's a long haul. So, make seq scan without any lock. It is possible
+	 * because only this operation can delete data from hash table.
+	 */
+	hash_seq_init(&hash_seq, queries_htab);
+	while ((entry = hash_seq_search(&hash_seq)) != NULL)
+	{
+		HASH_SEQ_STATUS	hash_seq2;
+		DataEntry	   *dentry;
+		List		   *junk_fss = NIL;
+		List		   *actual_fss = NIL;
+		ListCell	   *lc;
+
+		/* Scan aqo_data for any junk records related to this FS */
+		hash_seq_init(&hash_seq2, data_htab);
+		while ((dentry = hash_seq_search(&hash_seq2)) != NULL)
+		{
+			char *ptr;
+
+			if (entry->fs != dentry->key.fs)
+				/* Another FS */
+				continue;
+
+			LWLockAcquire(&aqo_state->data_lock, LW_SHARED);
+
+			Assert(DsaPointerIsValid(dentry->data_dp));
+			ptr = dsa_get_address(data_dsa, dentry->data_dp);
+
+			ptr += sizeof(data_key);
+			ptr += sizeof(double) * dentry->rows * dentry->cols;
+			ptr += sizeof(double) * 2 * dentry->rows;
+
+			if (dentry->nrels > 0)
+			{
+				int			i;
+
+				/* Check each OID to be existed. */
+				for(i = 0; i < dentry->nrels; i++)
+				{
+					Oid reloid = ObjectIdGetDatum(*(Oid *)ptr);
+
+					if (!SearchSysCacheExists1(RELOID, reloid))
+						/* Remember this value */
+						junk_fss = list_append_unique_int(junk_fss,
+														  dentry->key.fss);
+					else
+						actual_fss = list_append_unique_int(actual_fss,
+															dentry->key.fss);
+
+					ptr += sizeof(Oid);
+				}
+			}
+			else
+			{
+				/*
+				 * Impossible case. We don't use AQO for so simple or synthetic
+				 * data. Just detect errors in this logic.
+				 */
+				ereport(PANIC,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("AQO detected incorrect behaviour: fs=%lu fss=%ld",
+						dentry->key.fs, dentry->key.fss)));
+			}
+
+			LWLockRelease(&aqo_state->data_lock);
+		}
+
+		/*
+		 * In forced mode remove all child FSSes even some of them are still
+		 * link to existed tables.
+		 */
+		if (junk_fss != NIL && !gentle)
+			junk_fss = list_concat(junk_fss, actual_fss);
+
+		/* Remove junk records from aqo_data */
+		foreach(lc, junk_fss)
+		{
+			data_key	key = {.fs = entry->fs, .fss = lfirst_int(lc)};
+			(*fss_num) += (int) _aqo_data_remove(&key);
+		}
+
+		/*
+		 * If no one live FSS exists, remove the class totally. Don't touch
+		 * default query class.
+		 */
+		if (entry->fs != 0 && (actual_fss == NIL || (junk_fss != NIL && !gentle)))
+		{
+			/* Query Stat */
+			_aqo_stat_remove(entry->queryid);
+
+			/* Query text */
+			_aqo_qtexts_remove(entry->queryid);
+
+			/* Query class preferences */
+			(*fs_num) += (int) _aqo_queries_remove(entry->queryid);
+		}
+
+		list_free(junk_fss);
+		list_free(actual_fss);
+	}
+
+	/*
+	 * The best place to flush updated AQO storage: calling the routine, user
+	 * realizes how heavy it is.
+	 */
+	aqo_stat_flush();
+	aqo_data_flush();
+	aqo_qtexts_flush();
+	aqo_queries_flush();
+}
+
+Datum
+aqo_cleanup(PG_FUNCTION_ARGS)
+{
+	int					fs_num;
+	int					fss_num;
+	ReturnSetInfo	   *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	TupleDesc			tupDesc;
+	MemoryContext		per_query_ctx;
+	MemoryContext		oldcontext;
+	Tuplestorestate	   *tupstore;
+	Datum				values[2];
+	bool				nulls[2] = {0, 0};
+
+	/* check to see if caller supports us returning a tuplestore */
+	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("set-valued function called in context that cannot accept a set")));
+	if (!(rsinfo->allowedModes & SFRM_Materialize))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("materialize mode required, but it is not allowed in this context")));
+
+	/* Switch into long-lived context to construct returned data structures */
+	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
+	oldcontext = MemoryContextSwitchTo(per_query_ctx);
+
+	/* Build a tuple descriptor for our result type */
+	if (get_call_result_type(fcinfo, NULL, &tupDesc) != TYPEFUNC_COMPOSITE)
+		elog(ERROR, "return type must be a row type");
+	Assert(tupDesc->natts == 2);
+
+	tupstore = tuplestore_begin_heap(true, false, work_mem);
+	rsinfo->returnMode = SFRM_Materialize;
+	rsinfo->setResult = tupstore;
+	rsinfo->setDesc = tupDesc;
+
+	MemoryContextSwitchTo(oldcontext);
+
+	/*
+	 * Make forced cleanup: if at least one fss isn't actual, remove parent FS
+	 * and all its FSSes.
+	 * Main idea of such behaviour here is, if a table was deleted, we have
+	 * little chance to use this class in future. Only one use case here can be
+	 * a reason: to use it as a base for search data in a set of neighbours.
+	 * But, invent another UI function for such logic.
+	 */
+	cleanup_aqo_database(false, &fs_num, &fss_num);
+
+	values[0] = Int32GetDatum(fs_num);
+	values[1] = Int32GetDatum(fss_num);
+	tuplestore_putvalues(tupstore, tupDesc, values, nulls);
+	tuplestore_donestoring(tupstore);
+	return (Datum) 0;
 }

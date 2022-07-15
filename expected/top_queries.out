@@ -10,7 +10,7 @@ SET aqo.force_collect_stat = 'on';
 --
 CREATE TEMP TABLE ttt AS SELECT count(*) AS cnt FROM generate_series(1,10);
 CREATE TABLE ttp AS SELECT count(*) AS cnt FROM generate_series(1,10);
-SELECT count(*) AS cnt FROM ttt WHERE cnt % 100 = 0;
+SELECT count(*) AS cnt FROM ttt WHERE cnt % 100 = 0; -- Ignore it
  cnt 
 -----
    0
@@ -31,8 +31,7 @@ SELECT num FROM aqo_execution_time(false);
  num 
 -----
    1
-   2
-(2 rows)
+(1 row)
 
 -- Without the AQO control queries with and without temp tables are logged.
 SELECT query_text,nexecs
@@ -41,9 +40,8 @@ WHERE ce.id = aqt.queryid
 ORDER BY (md5(query_text));
                       query_text                      | nexecs 
 ------------------------------------------------------+--------
- SELECT count(*) AS cnt FROM ttt WHERE cnt % 100 = 0; |      1
  SELECT count(*) AS cnt FROM ttp WHERE cnt % 100 = 0; |      1
-(2 rows)
+(1 row)
 
 --
 -- num of query which uses the table t2 should be bigger than num of query which
@@ -93,10 +91,9 @@ ORDER BY (md5(query_text));
                                            query_text                                           | nexecs 
 ------------------------------------------------------------------------------------------------+--------
  SELECT count(*) FROM (SELECT x, y FROM t2 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1; |      1
- SELECT count(*) AS cnt FROM ttt WHERE cnt % 100 = 0;                                           |      1
  SELECT count(*) AS cnt FROM ttp WHERE cnt % 100 = 0;                                           |      1
  SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1; |      1
-(4 rows)
+(3 rows)
 
 SELECT 1 FROM aqo_reset();
  ?column? 

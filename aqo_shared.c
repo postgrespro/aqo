@@ -216,25 +216,25 @@ aqo_init_shmem(void)
 
 	info.keysize = sizeof(((StatEntry *) 0)->queryid);
 	info.entrysize = sizeof(StatEntry);
-	stat_htab = ShmemInitHash("AQO Stat HTAB", 64, fs_max_items,
+	stat_htab = ShmemInitHash("AQO Stat HTAB", fs_max_items, fs_max_items,
 							  &info, HASH_ELEM | HASH_BLOBS);
 
 	/* Init shared memory table for query texts */
 	info.keysize = sizeof(((QueryTextEntry *) 0)->queryid);
 	info.entrysize = sizeof(QueryTextEntry);
-	qtexts_htab = ShmemInitHash("AQO Query Texts HTAB", 64, fs_max_items,
+	qtexts_htab = ShmemInitHash("AQO Query Texts HTAB", fs_max_items, fs_max_items,
 								&info, HASH_ELEM | HASH_BLOBS);
 
 	/* Shared memory hash table for the data */
 	info.keysize = sizeof(data_key);
 	info.entrysize = sizeof(DataEntry);
-	data_htab = ShmemInitHash("AQO Data HTAB", 64, fss_max_items,
+	data_htab = ShmemInitHash("AQO Data HTAB", fss_max_items, fss_max_items,
 							  &info, HASH_ELEM | HASH_BLOBS);
 
 	/* Shared memory hash table for queries */
 	info.keysize = sizeof(((QueriesEntry *) 0)->queryid);
 	info.entrysize = sizeof(QueriesEntry);
-	queries_htab = ShmemInitHash("AQO Queries HTAB", 64, fs_max_items,
+	queries_htab = ShmemInitHash("AQO Queries HTAB", fs_max_items, fs_max_items,
 								 &info, HASH_ELEM | HASH_BLOBS);
 
 	LWLockRelease(AddinShmemInitLock);
