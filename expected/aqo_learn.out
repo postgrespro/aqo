@@ -485,14 +485,8 @@ SELECT * FROM check_estimated_rows('
 SET aqo.mode = 'learn';
 SELECT * FROM aqo_drop_class(0);
 ERROR:  [AQO] Cannot remove basic class 0.
-CONTEXT:  PL/pgSQL function aqo_drop_class(bigint) line 7 at RAISE
 SELECT * FROM aqo_drop_class(42);
-WARNING:  [AQO] Nothing to remove for the class 42.
- aqo_drop_class 
-----------------
-              0
-(1 row)
-
+ERROR:  [AQO] Nothing to remove for the class 42.
 -- Remove all data from ML knowledge base
 SELECT count(*) FROM (
 SELECT aqo_drop_class(q1.id::bigint) FROM (
