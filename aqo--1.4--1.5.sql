@@ -3,6 +3,7 @@
 -- complain if script is sourced in psql, rather than via CREATE EXTENSION
 \echo Use "ALTER EXTENSION aqo UPDATE TO '1.5'" to load this file. \quit
 
+/* Remove old interface of the extension */
 DROP FUNCTION array_mse;
 DROP FUNCTION array_avg;
 DROP FUNCTION public.aqo_clear_hist; -- Should be renamed and reworked
@@ -14,12 +15,15 @@ DROP FUNCTION public.aqo_status;
 DROP FUNCTION public.clean_aqo_data;
 DROP FUNCTION public.show_cardinality_errors;
 DROP FUNCTION public.top_time_queries;
-
 DROP TABLE public.aqo_data CASCADE;
 DROP TABLE public.aqo_queries CASCADE;
 DROP TABLE public.aqo_query_texts CASCADE;
 DROP TABLE public.aqo_query_stat CASCADE;
 
+
+/*
+ * VIEWs to discover AQO data.
+ */
 CREATE FUNCTION aqo_queries (
   OUT queryid		bigint,
   OUT fs			bigint,
@@ -30,28 +34,13 @@ CREATE FUNCTION aqo_queries (
 RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'aqo_queries'
 LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
-CREATE FUNCTION aqo_queries_remove(queryid bigint) RETURNS bool
-AS 'MODULE_PATHNAME'
-LANGUAGE C STRICT PARALLEL SAFE;
 
 CREATE FUNCTION aqo_query_texts(OUT queryid bigint, OUT query_text text)
 RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'aqo_query_texts'
 LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
-CREATE FUNCTION aqo_qtexts_remove(queryid bigint) RETURNS bool
-AS 'MODULE_PATHNAME'
-LANGUAGE C STRICT PARALLEL SAFE;
 
---
--- Remove all records in the AQO storage.
--- Return number of rows removed.
---
-CREATE FUNCTION aqo_reset() RETURNS bigint
-AS 'MODULE_PATHNAME' LANGUAGE C PARALLEL SAFE;
-COMMENT ON FUNCTION aqo_reset() IS
-'Reset all data gathered by AQO';
-
-CREATE FUNCTION aqo_query_stat(
+CREATE FUNCTION aqo_query_stat (
   OUT queryid						bigint,
   OUT execution_time_with_aqo		double precision[],
   OUT execution_time_without_aqo	double precision[],
@@ -66,7 +55,7 @@ RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'aqo_query_stat'
 LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
 
-CREATE FUNCTION aqo_data(
+CREATE FUNCTION aqo_data (
   OUT fs			bigint,
   OUT fss			integer,
   OUT nfeatures		integer,
@@ -78,18 +67,13 @@ CREATE FUNCTION aqo_data(
 RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'aqo_data'
 LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
-CREATE FUNCTION aqo_data_remove(fs bigint, fss int) RETURNS bool
-AS 'MODULE_PATHNAME'
-LANGUAGE C PARALLEL SAFE;
 
 CREATE VIEW aqo_query_stat AS SELECT * FROM aqo_query_stat();
 CREATE VIEW aqo_query_texts AS SELECT * FROM aqo_query_texts();
 CREATE VIEW aqo_data AS SELECT * FROM aqo_data();
 CREATE VIEW aqo_queries AS SELECT * FROM aqo_queries();
 
-CREATE FUNCTION aqo_stat_remove(fs bigint) RETURNS bool
-AS 'MODULE_PATHNAME'
-LANGUAGE C STRICT PARALLEL SAFE;
+/* UI functions */
 
 --
 -- Show execution time of queries, for which AQO has statistics.
@@ -141,44 +125,17 @@ ELSE
 END IF;
 END;
 $$ LANGUAGE plpgsql;
-
 COMMENT ON FUNCTION aqo_execution_time(boolean) IS
 'Get execution time of queries. If controlled = true (AQO could advise cardinality estimations), show time of last execution attempt. Another case (AQO not used), return an average value of execution time across all known executions.';
 
 --
--- Remove all information about a query class from AQO storage.
+-- Remove query class settings, text, statistics and ML data from AQO storage.
+-- Return number of FSS records, removed from the storage.
 --
-CREATE OR REPLACE FUNCTION aqo_drop_class(queryid_rm bigint)
-RETURNS integer AS $$
-DECLARE
-  lfs bigint;
-  num integer;
-BEGIN
-  IF (queryid_rm = 0) THEN
-    raise EXCEPTION '[AQO] Cannot remove basic class %.', queryid_rm;
-  END IF;
-
-  SELECT fs FROM aqo_queries WHERE (queryid = queryid_rm) INTO lfs;
-
-  IF (lfs IS NULL) THEN
-    raise WARNING '[AQO] Nothing to remove for the class %.', queryid_rm;
-    RETURN 0;
-  END IF;
-
-  IF (lfs <> queryid_rm) THEN
-    raise WARNING '[AQO] Removing query class has non-generic feature space value: id = %, fs = %.', queryid_rm, fs;
-  END IF;
-
-  SELECT count(*) FROM aqo_data WHERE fs = lfs INTO num;
-
-  PERFORM aqo_queries_remove(queryid_rm);
-  PERFORM aqo_stat_remove(queryid_rm);
-  PERFORM aqo_qtexts_remove(queryid_rm);
-  PERFORM aqo_data_remove(lfs, NULL);
-  RETURN num;
-END;
-$$ LANGUAGE plpgsql;
-
+CREATE OR REPLACE FUNCTION aqo_drop_class(queryid bigint)
+RETURNS integer
+AS 'MODULE_PATHNAME', 'aqo_drop_class'
+LANGUAGE C STRICT VOLATILE;
 COMMENT ON FUNCTION aqo_drop_class(bigint) IS
 'Remove info about an query class from AQO ML knowledge base.';
 
@@ -190,9 +147,8 @@ COMMENT ON FUNCTION aqo_drop_class(bigint) IS
 -- Returns number of deleted rows from aqo_queries and aqo_data tables.
 --
 CREATE OR REPLACE FUNCTION aqo_cleanup(OUT nfs integer, OUT nfss integer)
-AS 'MODULE_PATHNAME'
+AS 'MODULE_PATHNAME', 'aqo_cleanup'
 LANGUAGE C STRICT VOLATILE;
-
 COMMENT ON FUNCTION aqo_cleanup() IS
 'Remove unneeded rows from the AQO ML storage';
 
@@ -328,3 +284,13 @@ CREATE FUNCTION aqo_queries_update(queryid bigint, fs bigint, learn_aqo bool,
 RETURNS bool
 AS 'MODULE_PATHNAME', 'aqo_queries_update'
 LANGUAGE C VOLATILE;
+
+--
+-- Remove all records in the AQO storage.
+-- Return number of rows removed.
+--
+CREATE FUNCTION aqo_reset() RETURNS bigint
+AS 'MODULE_PATHNAME', 'aqo_reset'
+LANGUAGE C PARALLEL SAFE;
+COMMENT ON FUNCTION aqo_reset() IS
+'Reset all data gathered by AQO';

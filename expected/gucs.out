@@ -92,7 +92,7 @@ SELECT obj_description('aqo_reset'::regproc::oid);
                             List of functions
  Schema |      Name      | Result data type | Argument data types | Type 
 --------+----------------+------------------+---------------------+------
- public | aqo_drop_class | integer          | queryid_rm bigint   | func
+ public | aqo_drop_class | integer          | queryid bigint      | func
 (1 row)
 
 \df aqo_cleanup

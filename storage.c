@@ -96,15 +96,12 @@ PG_FUNCTION_INFO_V1(aqo_query_stat);
 PG_FUNCTION_INFO_V1(aqo_query_texts);
 PG_FUNCTION_INFO_V1(aqo_data);
 PG_FUNCTION_INFO_V1(aqo_queries);
-PG_FUNCTION_INFO_V1(aqo_stat_remove);
-PG_FUNCTION_INFO_V1(aqo_qtexts_remove);
-PG_FUNCTION_INFO_V1(aqo_data_remove);
-PG_FUNCTION_INFO_V1(aqo_queries_remove);
 PG_FUNCTION_INFO_V1(aqo_enable_query);
 PG_FUNCTION_INFO_V1(aqo_disable_query);
 PG_FUNCTION_INFO_V1(aqo_queries_update);
 PG_FUNCTION_INFO_V1(aqo_reset);
 PG_FUNCTION_INFO_V1(aqo_cleanup);
+PG_FUNCTION_INFO_V1(aqo_drop_class);
 
 
 bool
@@ -397,15 +394,6 @@ aqo_stat_reset(void)
 	aqo_stat_flush();
 
 	return num_remove;
-}
-
-
-Datum
-aqo_stat_remove(PG_FUNCTION_ARGS)
-{
-	uint64	queryid = (uint64) PG_GETARG_INT64(0);
-
-	PG_RETURN_BOOL(_aqo_stat_remove(queryid));
 }
 
 static void *
@@ -1212,14 +1200,6 @@ _aqo_data_remove(data_key *key)
 	return found;
 }
 
-Datum
-aqo_qtexts_remove(PG_FUNCTION_ARGS)
-{
-	uint64			queryid = (uint64) PG_GETARG_INT64(0);
-
-	PG_RETURN_BOOL(_aqo_qtexts_remove(queryid));
-}
-
 static long
 aqo_qtexts_reset(void)
 {
@@ -1693,26 +1673,6 @@ _aqo_data_clean(uint64 fs)
 	return removed;
 }
 
-Datum
-aqo_data_remove(PG_FUNCTION_ARGS)
-{
-	data_key	key;
-	bool		found;
-
-	dsa_init();
-
-	if (PG_ARGISNULL(1))
-	{
-		/* Remove all feature subspaces from the space */
-		found = (_aqo_data_clean((uint64) PG_GETARG_INT64(0)) > 0);
-		return found;
-	}
-
-	key.fs = (uint64) PG_GETARG_INT64(0);
-	key.fss = PG_GETARG_INT32(1);
-	PG_RETURN_BOOL(_aqo_data_remove(&key));
-}
-
 static long
 aqo_data_reset(void)
 {
@@ -1800,14 +1760,6 @@ aqo_queries(PG_FUNCTION_ARGS)
 	LWLockRelease(&aqo_state->queries_lock);
 	tuplestore_donestoring(tupstore);
 	return (Datum) 0;
-}
-
-Datum
-aqo_queries_remove(PG_FUNCTION_ARGS)
-{
-	uint64	queryid = (uint64) PG_GETARG_INT64(0);
-
-	PG_RETURN_BOOL(_aqo_queries_remove(queryid));
 }
 
 bool
@@ -2203,4 +2155,51 @@ aqo_cleanup(PG_FUNCTION_ARGS)
 	tuplestore_putvalues(tupstore, tupDesc, values, nulls);
 	tuplestore_donestoring(tupstore);
 	return (Datum) 0;
+}
+
+/*
+ * XXX: Maybe to allow usage of NULL value to make a reset?
+ */
+Datum
+aqo_drop_class(PG_FUNCTION_ARGS)
+{
+	uint64			queryid = PG_GETARG_INT64(0);
+	bool			found;
+	QueriesEntry   *entry;
+	uint64			fs;
+	long			cnt;
+
+	if (queryid == 0)
+		elog(ERROR, "[AQO] Cannot remove basic class %lu.", queryid);
+
+	/* Extract FS value for the queryid */
+	LWLockAcquire(&aqo_state->queries_lock, LW_SHARED);
+	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, HASH_FIND,
+										 &found);
+	if (!found)
+		elog(ERROR, "[AQO] Nothing to remove for the class %lu.", queryid);
+
+	fs = entry->fs;
+	LWLockRelease(&aqo_state->queries_lock);
+
+	if (fs == 0)
+		elog(ERROR, "[AQO] Cannot remove class %lu with default FS.", queryid);
+	if (fs != queryid)
+		elog(WARNING,
+			 "[AQO] Removing query class has non-generic feature space value: id = %lu, fs = %lu.",
+			 queryid, fs);
+
+	/* Now, remove all data related to the class */
+	_aqo_queries_remove(queryid);
+	_aqo_stat_remove(queryid);
+	_aqo_qtexts_remove(queryid);
+	cnt = _aqo_data_clean(fs);
+
+	/* Immediately save changes to permanent storage. */
+	aqo_stat_flush();
+	aqo_data_flush();
+	aqo_qtexts_flush();
+	aqo_queries_flush();
+
+	PG_RETURN_INT32(cnt);
 }
