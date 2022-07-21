@@ -4,7 +4,7 @@ use warnings;
 use Config;
 use PostgresNode;
 use TestLib;
-use Test::More tests => 22;
+use Test::More tests => 27;
 
 my $node = get_new_node('aqotest');
 $node->init;
@@ -298,6 +298,59 @@ is($new_fs_samples_count == $fs_samples_count - $pgb_fs_samples_count, 1,
 is($new_stat_count == $stat_count - $pgb_stat_count, 1,
 	'Total number of samples in aqo_query_stat');
 
+# ##############################################################################
+#
+# AQO works after moving to another schema
+#
+# ##############################################################################
+
+# Move the extension to not-in-search-path schema
+# use LEARN mode to guarantee that AQO will be triggered on each query.
+$node->safe_psql('postgres', "CREATE SCHEMA test; ALTER EXTENSION aqo SET SCHEMA test");
+$node->safe_psql('postgres', "SELECT * FROM test.aqo_reset()"); # Clear data
+
+$res = $node->safe_psql('postgres', "SELECT count(*) FROM test.aqo_queries");
+is($res, 1, 'The extension data was reset');
+
+$node->command_ok([ 'pgbench', '-i', '-s', '1' ], 'init pgbench tables');
+$node->safe_psql('postgres', "
+	ALTER SYSTEM SET aqo.mode = 'learn';
+	ALTER SYSTEM SET log_statement = 'ddl';
+	SELECT pg_reload_conf();
+");
+$node->restart();
+
+$node->command_ok([ 'pgbench', '-t', "25", '-c', "$CLIENTS", '-j', "$THREADS" ],
+					'pgbench should work with moved AQO.');
+
+# DEBUG
+$res = $node->safe_psql('postgres', "
+	SELECT executions_with_aqo, query_text
+	FROM test.aqo_query_stat a, test.aqo_query_texts b
+	WHERE a.queryid = b.queryid
+");
+note("executions:\n$res\n");
+
+$res = $node->safe_psql('postgres',
+	"SELECT sum(executions_with_aqo) FROM test.aqo_query_stat");
+
+# 25 trans * 10 clients * 4 query classes = 1000 + unique SELECT to pgbench_branches
+is($res, 1001, 'Each query should be logged in LEARN mode');
+$res = $node->safe_psql('postgres',
+	"SELECT sum(executions_without_aqo) FROM test.aqo_query_stat");
+is($res, 0, 'AQO has learned on the queries - 2');
+
+# Try to call UI functions. Break the test on an error
+$res = $node->safe_psql('postgres', "
+	SELECT * FROM test.aqo_cardinality_error(true);
+	SELECT * FROM test.aqo_execution_time(true);
+	SELECT * FROM
+		(SELECT queryid FROM test.aqo_queries WHERE queryid<>0 LIMIT 1) q,
+		LATERAL test.aqo_drop_class(queryid);
+	SELECT * FROM test.aqo_cleanup();
+");
+note("OUTPUT:\n$res\n");
+
 $node->safe_psql('postgres', "DROP EXTENSION aqo");
 
 # ##############################################################################
@@ -333,7 +386,7 @@ append_to_file($bank, q{
 $node->safe_psql('postgres', "
 	CREATE EXTENSION aqo;
 	ALTER SYSTEM SET aqo.mode = 'intelligent';
-	ALTER SYSTEM SET log_statement = 'ddl';
+	ALTER SYSTEM SET log_statement = 'none';
 	SELECT pg_reload_conf();
 ");
 $node->restart();
