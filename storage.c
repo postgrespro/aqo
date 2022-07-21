@@ -102,6 +102,7 @@ PG_FUNCTION_INFO_V1(aqo_queries_update);
 PG_FUNCTION_INFO_V1(aqo_reset);
 PG_FUNCTION_INFO_V1(aqo_cleanup);
 PG_FUNCTION_INFO_V1(aqo_drop_class);
+PG_FUNCTION_INFO_V1(aqo_cardinality_error);
 
 
 bool
@@ -2202,4 +2203,96 @@ aqo_drop_class(PG_FUNCTION_ARGS)
 	aqo_queries_flush();
 
 	PG_RETURN_INT32(cnt);
+}
+
+typedef enum {
+	AQE_NN = 0, AQE_QUERYID, AQE_FS, AQE_CERROR, AQE_NEXECS, AQE_TOTAL_NCOLS
+} ce_output_order;
+
+/*
+ * Show cardinality error gathered on last execution.
+ * Skip entries with empty stat slots. XXX: is it possible?
+ */
+Datum
+aqo_cardinality_error(PG_FUNCTION_ARGS)
+{
+	bool				controlled = PG_GETARG_BOOL(0);
+	ReturnSetInfo	   *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	TupleDesc			tupDesc;
+	MemoryContext		per_query_ctx;
+	MemoryContext		oldcontext;
+	Tuplestorestate	   *tupstore;
+	Datum				values[AQE_TOTAL_NCOLS];
+	bool				nulls[AQE_TOTAL_NCOLS];
+	HASH_SEQ_STATUS		hash_seq;
+	QueriesEntry	   *qentry;
+	StatEntry		   *sentry;
+	int					counter = 0;
+
+	/* check to see if caller supports us returning a tuplestore */
+	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("set-valued function called in context that cannot accept a set")));
+	if (!(rsinfo->allowedModes & SFRM_Materialize))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("materialize mode required, but it is not allowed in this context")));
+
+	/* Switch into long-lived context to construct returned data structures */
+	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
+	oldcontext = MemoryContextSwitchTo(per_query_ctx);
+
+	/* Build a tuple descriptor for our result type */
+	if (get_call_result_type(fcinfo, NULL, &tupDesc) != TYPEFUNC_COMPOSITE)
+		elog(ERROR, "return type must be a row type");
+	Assert(tupDesc->natts == AQE_TOTAL_NCOLS);
+
+	tupstore = tuplestore_begin_heap(true, false, work_mem);
+	rsinfo->returnMode = SFRM_Materialize;
+	rsinfo->setResult = tupstore;
+	rsinfo->setDesc = tupDesc;
+
+	MemoryContextSwitchTo(oldcontext);
+
+	LWLockAcquire(&aqo_state->queries_lock, LW_SHARED);
+	LWLockAcquire(&aqo_state->stat_lock, LW_SHARED);
+
+	hash_seq_init(&hash_seq, queries_htab);
+	while ((qentry = hash_seq_search(&hash_seq)) != NULL)
+	{
+		bool	found;
+		double *ce;
+		int64	nexecs;
+		int		nvals;
+
+		memset(nulls, 0, AQE_TOTAL_NCOLS * sizeof(nulls[0]));
+
+		sentry = (StatEntry *) hash_search(stat_htab, &qentry->queryid,
+										   HASH_FIND, &found);
+		if (!found)
+			/* Statistics not found by some reason. Just go further */
+			continue;
+
+		nvals = controlled ? sentry->cur_stat_slot_aqo : sentry->cur_stat_slot;
+		if (nvals == 0)
+			/* No one stat slot filled */
+			continue;
+
+		nexecs = controlled ? sentry->execs_with_aqo : sentry->execs_without_aqo;
+		ce = controlled ? sentry->est_error_aqo : sentry->est_error;
+
+		values[AQE_NN] = Int32GetDatum(counter++);
+		values[AQE_QUERYID] = Int64GetDatum(qentry->queryid);
+		values[AQE_FS] = Int64GetDatum(qentry->fs);
+		values[AQE_NEXECS] = Int64GetDatum(nexecs);
+		values[AQE_CERROR] = Float8GetDatum(ce[nvals - 1]);
+		tuplestore_putvalues(tupstore, tupDesc, values, nulls);
+	}
+
+	LWLockRelease(&aqo_state->stat_lock);
+	LWLockRelease(&aqo_state->queries_lock);
+
+	tuplestore_donestoring(tupstore);
+	return (Datum) 0;
 }

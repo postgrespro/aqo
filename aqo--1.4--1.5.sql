@@ -167,44 +167,8 @@ COMMENT ON FUNCTION aqo_cleanup() IS
 --
 CREATE OR REPLACE FUNCTION aqo_cardinality_error(controlled boolean)
 RETURNS TABLE(num bigint, id bigint, fshash bigint, error float, nexecs bigint)
-AS $$
-BEGIN
-IF (controlled) THEN
-  RETURN QUERY
-    SELECT
-      row_number() OVER (ORDER BY (cerror, query_id, fs_hash) DESC) AS nn,
-      query_id, fs_hash, cerror, execs
-    FROM (
-    SELECT
-      aq.queryid AS query_id,
-      aq.fs AS fs_hash,
-      cardinality_error_with_aqo[array_length(cardinality_error_with_aqo, 1)] AS cerror,
-      executions_with_aqo AS execs
-    FROM aqo_queries aq JOIN aqo_query_stat aqs
-    ON aq.queryid = aqs.queryid
-    WHERE TRUE = ANY (SELECT unnest(cardinality_error_with_aqo) IS NOT NULL)
-    ) AS q1
-    ORDER BY nn ASC;
-ELSE
-  RETURN QUERY
-    SELECT
-      row_number() OVER (ORDER BY (cerror, query_id, fs_hash) DESC) AS nn,
-      query_id, fs_hash, cerror, execs
-    FROM (
-      SELECT
-        aq.queryid AS query_id,
-        aq.fs AS fs_hash,
-		(SELECT AVG(t) FROM unnest(cardinality_error_without_aqo) t) AS cerror,
-        executions_without_aqo AS execs
-      FROM aqo_queries aq JOIN aqo_query_stat aqs
-      ON aq.queryid = aqs.queryid
-      WHERE TRUE = ANY (SELECT unnest(cardinality_error_without_aqo) IS NOT NULL)
-      ) AS q1
-    ORDER BY (nn) ASC;
-END IF;
-END;
-$$ LANGUAGE plpgsql;
-
+AS 'MODULE_PATHNAME', 'aqo_cardinality_error'
+LANGUAGE C STRICT VOLATILE;
 COMMENT ON FUNCTION aqo_cardinality_error(boolean) IS
 'Get cardinality error of queries the last time they were executed. Order queries according to an error value.';
 
