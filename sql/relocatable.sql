@@ -41,10 +41,12 @@ ORDER BY (md5(query_text))
  */
 SELECT aqo_disable_query(id) FROM (
   SELECT queryid AS id FROM aqo_queries WHERE queryid <> 0) AS q1;
-SELECT learn_aqo, use_aqo, auto_tuning FROM test.aqo_queries;
+SELECT learn_aqo, use_aqo, auto_tuning FROM test.aqo_queries
+ORDER BY (learn_aqo, use_aqo, auto_tuning);
 SELECT aqo_enable_query(id) FROM (
   SELECT queryid AS id FROM aqo_queries WHERE queryid <> 0) AS q1;
-SELECT learn_aqo, use_aqo, auto_tuning FROM test.aqo_queries;
+SELECT learn_aqo, use_aqo, auto_tuning FROM test.aqo_queries
+ORDER BY (learn_aqo, use_aqo, auto_tuning);
 
 RESET search_path;
 DROP TABLE test CASCADE;

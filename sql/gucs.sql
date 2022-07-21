@@ -21,14 +21,12 @@ SELECT obj_description('aqo_cardinality_error'::regproc::oid);
 SELECT obj_description('aqo_execution_time'::regproc::oid);
 SELECT obj_description('aqo_drop_class'::regproc::oid);
 SELECT obj_description('aqo_cleanup'::regproc::oid);
-SELECT obj_description('aqo_reset_query'::regproc::oid);
 SELECT obj_description('aqo_reset'::regproc::oid);
 
 \df aqo_cardinality_error
 \df aqo_execution_time
 \df aqo_drop_class
 \df aqo_cleanup
-\df aqo_reset_query
 \df aqo_reset
 
 -- Check stat reset

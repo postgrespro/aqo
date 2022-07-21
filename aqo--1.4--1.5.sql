@@ -208,33 +208,6 @@ $$ LANGUAGE plpgsql;
 COMMENT ON FUNCTION aqo_cardinality_error(boolean) IS
 'Get cardinality error of queries the last time they were executed. Order queries according to an error value.';
 
---
--- Remove all learning data for query with given ID.
--- Can be used in the case when user don't want to drop preferences and
--- accumulated statistics on a query class, but tries to re-learn AQO on this
--- class.
--- Returns a number of deleted rows in the aqo_data table.
---
-CREATE OR REPLACE FUNCTION aqo_reset_query(queryid_res bigint)
-RETURNS integer AS $$
-DECLARE
-  num integer;
-  lfs  bigint;
-BEGIN
-  IF (queryid_res = 0) THEN
-    raise WARNING '[AQO] Reset common feature space.'
-  END IF;
-
-  SELECT fs FROM aqo_queries WHERE queryid = queryid_res INTO lfs;
-  SELECT count(*) FROM aqo_data WHERE fs = lfs INTO num;
-  DELETE FROM aqo_data WHERE fs = lfs;
-  RETURN num;
-END;
-$$ LANGUAGE plpgsql;
-
-COMMENT ON FUNCTION aqo_reset_query(bigint) IS
-'Remove from AQO storage only learning data for given QueryId.';
-
 CREATE FUNCTION aqo_status(hash bigint)
 RETURNS TABLE (
 	"learn"			BOOL,

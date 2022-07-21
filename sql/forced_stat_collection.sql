@@ -32,7 +32,8 @@ SELECT * FROM aqo_data;
 
 SELECT learn_aqo,use_aqo,auto_tuning,cardinality_error_without_aqo ce,executions_without_aqo nex
 FROM aqo_queries AS aq JOIN aqo_query_stat AS aqs
-ON aq.queryid = aqs.queryid;
+ON aq.queryid = aqs.queryid
+ORDER BY (cardinality_error_without_aqo);
 
 SELECT query_text FROM aqo_query_texts ORDER BY (md5(query_text));
 

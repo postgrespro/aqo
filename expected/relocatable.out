@@ -88,7 +88,8 @@ SELECT aqo_disable_query(id) FROM (
  
 (2 rows)
 
-SELECT learn_aqo, use_aqo, auto_tuning FROM test.aqo_queries;
+SELECT learn_aqo, use_aqo, auto_tuning FROM test.aqo_queries
+ORDER BY (learn_aqo, use_aqo, auto_tuning);
  learn_aqo | use_aqo | auto_tuning 
 -----------+---------+-------------
  f         | f       | f
@@ -104,7 +105,8 @@ SELECT aqo_enable_query(id) FROM (
  
 (2 rows)
 
-SELECT learn_aqo, use_aqo, auto_tuning FROM test.aqo_queries;
+SELECT learn_aqo, use_aqo, auto_tuning FROM test.aqo_queries
+ORDER BY (learn_aqo, use_aqo, auto_tuning);
  learn_aqo | use_aqo | auto_tuning 
 -----------+---------+-------------
  f         | f       | f
