@@ -62,12 +62,6 @@ SELECT obj_description('aqo_cleanup'::regproc::oid);
  Remove unneeded rows from the AQO ML storage
 (1 row)
 
-SELECT obj_description('aqo_reset_query'::regproc::oid);
-                        obj_description                        
----------------------------------------------------------------
- Remove from AQO storage only learning data for given QueryId.
-(1 row)
-
 SELECT obj_description('aqo_reset'::regproc::oid);
         obj_description         
 --------------------------------
@@ -100,13 +94,6 @@ SELECT obj_description('aqo_reset'::regproc::oid);
  Schema |    Name     | Result data type |        Argument data types        | Type 
 --------+-------------+------------------+-----------------------------------+------
  public | aqo_cleanup | record           | OUT nfs integer, OUT nfss integer | func
-(1 row)
-
-\df aqo_reset_query
-                            List of functions
- Schema |      Name       | Result data type | Argument data types | Type 
---------+-----------------+------------------+---------------------+------
- public | aqo_reset_query | integer          | queryid_res bigint  | func
 (1 row)
 
 \df aqo_reset
