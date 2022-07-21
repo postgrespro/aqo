@@ -33,7 +33,7 @@ CREATE TABLE t2 AS SELECT mod(gs,10) AS x, mod(gs+1,10) AS y
 SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;
 SELECT count(*) FROM (SELECT x, y FROM t2 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;
 
-SELECT num, to_char(error, '9.99EEEE') FROM aqo_cardinality_error(false) AS te
+SELECT to_char(error, '9.99EEEE') FROM aqo_cardinality_error(false) AS te
 WHERE te.fshash = (
   SELECT fs FROM aqo_queries
   WHERE aqo_queries.queryid = (

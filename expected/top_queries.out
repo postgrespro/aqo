@@ -63,7 +63,7 @@ SELECT count(*) FROM (SELECT x, y FROM t2 GROUP BY GROUPING SETS ((x,y), (x), (y
     31
 (1 row)
 
-SELECT num, to_char(error, '9.99EEEE') FROM aqo_cardinality_error(false) AS te
+SELECT to_char(error, '9.99EEEE') FROM aqo_cardinality_error(false) AS te
 WHERE te.fshash = (
   SELECT fs FROM aqo_queries
   WHERE aqo_queries.queryid = (
@@ -71,9 +71,9 @@ WHERE te.fshash = (
     WHERE query_text = 'SELECT count(*) FROM (SELECT x, y FROM t2 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;'
   )
 );
- num |  to_char  
------+-----------
-   1 |  1.94e+00
+  to_char  
+-----------
+  1.94e+00
 (1 row)
 
 -- Should return zero
