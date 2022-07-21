@@ -75,6 +75,43 @@ CREATE VIEW aqo_queries AS SELECT * FROM aqo_queries();
 
 /* UI functions */
 
+
+CREATE FUNCTION aqo_enable_query(queryid bigint)
+RETURNS void
+AS 'MODULE_PATHNAME', 'aqo_enable_query'
+LANGUAGE C STRICT VOLATILE;
+
+CREATE FUNCTION aqo_disable_query(queryid bigint)
+RETURNS void
+AS 'MODULE_PATHNAME', 'aqo_enable_query'
+LANGUAGE C STRICT VOLATILE;
+
+CREATE FUNCTION aqo_queries_update(
+  queryid bigint, fs bigint, learn_aqo bool, use_aqo bool, auto_tuning bool)
+RETURNS bool
+AS 'MODULE_PATHNAME', 'aqo_queries_update'
+LANGUAGE C VOLATILE;
+
+--
+-- Get cardinality error of queries the last time they were executed.
+-- IN:
+-- controlled - show queries executed under a control of AQO (true);
+-- executed without an AQO control, but AQO has a stat on the query (false).
+--
+-- OUT:
+-- num - sequental number. Smaller number corresponds to higher error.
+-- id - ID of a query.
+-- fshash - feature space. Usually equal to zero or ID.
+-- error - AQO error that calculated on plan nodes of the query.
+-- nexecs - number of executions of queries associated with this ID.
+--
+CREATE OR REPLACE FUNCTION aqo_cardinality_error(controlled boolean)
+RETURNS TABLE(num bigint, id bigint, fshash bigint, error float, nexecs bigint)
+AS 'MODULE_PATHNAME', 'aqo_cardinality_error'
+LANGUAGE C STRICT VOLATILE;
+COMMENT ON FUNCTION aqo_cardinality_error(boolean) IS
+'Get cardinality error of queries the last time they were executed. Order queries according to an error value.';
+
 --
 -- Show execution time of queries, for which AQO has statistics.
 -- controlled - show stat on executions where AQO was used for cardinality
@@ -83,48 +120,8 @@ CREATE VIEW aqo_queries AS SELECT * FROM aqo_queries();
 --
 CREATE OR REPLACE FUNCTION aqo_execution_time(controlled boolean)
 RETURNS TABLE(num bigint, id bigint, fshash bigint, exec_time float, nexecs bigint)
-AS $$
-BEGIN
-IF (controlled) THEN
-  -- Show a query execution time made with AQO support for the planner
-  -- cardinality estimations. Here we return result of last execution.
-  RETURN QUERY
-    SELECT
-      row_number() OVER (ORDER BY (exectime, queryid, fs_hash) DESC) AS nn,
-       queryid, fs_hash, exectime, execs
-    FROM (
-    SELECT
-      aq.queryid AS queryid,
-      aq.fs AS fs_hash,
-      execution_time_with_aqo[array_length(execution_time_with_aqo, 1)] AS exectime,
-      executions_with_aqo AS execs
-    FROM aqo_queries aq JOIN aqo_query_stat aqs
-    ON aq.queryid = aqs.queryid
-    WHERE TRUE = ANY (SELECT unnest(execution_time_with_aqo) IS NOT NULL)
-    ) AS q1
-    ORDER BY nn ASC;
-
-ELSE
-  -- Show a query execution time made without any AQO advise.
-  -- Return an average value across all executions.
-  RETURN QUERY
-    SELECT
-      row_number() OVER (ORDER BY (exectime, queryid, fs_hash) DESC) AS nn,
-      queryid, fs_hash, exectime, execs
-    FROM (
-      SELECT
-        aq.queryid AS queryid,
-        aq.fs AS fs_hash,
-        (SELECT AVG(t) FROM unnest(execution_time_without_aqo) t) AS exectime,
-        executions_without_aqo AS execs
-      FROM aqo_queries aq JOIN aqo_query_stat aqs
-      ON aq.queryid = aqs.queryid
-      WHERE TRUE = ANY (SELECT unnest(execution_time_without_aqo) IS NOT NULL)
-      ) AS q1
-    ORDER BY (nn) ASC;
-END IF;
-END;
-$$ LANGUAGE plpgsql;
+AS 'MODULE_PATHNAME', 'aqo_execution_time'
+LANGUAGE C STRICT VOLATILE;
 COMMENT ON FUNCTION aqo_execution_time(boolean) IS
 'Get execution time of queries. If controlled = true (AQO could advise cardinality estimations), show time of last execution attempt. Another case (AQO not used), return an average value of execution time across all known executions.';
 
@@ -151,76 +148,6 @@ AS 'MODULE_PATHNAME', 'aqo_cleanup'
 LANGUAGE C STRICT VOLATILE;
 COMMENT ON FUNCTION aqo_cleanup() IS
 'Remove unneeded rows from the AQO ML storage';
-
---
--- Get cardinality error of queries the last time they were executed.
--- IN:
--- controlled - show queries executed under a control of AQO (true);
--- executed without an AQO control, but AQO has a stat on the query (false).
---
--- OUT:
--- num - sequental number. Smaller number corresponds to higher error.
--- id - ID of a query.
--- fshash - feature space. Usually equal to zero or ID.
--- error - AQO error that calculated on plan nodes of the query.
--- nexecs - number of executions of queries associated with this ID.
---
-CREATE OR REPLACE FUNCTION aqo_cardinality_error(controlled boolean)
-RETURNS TABLE(num bigint, id bigint, fshash bigint, error float, nexecs bigint)
-AS 'MODULE_PATHNAME', 'aqo_cardinality_error'
-LANGUAGE C STRICT VOLATILE;
-COMMENT ON FUNCTION aqo_cardinality_error(boolean) IS
-'Get cardinality error of queries the last time they were executed. Order queries according to an error value.';
-
-CREATE FUNCTION aqo_status(hash bigint)
-RETURNS TABLE (
-	"learn"			BOOL,
-	"use aqo"		BOOL,
-	"auto tune"		BOOL,
-	"fspace hash"	bigINT,
-	"t_naqo"		TEXT,
-	"err_naqo"		TEXT,
-	"iters"			BIGINT,
-	"t_aqo"			TEXT,
-	"err_aqo"		TEXT,
-	"iters_aqo"		BIGINT
-) AS $$
-SELECT	learn_aqo,use_aqo,auto_tuning,fs,
-		to_char(execution_time_without_aqo[n4],'9.99EEEE'),
-		to_char(cardinality_error_without_aqo[n2],'9.99EEEE'),
-		executions_without_aqo,
-		to_char(execution_time_with_aqo[n3],'9.99EEEE'),
-		to_char(cardinality_error_with_aqo[n1],'9.99EEEE'),
-		executions_with_aqo
-FROM aqo_queries aq, aqo_query_stat aqs,
-	(SELECT array_length(n1,1) AS n1, array_length(n2,1) AS n2,
-		array_length(n3,1) AS n3, array_length(n4,1) AS n4
-	FROM
-		(SELECT cardinality_error_with_aqo		AS n1,
-				cardinality_error_without_aqo	AS n2,
-				execution_time_with_aqo			AS n3,
-				execution_time_without_aqo		AS n4
-		FROM aqo_query_stat aqs WHERE
-			aqs.queryid = $1) AS al) AS q
-WHERE (aqs.queryid = aq.queryid) AND
-	aqs.queryid = $1;
-$$ LANGUAGE SQL;
-
-CREATE FUNCTION aqo_enable_query(queryid bigint)
-RETURNS void
-AS 'MODULE_PATHNAME', 'aqo_enable_query'
-LANGUAGE C STRICT VOLATILE;
-
-CREATE FUNCTION aqo_disable_query(queryid bigint)
-RETURNS void
-AS 'MODULE_PATHNAME', 'aqo_enable_query'
-LANGUAGE C STRICT VOLATILE;
-
-CREATE FUNCTION aqo_queries_update(queryid bigint, fs bigint, learn_aqo bool,
-								   use_aqo bool, auto_tuning bool)
-RETURNS bool
-AS 'MODULE_PATHNAME', 'aqo_queries_update'
-LANGUAGE C VOLATILE;
 
 --
 -- Remove all records in the AQO storage.

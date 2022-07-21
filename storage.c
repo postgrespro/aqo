@@ -103,6 +103,7 @@ PG_FUNCTION_INFO_V1(aqo_reset);
 PG_FUNCTION_INFO_V1(aqo_cleanup);
 PG_FUNCTION_INFO_V1(aqo_drop_class);
 PG_FUNCTION_INFO_V1(aqo_cardinality_error);
+PG_FUNCTION_INFO_V1(aqo_execution_time);
 
 
 bool
@@ -2282,11 +2283,115 @@ aqo_cardinality_error(PG_FUNCTION_ARGS)
 		nexecs = controlled ? sentry->execs_with_aqo : sentry->execs_without_aqo;
 		ce = controlled ? sentry->est_error_aqo : sentry->est_error;
 
-		values[AQE_NN] = Int32GetDatum(counter++);
+		values[AQE_NN] = Int32GetDatum(++counter);
 		values[AQE_QUERYID] = Int64GetDatum(qentry->queryid);
 		values[AQE_FS] = Int64GetDatum(qentry->fs);
 		values[AQE_NEXECS] = Int64GetDatum(nexecs);
 		values[AQE_CERROR] = Float8GetDatum(ce[nvals - 1]);
+		tuplestore_putvalues(tupstore, tupDesc, values, nulls);
+	}
+
+	LWLockRelease(&aqo_state->stat_lock);
+	LWLockRelease(&aqo_state->queries_lock);
+
+	tuplestore_donestoring(tupstore);
+	return (Datum) 0;
+}
+
+typedef enum {
+	ET_NN = 0, ET_QUERYID, ET_FS, ET_EXECTIME, ET_NEXECS, ET_TOTAL_NCOLS
+} et_output_order;
+
+/*
+ * XXX: maybe to merge with aqo_cardinality_error ?
+ * XXX: Do we really want sequental number ?
+ */
+Datum
+aqo_execution_time(PG_FUNCTION_ARGS)
+{
+	bool				controlled = PG_GETARG_BOOL(0);
+	ReturnSetInfo	   *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	TupleDesc			tupDesc;
+	MemoryContext		per_query_ctx;
+	MemoryContext		oldcontext;
+	Tuplestorestate	   *tupstore;
+	Datum				values[AQE_TOTAL_NCOLS];
+	bool				nulls[AQE_TOTAL_NCOLS];
+	HASH_SEQ_STATUS		hash_seq;
+	QueriesEntry	   *qentry;
+	StatEntry		   *sentry;
+	int					counter = 0;
+
+	/* check to see if caller supports us returning a tuplestore */
+	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("set-valued function called in context that cannot accept a set")));
+	if (!(rsinfo->allowedModes & SFRM_Materialize))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("materialize mode required, but it is not allowed in this context")));
+
+	/* Switch into long-lived context to construct returned data structures */
+	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
+	oldcontext = MemoryContextSwitchTo(per_query_ctx);
+
+	/* Build a tuple descriptor for our result type */
+	if (get_call_result_type(fcinfo, NULL, &tupDesc) != TYPEFUNC_COMPOSITE)
+		elog(ERROR, "return type must be a row type");
+	Assert(tupDesc->natts == ET_TOTAL_NCOLS);
+
+	tupstore = tuplestore_begin_heap(true, false, work_mem);
+	rsinfo->returnMode = SFRM_Materialize;
+	rsinfo->setResult = tupstore;
+	rsinfo->setDesc = tupDesc;
+
+	MemoryContextSwitchTo(oldcontext);
+
+	LWLockAcquire(&aqo_state->queries_lock, LW_SHARED);
+	LWLockAcquire(&aqo_state->stat_lock, LW_SHARED);
+
+	hash_seq_init(&hash_seq, queries_htab);
+	while ((qentry = hash_seq_search(&hash_seq)) != NULL)
+	{
+		bool	found;
+		double *et;
+		int64	nexecs;
+		int		nvals;
+		double	tm = 0;
+
+		memset(nulls, 0, ET_TOTAL_NCOLS * sizeof(nulls[0]));
+
+		sentry = (StatEntry *) hash_search(stat_htab, &qentry->queryid,
+										   HASH_FIND, &found);
+		if (!found)
+			/* Statistics not found by some reason. Just go further */
+			continue;
+
+		nvals = controlled ? sentry->cur_stat_slot_aqo : sentry->cur_stat_slot;
+		if (nvals == 0)
+			/* No one stat slot filled */
+			continue;
+
+		nexecs = controlled ? sentry->execs_with_aqo : sentry->execs_without_aqo;
+		et = controlled ? sentry->exec_time_aqo : sentry->exec_time;
+
+		if (!controlled)
+		{
+			int i;
+			/* Calculate average execution time */
+			for (i = 0; i < nvals; i++)
+				tm += et[i];
+			tm /= nvals;
+		}
+		else
+			tm = et[nvals - 1];
+
+		values[ET_NN] = Int32GetDatum(++counter);
+		values[ET_QUERYID] = Int64GetDatum(qentry->queryid);
+		values[ET_FS] = Int64GetDatum(qentry->fs);
+		values[ET_NEXECS] = Int64GetDatum(nexecs);
+		values[ET_EXECTIME] = Float8GetDatum(tm);
 		tuplestore_putvalues(tupstore, tupDesc, values, nulls);
 	}
 

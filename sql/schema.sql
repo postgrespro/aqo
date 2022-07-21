@@ -21,6 +21,8 @@ SELECT * FROM test;
 -- Check AQO service relations state after some manipulations
 -- Exclude fields with hash values from the queries. Hash is depend on
 -- nodefuncs code which is highly PostgreSQL version specific.
-SELECT query_text FROM aqo_query_texts;
-SELECT learn_aqo, use_aqo, auto_tuning FROM aqo_queries;
+SELECT query_text FROM aqo_query_texts
+ORDER BY (md5(query_text)) DESC;
+SELECT learn_aqo, use_aqo, auto_tuning FROM aqo_queries
+ORDER BY (learn_aqo, use_aqo, auto_tuning);
 DROP SCHEMA IF EXISTS test1 CASCADE;
