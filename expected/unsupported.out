@@ -467,6 +467,17 @@ SELECT * FROM
 -- any prediction on number of fetched tuples.
 -- So, if selectivity was wrong we could make bad choice of Scan operation.
 -- For example, we could choose suboptimal index.
+--
+-- Returns string-by-string explain of a query. Made for removing some strings
+-- from the explain output.
+--
+CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
+BEGIN
+    RETURN QUERY
+        EXECUTE format('EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF) %s', query_string);
+    RETURN;
+END;
+$$ LANGUAGE PLPGSQL;
 -- Turn off statistics gathering for simple demonstration of filtering problem.
 ALTER TABLE t SET (autovacuum_enabled = 'false');
 CREATE INDEX ind1 ON t(x);
@@ -502,21 +513,22 @@ SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
     50
 (1 row)
 
-EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
-	SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
-                           QUERY PLAN                            
+SELECT str AS result
+FROM expln('SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1') AS str
+WHERE str NOT LIKE '%Heap Blocks%';
+                             result                              
 -----------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
-   ->  Bitmap Heap Scan on t (actual rows=50 loops=1)
+   Output: count(*)
+   ->  Bitmap Heap Scan on public.t (actual rows=50 loops=1)
          AQO: rows=50, error=0%
-         Recheck Cond: (mod(x, 3) = 1)
-         Filter: (x < 3)
+         Recheck Cond: (mod(t.x, 3) = 1)
+         Filter: (t.x < 3)
          Rows Removed by Filter: 300
-         Heap Blocks: exact=5
          ->  Bitmap Index Scan on ind2 (actual rows=350 loops=1)
                AQO not used
-               Index Cond: (mod(x, 3) = 1)
+               Index Cond: (mod(t.x, 3) = 1)
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
