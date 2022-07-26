@@ -33,7 +33,15 @@ SELECT count(*) FROM person WHERE age<18;
 SELECT count(*) FROM person WHERE age<18 AND passport IS NOT NULL;
 SELECT * FROM aqo_data;
 
-SELECT learn_aqo,use_aqo,auto_tuning,cardinality_error_without_aqo ce,executions_without_aqo nex
+CREATE OR REPLACE FUNCTION round_array (double precision[])
+RETURNS double precision[]
+LANGUAGE SQL
+AS $$
+   SELECT array_agg(round(elem::numeric, 3))
+   FROM unnest($1) as arr(elem);
+$$;
+
+SELECT learn_aqo,use_aqo,auto_tuning,round_array(cardinality_error_without_aqo) ce,executions_without_aqo nex
 FROM aqo_queries JOIN aqo_query_stat USING (query_hash);
 
 SELECT query_text FROM aqo_query_texts ORDER BY (md5(query_text));

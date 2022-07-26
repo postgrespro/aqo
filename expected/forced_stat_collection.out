@@ -40,12 +40,19 @@ SELECT * FROM aqo_data;
 -------------+--------------+-----------+----------+---------+------
 (0 rows)
 
-SELECT learn_aqo,use_aqo,auto_tuning,cardinality_error_without_aqo ce,executions_without_aqo nex
+CREATE OR REPLACE FUNCTION round_array (double precision[])
+RETURNS double precision[]
+LANGUAGE SQL
+AS $$
+   SELECT array_agg(round(elem::numeric, 3))
+   FROM unnest($1) as arr(elem);
+$$;
+SELECT learn_aqo,use_aqo,auto_tuning,round_array(cardinality_error_without_aqo) ce,executions_without_aqo nex
 FROM aqo_queries JOIN aqo_query_stat USING (query_hash);
- learn_aqo | use_aqo | auto_tuning |          ce          | nex 
------------+---------+-------------+----------------------+-----
- f         | f       | f           | {0.8637762840285226} |   1
- f         | f       | f           | {2.9634630129852053} |   1
+ learn_aqo | use_aqo | auto_tuning |   ce    | nex 
+-----------+---------+-------------+---------+-----
+ f         | f       | f           | {0.864} |   1
+ f         | f       | f           | {2.963} |   1
 (2 rows)
 
 SELECT query_text FROM aqo_query_texts ORDER BY (md5(query_text));
@@ -54,6 +61,10 @@ SELECT query_text FROM aqo_query_texts ORDER BY (md5(query_text));
  SELECT count(*) FROM person WHERE age<18;
  COMMON feature space (do not delete!)
  SELECT count(*) FROM person WHERE age<18 AND passport IS NOT NULL;
-(3 rows)
+                                                                   +
+    SELECT array_agg(round(elem::numeric, 3))                      +
+    FROM unnest($1) as arr(elem);                                  +
+ 
+(4 rows)
 
 DROP EXTENSION aqo;
