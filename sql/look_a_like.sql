@@ -69,4 +69,6 @@ FROM expln('
 SELECT x,y FROM A,B WHERE x < 10 and y > 10 AND A.x = B.y;') AS str
 WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
 
+DROP TABLE a,b CASCADE;
+SELECT true FROM aqo_reset();
 DROP EXTENSION aqo CASCADE;

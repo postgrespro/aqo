@@ -230,4 +230,11 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
  JOINS: 0
 (19 rows)
 
+DROP TABLE a,b CASCADE;
+SELECT true FROM aqo_reset();
+ bool 
+------
+ t
+(1 row)
+
 DROP EXTENSION aqo CASCADE;

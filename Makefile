@@ -28,7 +28,8 @@ REGRESS =	aqo_disabled \
 			temp_tables \
 			top_queries \
 			relocatable\
-			look_a_like
+			look_a_like \
+			feature_subspace
 
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw
 stat_srcdir = $(top_srcdir)/contrib/pg_stat_statements
