@@ -23,6 +23,10 @@
 #include "aqo.h"
 #include "hash.h"
 
+#ifdef PGPRO_STD
+# define expression_tree_mutator(node, mutator, context) \
+     expression_tree_mutator(node, mutator, context, 0)
+#endif
 
 /*
  * Hook on creation of a plan node. We need to store AQO-specific data to
