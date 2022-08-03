@@ -586,7 +586,7 @@ data_store(const char *filename, form_record_t callback,
 {
 	FILE   *file;
 	size_t	size;
-	uint	counter = 0;
+	uint32	counter = 0;
 	void   *data;
 	char   *tmpfile;
 
