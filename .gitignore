@@ -8,3 +8,6 @@ regression.out
 *.gcov
 tags
 
+# Generated subdirectories
+/log/
+/tmp_check/
