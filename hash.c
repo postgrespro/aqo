@@ -176,6 +176,9 @@ get_grouped_exprs_hash(int child_fss, List *group_exprs)
 
 	final_hashes[0] = child_fss;
 	final_hashes[1] = get_int_array_hash(hashes, i);
+
+	pfree(hashes);
+
 	return get_int_array_hash(final_hashes, 2);
 }
 
@@ -475,6 +478,7 @@ get_relations_hash(List *relsigns)
 	int			nhashes = 0;
 	int64	   *hashes = palloc(list_length(relsigns) * sizeof(uint64));
 	ListCell   *lc;
+	int64		result;
 
 	foreach(lc, relsigns)
 	{
@@ -485,8 +489,12 @@ get_relations_hash(List *relsigns)
 	qsort(hashes, nhashes, sizeof(int64), int64_compare);
 
 	/* Make a final hash value */
-	return DatumGetInt64(hash_any_extended((const unsigned char *) hashes,
+
+	result = DatumGetInt64(hash_any_extended((const unsigned char *) hashes,
 										   nhashes * sizeof(int64), 0));
+
+	pfree(hashes);
+	return result;
 }
 
 /*
