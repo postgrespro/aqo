@@ -226,7 +226,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 
 	if (query_context.use_aqo || query_context.learn_aqo)
 	{
-		MemoryContext mcxt;
+		MemoryContext old_ctx_m;
 
 		allclauses = list_concat(aqo_get_clauses(root, param_clauses),
 								 aqo_get_clauses(root, rel->baserestrictinfo));
@@ -235,7 +235,8 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 		relid = planner_rt_fetch(rel->relid, root)->relid;
 		get_eclasses(allclauses, &nargs, &args_hash, &eclass_hash);
 
-		mcxt = MemoryContextSwitchTo(CacheMemoryContext);
+		old_ctx_m = MemoryContextSwitchTo(AQO_cache_mem_ctx);
+
 		forboth(l, allclauses, l2, selectivities)
 		{
 			current_hash = get_clause_hash(
@@ -245,7 +246,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 							  *((double *) lfirst(l2)));
 		}
 
-		MemoryContextSwitchTo(mcxt);
+		MemoryContextSwitchTo(old_ctx_m);
 		pfree(args_hash);
 		pfree(eclass_hash);
 	}

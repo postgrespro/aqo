@@ -89,5 +89,6 @@ selectivity_cache_find_global_relid(int clause_hash, int global_relid)
 void
 selectivity_cache_clear(void)
 {
+	MemoryContextReset(AQO_cache_mem_ctx);
 	objects = NIL;
 }

@@ -252,6 +252,7 @@ extern int njoins;
 
 /* Memory context for long-live data */
 extern MemoryContext AQOMemoryContext;
+extern MemoryContext AQO_cache_mem_ctx;
 
 /* Saved hook values in case of unload */
 extern post_parse_analyze_hook_type prev_post_parse_analyze_hook;
