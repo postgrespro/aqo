@@ -94,6 +94,7 @@ double		log_selectivity_lower_bound = -30;
  * after a query parsing and is used during the query planning.
  */
 MemoryContext		AQOMemoryContext;
+MemoryContext		AQO_cache_mem_ctx;
 QueryContextData	query_context;
 /* Additional plan info */
 int njoins;
@@ -234,6 +235,9 @@ _PG_init(void)
 	init_deactivated_queries_storage();
 	AQOMemoryContext = AllocSetContextCreate(TopMemoryContext,
 											 "AQOMemoryContext",
+											 ALLOCSET_DEFAULT_SIZES);
+	AQO_cache_mem_ctx = AllocSetContextCreate(TopMemoryContext,
+											 "AQO_cache_mem_ctx",
 											 ALLOCSET_DEFAULT_SIZES);
 	RegisterResourceReleaseCallback(aqo_free_callback, NULL);
 	RegisterAQOPlanNodeMethods();
