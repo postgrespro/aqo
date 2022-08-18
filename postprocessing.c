@@ -44,7 +44,7 @@ typedef struct
 static double cardinality_sum_errors;
 static int	cardinality_num_objects;
 static int64 max_timeout_value;
-static int64 growth_rate = 2;
+static int64 growth_rate = 3;
 
 /*
  * Store an AQO-related query data into the Query Environment structure.
@@ -637,21 +637,12 @@ aqo_timeout_handler(void)
 }
 
 /*
- * Function to get the value of a variable with exponential growth
- */
-static int64
-get_increment()
-{
-	return pow(1 + growth_rate, query_context.count_increase_timeout);
-}
-
-/*
  * Function for updating smart statement timeout
  */
 static int64
 increase_smart_timeout()
 {
-	int64 smart_timeout_fin_time = (query_context.smart_timeout + 1) * get_increment(query_context.count_increase_timeout);
+	int64 smart_timeout_fin_time = (query_context.smart_timeout + 1) * pow(growth_rate, query_context.count_increase_timeout);
 
 	if (query_context.smart_timeout == max_timeout_value && !update_query_timeout(query_context.query_hash, smart_timeout_fin_time))
 		elog(NOTICE, "[AQO] Timeout is not updated!");
