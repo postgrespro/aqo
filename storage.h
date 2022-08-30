@@ -119,4 +119,6 @@ extern void init_deactivated_queries_storage(void);
 extern bool query_is_deactivated(uint64 query_hash);
 extern void add_deactivated_query(uint64 query_hash);
 
+extern void cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num);
+
 #endif /* STORAGE_H */
