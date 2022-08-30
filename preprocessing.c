@@ -166,7 +166,8 @@ aqo_planner(Query *parse,
 			ParamListInfo boundParams)
 {
 	bool			query_is_stored = false;
-	MemoryContext	oldCxt;
+	MemoryContext oldctx;
+	oldctx = MemoryContextSwitchTo(AQOPredictMemCtx);
 
 	 /*
 	  * We do not work inside an parallel worker now by reason of insert into
@@ -184,6 +185,7 @@ aqo_planner(Query *parse,
 		 * We should disable AQO for this query to remember this decision along
 		 * all execution stages.
 		 */
+		MemoryContextSwitchTo(oldctx);
 		disable_aqo_for_query();
 
 		return call_default_planner(parse,
@@ -193,7 +195,15 @@ aqo_planner(Query *parse,
 	}
 
 	selectivity_cache_clear();
+	MemoryContextSwitchTo(oldctx);
+ 
+	oldctx = MemoryContextSwitchTo(AQOUtilityMemCtx);
 	query_context.query_hash = get_query_hash(parse, query_string);
+	MemoryContextSwitchTo(oldctx);
+
+	MemoryContextReset(AQOUtilityMemCtx);
+
+	oldctx = MemoryContextSwitchTo(AQOPredictMemCtx);
 
 	/* By default, they should be equal */
 	query_context.fspace_hash = query_context.query_hash;
@@ -206,6 +216,7 @@ aqo_planner(Query *parse,
 		 * feature space, that is processing yet (disallow invalidation
 		 * recursion, as an example).
 		 */
+		MemoryContextSwitchTo(oldctx);
 		disable_aqo_for_query();
 
 		return call_default_planner(parse,
@@ -213,13 +224,16 @@ aqo_planner(Query *parse,
 									cursorOptions,
 									boundParams);
 	}
+	MemoryContextSwitchTo(oldctx);
 
 	elog(DEBUG1, "AQO will be used for query '%s', class "UINT64_FORMAT,
 		 query_string ? query_string : "null string", query_context.query_hash);
 
-	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
+	oldctx = MemoryContextSwitchTo(AQOCacheMemCtx);
 	cur_classes = lappend_uint64(cur_classes, query_context.query_hash);
-	MemoryContextSwitchTo(oldCxt);
+	MemoryContextSwitchTo(oldctx);
+
+	oldctx = MemoryContextSwitchTo(AQOPredictMemCtx);
 
 	if (aqo_mode == AQO_MODE_DISABLED)
 	{
@@ -374,11 +388,16 @@ ignore_query_settings:
 	if (!IsQueryDisabled())
 		/* It's good place to set timestamp of start of a planning process. */
 		INSTR_TIME_SET_CURRENT(query_context.start_planning_time);
+	{
+		PlannedStmt *stmt;
+		MemoryContextSwitchTo(oldctx);
+		stmt = call_default_planner(parse, query_string,
+												 cursorOptions, boundParams);
 
-	return call_default_planner(parse,
-								query_string,
-								cursorOptions,
-								boundParams);
+		/* Release the memory, allocated for AQO predictions */
+		MemoryContextReset(AQOPredictMemCtx);
+		return stmt;
+	}
 }
 
 /*

@@ -221,9 +221,12 @@ extern double log_selectivity_lower_bound;
 extern QueryContextData query_context;
 extern int njoins;
 
-/* Memory context for long-live data */
-extern MemoryContext AQOMemoryContext;
-extern MemoryContext AQO_cache_mem_ctx;
+/* AQO Memory contexts */
+extern MemoryContext AQOTopMemCtx;
+extern MemoryContext AQOCacheMemCtx;
+extern MemoryContext AQOUtilityMemCtx;
+extern MemoryContext AQOPredictMemCtx;
+extern MemoryContext AQOLearnMemCtx;
 
 /* Saved hook values in case of unload */
 extern post_parse_analyze_hook_type prev_post_parse_analyze_hook;

@@ -122,7 +122,6 @@ learn_agg_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 	/* Critical section */
 	atomic_fss_learn_step(fs, fss, data, NULL,
 						  target, rfactor, rels->hrels, ctx->isTimedOut);
-	OkNNr_free(data);
 	/* End of critical section */
 }
 
@@ -162,9 +161,6 @@ learn_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 	atomic_fss_learn_step(fs, fss, data, features, target, rfactor,
 						  rels->hrels, ctx->isTimedOut);
 	/* End of critical section */
-
-	OkNNr_free(data);
-	pfree(features);
 }
 
 /*
@@ -185,12 +181,16 @@ restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 	double		*cur_sel;
 	int			cur_hash;
 	int			cur_relid;
+	MemoryContext old_ctx_m;
 
 	parametrized_sel = was_parametrized && (list_length(relidslist) == 1);
 	if (parametrized_sel)
 	{
 		cur_relid = linitial_int(relidslist);
+
+		old_ctx_m = MemoryContextSwitchTo(AQOUtilityMemCtx);
 		get_eclasses(clauselist, &nargs, &args_hash, &eclass_hash);
+		MemoryContextSwitchTo(old_ctx_m);
 	}
 
 	foreach(l, clauselist)
@@ -221,10 +221,9 @@ restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 	}
 
 	if (parametrized_sel)
-	{
-		pfree(args_hash);
-		pfree(eclass_hash);
-	}
+ 	{
+		MemoryContextReset(AQOUtilityMemCtx);
+ 	}
 
 	return lst;
 }
@@ -714,6 +713,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	StatEntry			   *stat;
 	instr_time				endtime;
 	EphemeralNamedRelation	enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
+	MemoryContext oldctx = MemoryContextSwitchTo(AQOLearnMemCtx);
 
 	cardinality_sum_errors = 0.;
 	cardinality_num_objects = 0;
@@ -752,9 +752,6 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		 * Analyze plan if AQO need to learn or need to collect statistics only.
 		 */
 		learnOnPlanState(queryDesc->planstate, (void *) &ctx);
-		list_free(ctx.clauselist);
-		list_free(ctx.relidslist);
-		list_free(ctx.selectivities);
 	}
 
 	/* Calculate execution time. */
@@ -780,8 +777,6 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 			/* Store all learn data into the AQO service relations. */
 			if (!query_context.adding_query && query_context.auto_tuning)
 				automatical_query_tuning(query_context.query_hash, stat);
-
-			pfree(stat);
 		}
 	}
 
@@ -789,6 +784,10 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	cur_classes = ldelete_uint64(cur_classes, query_context.query_hash);
 
 end:
+	/* Release all AQO-specific memory, allocated during learning procedure */
+	MemoryContextSwitchTo(oldctx);
+	MemoryContextReset(AQOLearnMemCtx);
+
 	if (prev_ExecutorEnd_hook)
 		prev_ExecutorEnd_hook(queryDesc);
 	else
@@ -814,21 +813,11 @@ StoreToQueryEnv(QueryDesc *queryDesc)
 {
 	EphemeralNamedRelation	enr;
 	int	qcsize = sizeof(QueryContextData);
-	MemoryContext	oldCxt;
 	bool newentry = false;
+	MemoryContext oldctx = MemoryContextSwitchTo(AQOCacheMemCtx);
 
-	/*
-	 * Choose memory context for AQO parameters. Use pre-existed context if
-	 * someone earlier created queryEnv (usually, SPI), or base on the queryDesc
-	 * memory context.
-	 */
-	if (queryDesc->queryEnv != NULL)
-		oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc->queryEnv));
-	else
-	{
-		oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc));
+	if (queryDesc->queryEnv == NULL)
 		queryDesc->queryEnv = create_queryEnv();
-	}
 
 	Assert(queryDesc->queryEnv);
 	enr = get_ENR(queryDesc->queryEnv, AQOPrivateData);
@@ -851,7 +840,7 @@ StoreToQueryEnv(QueryDesc *queryDesc)
 	if (newentry)
 		register_ENR(queryDesc->queryEnv, enr);
 
-	MemoryContextSwitchTo(oldCxt);
+	MemoryContextSwitchTo(oldctx);
 }
 
 static bool
@@ -873,24 +862,14 @@ static void
 StorePlanInternals(QueryDesc *queryDesc)
 {
 	EphemeralNamedRelation enr;
-	MemoryContext	oldCxt;
 	bool newentry = false;
+	MemoryContext oldctx = MemoryContextSwitchTo(AQOCacheMemCtx);
 
 	njoins = 0;
 	planstate_tree_walker(queryDesc->planstate, calculateJoinNum, &njoins);
 
-	/*
-	 * Choose memory context for AQO parameters. Use pre-existed context if
-	 * someone earlier created queryEnv (usually, SPI), or base on the queryDesc
-	 * memory context.
-	 */
-	if (queryDesc->queryEnv != NULL)
-		oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc->queryEnv));
-	else
-	{
-		oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc));
+	if (queryDesc->queryEnv == NULL)
 		queryDesc->queryEnv = create_queryEnv();
-	}
 
 	Assert(queryDesc->queryEnv);
 	enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
@@ -913,7 +892,7 @@ StorePlanInternals(QueryDesc *queryDesc)
 	if (newentry)
 		register_ENR(queryDesc->queryEnv, enr);
 
-	MemoryContextSwitchTo(oldCxt);
+	MemoryContextSwitchTo(oldctx);
 }
 
 /*

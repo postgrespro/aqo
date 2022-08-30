@@ -81,9 +81,23 @@ double		log_selectivity_lower_bound = -30;
  * Currently we use it only to store query_text string which is initialized
  * after a query parsing and is used during the query planning.
  */
-MemoryContext		AQOMemoryContext;
-MemoryContext		AQO_cache_mem_ctx;
+
 QueryContextData	query_context;
+
+MemoryContext		AQOTopMemCtx = NULL;
+
+/* Is released at the end of transaction */
+MemoryContext		AQOCacheMemCtx = NULL;
+
+/* Should be released in-place, just after a huge calculation */
+MemoryContext		AQOUtilityMemCtx = NULL;
+
+/* Is released at the end of planning */
+MemoryContext 		AQOPredictMemCtx = NULL;
+
+/* Is released at the end of learning */
+MemoryContext 		AQOLearnMemCtx = NULL;
+
 /* Additional plan info */
 int njoins;
 
@@ -119,7 +133,7 @@ aqo_free_callback(ResourceReleasePhase phase,
 
 	if (isTopLevel)
 	{
-		list_free_deep(cur_classes);
+		MemoryContextReset(AQOCacheMemCtx);
 		cur_classes = NIL;
 	}
 }
@@ -320,12 +334,42 @@ _PG_init(void)
 	shmem_request_hook = aqo_shmem_request;
 
 	init_deactivated_queries_storage();
-	AQOMemoryContext = AllocSetContextCreate(TopMemoryContext,
-											 "AQOMemoryContext",
+	
+	/*
+	 * Create own Top memory Context for reporting AQO memory in the future.
+	 */
+	AQOTopMemCtx = AllocSetContextCreate(TopMemoryContext,
+											 "AQOTopMemoryContext",
 											 ALLOCSET_DEFAULT_SIZES);
-	AQO_cache_mem_ctx = AllocSetContextCreate(TopMemoryContext,
-											 "AQO_cache_mem_ctx",
+	/*
+	 * AQO Cache Memory Context containe environment data.
+	 */
+	AQOCacheMemCtx = AllocSetContextCreate(AQOTopMemCtx,
+											 "AQOCacheMemCtx",
 											 ALLOCSET_DEFAULT_SIZES);
+	/*
+	 * AQOUtilityMemoryContext containe short-lived information which
+	 * is appeared from having got clause, selectivity arrays and relid lists
+	 * while calculating hashes. It clean up inside calculated
+	 * function or immediately after her having completed.
+	 */
+	AQOUtilityMemCtx = AllocSetContextCreate(AQOTopMemCtx,
+											 "AQOUtilityMemoryContext",
+											 ALLOCSET_DEFAULT_SIZES);
+	/*
+	 * AQOPredictMemoryContext save necessary information for making predict of plan nodes
+	 * and clean up in the execution stage of query.
+	 */
+	AQOPredictMemCtx = AllocSetContextCreate(AQOTopMemCtx,
+											 "AQOPredictMemoryContext",
+											 ALLOCSET_DEFAULT_SIZES);
+	/*
+	 * AQOLearnMemoryContext save necessary information for writing down to AQO knowledge table
+	 * and clean up after doing this operation.
+	 */
+	AQOLearnMemCtx = AllocSetContextCreate(AQOTopMemCtx,
+											 "AQOLearnMemoryContext",
+ 											 ALLOCSET_DEFAULT_SIZES);
 	RegisterResourceReleaseCallback(aqo_free_callback, NULL);
 	RegisterAQOPlanNodeMethods();
 
