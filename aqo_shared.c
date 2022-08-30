@@ -201,12 +201,14 @@ aqo_init_shmem(void)
 		aqo_state->stat_changed = false;
 		aqo_state->data_changed = false;
 		aqo_state->queries_changed = false;
+		aqo_state->bgw_handle = NULL;
 
 		LWLockInitialize(&aqo_state->lock, LWLockNewTrancheId());
 		LWLockInitialize(&aqo_state->stat_lock, LWLockNewTrancheId());
 		LWLockInitialize(&aqo_state->qtexts_lock, LWLockNewTrancheId());
 		LWLockInitialize(&aqo_state->data_lock, LWLockNewTrancheId());
 		LWLockInitialize(&aqo_state->queries_lock, LWLockNewTrancheId());
+		LWLockInitialize(&aqo_state->bgw_lock, LWLockNewTrancheId());
 	}
 
 	info.keysize = sizeof(htab_key);

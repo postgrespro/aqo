@@ -142,6 +142,7 @@
 #include "utils/rel.h"
 #include "utils/fmgroids.h"
 #include "utils/snapmgr.h"
+#include "catalog/objectaccess.h"
 
 #include "machine_learning.h"
 //#include "storage.h"
@@ -299,6 +300,10 @@ extern double *selectivity_cache_find_global_relid(int clause_hash,
 extern void selectivity_cache_clear(void);
 
 extern bool IsQueryDisabled(void);
+
+extern void aqo_drop_access_hook(ObjectAccessType access, Oid classId, Oid objectId, int subId, void *arg);
+extern void aqo_bgworker_startup(void);
+extern void aqo_bgworker_cleanup(void);
 
 extern List *cur_classes;
 #endif

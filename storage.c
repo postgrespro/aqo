@@ -2045,7 +2045,7 @@ aqo_reset(PG_FUNCTION_ARGS)
  * Scan aqo_queries. If no one record in aqo_data exists for this fs - remove
  * the record from aqo_queries, aqo_query_stat and aqo_query_texts.
  */
-static void
+void
 cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 {
 	HASH_SEQ_STATUS	hash_seq;
