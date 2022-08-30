@@ -52,7 +52,6 @@ predict_debug_output(List *clauses, List *selectivities,
 
 	appendStringInfo(&debug_str, "}, result: %lf", result);
 	elog(DEBUG1, "Prediction: %s", debug_str.data);
-	pfree(debug_str.data);
 }
 #endif
 
@@ -104,8 +103,6 @@ predict_for_relation(List *clauses, List *selectivities, List *relsigns,
 #ifdef AQO_DEBUG_PRINT
 	predict_debug_output(clauses, selectivities, relsigns, *fss, result);
 #endif
-	pfree(features);
-	OkNNr_free(data);
 
 	if (result < 0)
 		return -1;

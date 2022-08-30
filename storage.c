@@ -149,7 +149,6 @@ form_matrix(double *matrix, int nrows, int ncols)
 
 	array = construct_md_array(elems, NULL, 2, dims, lbs,
 							   FLOAT8OID, 8, FLOAT8PASSBYVAL, 'd');
-	pfree(elems);
 	return array;
 }
 
@@ -172,7 +171,6 @@ form_vector(double *vector, int nrows)
 		elems[i] = Float8GetDatum(vector[i]);
 	array = construct_md_array(elems, NULL, 1, dims, lbs,
 							   FLOAT8OID, 8, FLOAT8PASSBYVAL, 'd');
-	pfree(elems);
 	return array;
 }
 
@@ -606,7 +604,6 @@ data_store(const char *filename, form_record_t callback,
 		if (fwrite(&size, sizeof(size), 1, file) != 1 ||
 			fwrite(data, size, 1, file) != 1)
 			goto error;
-		pfree(data);
 		counter++;
 	}
 
@@ -618,7 +615,6 @@ data_store(const char *filename, form_record_t callback,
 	}
 
 	(void) durable_rename(tmpfile, filename, LOG);
-	pfree(tmpfile);
 	elog(LOG, "[AQO] %d records stored in file %s.", counter, filename);
 	return 0;
 
@@ -886,7 +882,6 @@ data_load(const char *filename, deform_record_t callback, void *ctx)
 		if (fread(data, size, 1, file) != 1)
 			goto read_error;
 		res = callback(data, size);
-		pfree(data);
 
 		if (!res)
 		{
@@ -1634,7 +1629,6 @@ aqo_data(PG_FUNCTION_ARGS)
 			array = construct_array(elems, entry->nrels, OIDOID,
 									sizeof(Oid), true, TYPALIGN_INT);
 			values[AD_OIDS] = PointerGetDatum(array);
-			pfree(elems);
 		}
 		else
 			nulls[AD_OIDS] = true;

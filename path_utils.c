@@ -212,7 +212,6 @@ get_list_of_relids(PlannerInfo *root, Relids relids, RelSortOut *rels)
 											strlen(relname), 0)));
 
 			hrels = lappend_oid(hrels, entry->relid);
-			pfree(relname);
 		}
 
 		ReleaseSysCache(htup);
@@ -486,6 +485,8 @@ is_appropriate_path(Path *path)
 
 /*
  * Converts path info into plan node for collecting it after query execution.
+ * Don't switch here to any AQO-specific memory contexts, because we should
+ * store AQO prediction in the same context, as the plan.
  */
 void
 aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)

@@ -59,19 +59,6 @@ OkNNr_allocate(int ncols)
 	return data;
 }
 
-void
-OkNNr_free(OkNNrdata *data)
-{
-	int i;
-
-	if (data->cols > 0)
-	{
-		for (i = 0; i < aqo_K; ++i)
-			pfree(data->matrix[i]);
-	}
-	pfree(data);
-}
-
 /*
  * Computes L2-distance between two given vectors.
  */

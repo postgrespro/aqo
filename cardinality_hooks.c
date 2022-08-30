@@ -144,10 +144,13 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	List		   *selectivities = NULL;
 	List		   *clauses;
 	int				fss = 0;
+	MemoryContext old_ctx_m;
 
 	if (IsQueryDisabled())
 		/* Fast path. */
 		goto default_estimator;
+
+	old_ctx_m = MemoryContextSwitchTo(AQOPredictMemCtx);
 
 	if (query_context.use_aqo || query_context.learn_aqo)
 		selectivities = get_selectivities(root, rel->baserestrictinfo, 0,
@@ -155,9 +158,7 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 
 	if (!query_context.use_aqo)
 	{
-		if (query_context.learn_aqo)
-			list_free_deep(selectivities);
-
+		MemoryContextSwitchTo(old_ctx_m);
 		goto default_estimator;
 	}
 
@@ -174,10 +175,8 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 									 &fss);
 	rel->fss_hash = fss;
 
-	list_free(rels.hrels);
-	list_free(rels.signatures);
-	list_free_deep(selectivities);
-	list_free(clauses);
+	/* Return to the caller's memory context. */
+	MemoryContextSwitchTo(old_ctx_m);
 
 	if (predicted >= 0)
 	{
@@ -224,14 +223,16 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	int		   *eclass_hash;
 	int			current_hash;
 	int			fss = 0;
+	MemoryContext oldctx;
 
 	if (IsQueryDisabled())
 		/* Fast path */
 		goto default_estimator;
 
+	oldctx = MemoryContextSwitchTo(AQOPredictMemCtx);
+
 	if (query_context.use_aqo || query_context.learn_aqo)
 	{
-		MemoryContext old_ctx_m;
 
 		selectivities = list_concat(
 							get_selectivities(root, param_clauses, rel->relid,
@@ -247,8 +248,6 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 		rte = planner_rt_fetch(rel->relid, root);
 		get_eclasses(allclauses, &nargs, &args_hash, &eclass_hash);
 
-		old_ctx_m = MemoryContextSwitchTo(AQO_cache_mem_ctx);
-
 		forboth(l, allclauses, l2, selectivities)
 		{
 			current_hash = get_clause_hash(
@@ -257,19 +256,11 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 			cache_selectivity(current_hash, rel->relid, rte->relid,
 							  *((double *) lfirst(l2)));
 		}
-
-		MemoryContextSwitchTo(old_ctx_m);
-		pfree(args_hash);
-		pfree(eclass_hash);
 	}
 
 	if (!query_context.use_aqo)
 	{
-		if (query_context.learn_aqo)
-		{
-			list_free_deep(selectivities);
-			list_free(allclauses);
-		}
+		MemoryContextSwitchTo(oldctx);
 
 		goto default_estimator;
 	}
@@ -282,8 +273,9 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	}
 
 	predicted = predict_for_relation(allclauses, selectivities, rels.signatures, &fss);
-	list_free(rels.hrels);
-	list_free(rels.signatures);
+
+	/* Return to the caller's memory context */
+	MemoryContextSwitchTo(oldctx);
 
 	predicted_ppi_rows = predicted;
 	fss_ppi_hash = fss;
@@ -317,20 +309,20 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	List	   *outer_selectivities;
 	List	   *current_selectivities = NULL;
 	int			fss = 0;
+	MemoryContext old_ctx_m;
 
 	if (IsQueryDisabled())
 		/* Fast path */
 		goto default_estimator;
 
+	old_ctx_m = MemoryContextSwitchTo(AQOPredictMemCtx);
+
 	if (query_context.use_aqo || query_context.learn_aqo)
 		current_selectivities = get_selectivities(root, restrictlist, 0,
 												  sjinfo->jointype, sjinfo);
-
 	if (!query_context.use_aqo)
 	{
-		if (query_context.learn_aqo)
-			list_free_deep(current_selectivities);
-
+		MemoryContextSwitchTo(old_ctx_m);
 		goto default_estimator;
 	}
 
@@ -347,8 +339,9 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 
 	predicted = predict_for_relation(allclauses, selectivities, rels.signatures,
 									 &fss);
-	list_free(rels.hrels);
-	list_free(rels.signatures);
+
+	/* Return to the caller's memory context */
+	MemoryContextSwitchTo(old_ctx_m);
 
 	rel->fss_hash = fss;
 
@@ -389,10 +382,13 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	List	   *outer_selectivities;
 	List	   *current_selectivities = NULL;
 	int			fss = 0;
+	MemoryContext old_ctx_m;
 
 	if (IsQueryDisabled())
 		/* Fast path */
 		goto default_estimator;
+
+	old_ctx_m = MemoryContextSwitchTo(AQOPredictMemCtx);
 
 	if (query_context.use_aqo || query_context.learn_aqo)
 		current_selectivities = get_selectivities(root, clauses, 0,
@@ -400,9 +396,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 
 	if (!query_context.use_aqo)
 	{
-		if (query_context.learn_aqo)
-			list_free_deep(current_selectivities);
-
+		MemoryContextSwitchTo(old_ctx_m);
 		goto default_estimator;
 	}
 
@@ -417,8 +411,8 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 
 	predicted = predict_for_relation(allclauses, selectivities, rels.signatures,
 									 &fss);
-	list_free(rels.hrels);
-	list_free(rels.signatures);
+	/* Return to the caller's memory context */
+	MemoryContextSwitchTo(old_ctx_m);
 
 	predicted_ppi_rows = predicted;
 	fss_ppi_hash = fss;
@@ -453,8 +447,6 @@ predict_num_groups(PlannerInfo *root, Path *subpath, List *group_exprs,
 		clauses = get_path_clauses(subpath, root, &selectivities);
 		(void) predict_for_relation(clauses, selectivities, rels.signatures,
 									&child_fss);
-		list_free(rels.hrels);
-		list_free(rels.signatures);
 	}
 
 	*fss = get_grouped_exprs_hash(child_fss, group_exprs);
@@ -475,6 +467,7 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 {
 	int fss;
 	double predicted;
+	MemoryContext old_ctx_m;
 
 	if (!query_context.use_aqo)
 		goto default_estimator;
@@ -489,12 +482,15 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 	if (groupExprs == NIL)
 		return 1.0;
 
+	old_ctx_m = MemoryContextSwitchTo(AQOPredictMemCtx);
+
 	predicted = predict_num_groups(root, subpath, groupExprs, &fss);
 	if (predicted > 0.)
 	{
 		grouped_rel->predicted_cardinality = predicted;
 		grouped_rel->rows = predicted;
 		grouped_rel->fss_hash = fss;
+		MemoryContextSwitchTo(old_ctx_m);
 		return predicted;
 	}
 	else
@@ -503,6 +499,8 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 		 * permanently - as an example, SubqueryScan.
 		 */
 		grouped_rel->predicted_cardinality = -1;
+
+	MemoryContextSwitchTo(old_ctx_m);
 
 default_estimator:
 	return default_estimate_num_groups(root, groupExprs, subpath, grouped_rel,
