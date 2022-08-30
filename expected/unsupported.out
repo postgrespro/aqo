@@ -583,13 +583,13 @@ DROP TABLE t,t1 CASCADE; -- delete all tables used in the test
 SELECT count(*) FROM aqo_data; -- Just to detect some changes in the logic. May some false positives really bother us here?
  count 
 -------
-    42
+     7
 (1 row)
 
 SELECT * FROM aqo_cleanup();
  nfs | nfss 
 -----+------
-  12 |   42
+   4 |    7
 (1 row)
 
 SELECT count(*) FROM aqo_data; -- No one row should be returned

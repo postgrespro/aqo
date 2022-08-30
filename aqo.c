@@ -24,6 +24,9 @@
 #include "preprocessing.h"
 #include "learn_cache.h"
 #include "storage.h"
+#include "postmaster/bgworker.h"
+#include "executor/spi.h"
+#include "catalog/objectaccess.h"
 
 
 PG_MODULE_MAGIC;
@@ -98,6 +101,7 @@ set_joinrel_size_estimates_hook_type		prev_set_joinrel_size_estimates_hook;
 get_parameterized_joinrel_size_hook_type	prev_get_parameterized_joinrel_size_hook;
 ExplainOnePlan_hook_type					prev_ExplainOnePlan_hook;
 ExplainOneNode_hook_type					prev_ExplainOneNode_hook;
+object_access_hook_type						prev_object_access_hook;
 
 /*****************************************************************************
  *
@@ -119,6 +123,75 @@ aqo_free_callback(ResourceReleasePhase phase,
 		list_free_deep(cur_classes);
 		cur_classes = NIL;
 	}
+}
+
+/* 
+ * Function of bgworker which responsible for aqo_cleanup
+ */
+void
+aqo_cleanup_bgworker(ObjectAccessType access,
+				   Oid classId,
+				   Oid objectId,
+				   int subId,
+				   void *arg)
+{
+	if (prev_object_access_hook)
+		(*prev_object_access_hook) (access, classId, objectId, subId, arg);
+
+	if (access == OAT_DROP)
+	{
+		int ret;
+		const char* sql = "DO\n$$\nBEGIN\n  IF EXISTS (SELECT * FROM pg_proc where proname = 'aqo_cleanup') THEN\n    PERFORM * FROM aqo_cleanup();\n  END IF;\nEND;\n$$";
+
+		if ((ret = SPI_connect()) < 0)
+			elog(ERROR, "SPI connect failure - returned %d", ret);
+		ret = SPI_exec(sql, 0);
+		SPI_finish();
+	}
+}
+
+void
+aqo_bgworker_startup(void)
+{
+	BackgroundWorker		worker;
+	BackgroundWorkerHandle	*handle;
+	BgwHandleStatus			status;
+	pid_t					pid;
+
+	MemSet(&worker, 0, sizeof(worker));
+	worker.bgw_flags = BGWORKER_SHMEM_ACCESS |
+		BGWORKER_BACKEND_DATABASE_CONNECTION;
+	worker.bgw_start_time = BgWorkerStart_ConsistentState;
+	worker.bgw_restart_time = BGW_NEVER_RESTART;
+	worker.bgw_main_arg = Int32GetDatum(0);
+	worker.bgw_extra[0] = 0;
+	memcpy(worker.bgw_function_name, "aqo_cleanup_bgworker", 19);
+	memcpy(worker.bgw_library_name, "aqo", 4);
+	memcpy(worker.bgw_name, "aqo cleanup", 12);
+
+	if (process_shared_preload_libraries_in_progress)
+	{
+		RegisterBackgroundWorker(&worker);
+		return;
+	}
+
+	/* must set notify PID to wait for startup */
+	worker.bgw_notify_pid = MyProcPid;
+
+	if (!RegisterDynamicBackgroundWorker(&worker, &handle))
+		ereport(ERROR,
+				(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
+				 errmsg("could not register background process"),
+				 errhint("You might need to increase max_worker_processes.")));
+
+	status = WaitForBackgroundWorkerStartup(handle, &pid);
+	if (status != BGWH_STARTED)
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_RESOURCES),
+				 errmsg("could not start background process"),
+				 errhint("More details may be available in the server log.")));
+
+	return;
 }
 
 void
@@ -301,6 +374,9 @@ _PG_init(void)
 	prev_create_upper_paths_hook				= create_upper_paths_hook;
 	create_upper_paths_hook						= aqo_store_upper_signature_hook;
 
+	prev_object_access_hook						= object_access_hook;
+	object_access_hook							= aqo_cleanup_bgworker;
+
 	init_deactivated_queries_storage();
 	AQOMemoryContext = AllocSetContextCreate(TopMemoryContext,
 											 "AQOMemoryContext",
@@ -313,6 +389,8 @@ _PG_init(void)
 
 	EmitWarningsOnPlaceholders("aqo");
 	RequestAddinShmemSpace(aqo_memsize());
+
+	aqo_bgworker_startup();
 }
 
 /*

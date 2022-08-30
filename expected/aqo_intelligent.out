@@ -295,7 +295,7 @@ SELECT count(*) FROM
 ; -- Disable all query classes
  count 
 -------
-    25
+     8
 (1 row)
 
 EXPLAIN SELECT * FROM aqo_test0
@@ -408,7 +408,7 @@ SELECT count(*) FROM
 ; -- set learn = false, use = true, tuning = false
  count 
 -------
-    25
+     8
 (1 row)
 
 EXPLAIN SELECT * FROM aqo_test0

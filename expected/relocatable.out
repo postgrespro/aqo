@@ -114,9 +114,9 @@ ORDER BY (learn_aqo, use_aqo, auto_tuning);
  t         | t       | f
 (3 rows)
 
-RESET search_path;
 DROP TABLE test CASCADE;
 DROP SCHEMA IF EXISTS test CASCADE;
 NOTICE:  drop cascades to extension aqo
 DROP EXTENSION IF EXISTS aqo CASCADE;
 NOTICE:  extension "aqo" does not exist, skipping
+RESET search_path;

@@ -113,7 +113,7 @@ SELECT count(*) FROM
 ; -- learn = true, use = false, tuning = false
  count 
 -------
-    12
+     7
 (1 row)
 
 EXPLAIN (COSTS FALSE)
@@ -203,7 +203,7 @@ SELECT count(*) FROM
 ; -- set use = true
  count 
 -------
-    12
+     7
 (1 row)
 
 EXPLAIN (COSTS FALSE)

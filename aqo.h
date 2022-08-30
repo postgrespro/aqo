@@ -142,6 +142,7 @@
 #include "utils/rel.h"
 #include "utils/fmgroids.h"
 #include "utils/snapmgr.h"
+#include "catalog/objectaccess.h"
 
 #include "machine_learning.h"
 //#include "storage.h"
@@ -296,6 +297,9 @@ extern void selectivity_cache_clear(void);
 
 extern Oid get_aqo_schema(void);
 extern bool IsQueryDisabled(void);
+
+extern void aqo_cleanup_bgworker(ObjectAccessType access, Oid classId, Oid objectId, int subId, void *arg);
+extern void aqo_bgworker_startup(void);
 
 extern List *cur_classes;
 #endif
