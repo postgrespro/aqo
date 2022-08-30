@@ -48,7 +48,7 @@ SELECT aqo_enable_class(id) FROM (
 SELECT learn_aqo, use_aqo, auto_tuning FROM test.aqo_queries
 ORDER BY (learn_aqo, use_aqo, auto_tuning);
 
-RESET search_path;
 DROP TABLE test CASCADE;
 DROP SCHEMA IF EXISTS test CASCADE;
 DROP EXTENSION IF EXISTS aqo CASCADE;
+RESET search_path;

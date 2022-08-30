@@ -7,6 +7,7 @@
 #include "storage/lwlock.h"
 #include "utils/dsa.h"
 #include "lib/dshash.h"
+#include "postmaster/bgworker.h"
 
 #define AQO_SHARED_MAGIC	0x053163
 
@@ -43,6 +44,8 @@ typedef struct AQOSharedState
 
 	LWLock		queries_lock;  /* lock for access to queries storage */
 	bool		queries_changed;
+
+	BackgroundWorkerHandle	*bgw_handle;
 } AQOSharedState;
 
 

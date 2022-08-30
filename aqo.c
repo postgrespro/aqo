@@ -26,6 +26,8 @@
 #include "preprocessing.h"
 #include "learn_cache.h"
 #include "storage.h"
+#include "postmaster/bgworker.h"
+#include "catalog/objectaccess.h"
 
 
 PG_MODULE_MAGIC;
@@ -77,6 +79,8 @@ int			auto_tuning_infinite_loop = 8;
 int			aqo_k = 3;
 double		log_selectivity_lower_bound = -30;
 
+bool		cleanup_bgworker = false;
+
 /*
  * Currently we use it only to store query_text string which is initialized
  * after a query parsing and is used during the query planning.
@@ -112,6 +116,7 @@ get_parameterized_joinrel_size_hook_type	prev_get_parameterized_joinrel_size_hoo
 ExplainOnePlan_hook_type					prev_ExplainOnePlan_hook;
 ExplainOneNode_hook_type					prev_ExplainOneNode_hook;
 static shmem_request_hook_type				prev_shmem_request_hook = NULL;
+object_access_hook_type						prev_object_access_hook;
 
 /*****************************************************************************
  *
@@ -145,6 +150,93 @@ aqo_shmem_request(void)
 		prev_shmem_request_hook();
 
 	RequestAddinShmemSpace(aqo_memsize());
+}
+
+/*
+ * Entry point for CleanupWorker's process.
+ */
+void
+aqo_bgworker_cleanup(void)
+{
+	int	fs_num;
+	int	fss_num;
+
+	cleanup_aqo_database(true, &fs_num, &fss_num);
+}
+
+/* 
+ * Object access hook
+ */
+void
+aqo_drop_access_hook(ObjectAccessType access,
+					 Oid classId,
+					 Oid objectId,
+					 int subId,
+					 void *arg)
+{
+	if (prev_object_access_hook)
+		(*prev_object_access_hook) (access, classId, objectId, subId, arg);
+
+	if (access == OAT_DROP && cleanup_bgworker)
+	{
+		MemoryContext old_ctx;
+		int status = BGWH_STOPPED;
+		pid_t pid;
+
+		old_ctx = MemoryContextSwitchTo(AQOTopMemCtx);
+		LWLockAcquire(&aqo_state->lock, LW_EXCLUSIVE);
+		if (aqo_state->bgw_handle != NULL)
+		{
+			status = GetBackgroundWorkerPid(aqo_state->bgw_handle, &pid);
+		}
+		LWLockRelease(&aqo_state->lock);
+		if (status != BGWH_STARTED)
+		{
+			aqo_bgworker_startup();
+		}
+		MemoryContextSwitchTo(old_ctx);
+	}
+}
+
+void
+aqo_bgworker_startup(void)
+{
+	BackgroundWorker		worker;
+	BackgroundWorkerHandle	*handle;
+	BgwHandleStatus			status;
+	pid_t					pid;
+
+	MemSet(&worker, 0, sizeof(worker));
+
+	worker.bgw_flags = BGWORKER_SHMEM_ACCESS |
+		BGWORKER_BACKEND_DATABASE_CONNECTION;
+	worker.bgw_start_time = BgWorkerStart_ConsistentState;
+	worker.bgw_restart_time = BGW_NEVER_RESTART;
+	worker.bgw_main_arg = Int32GetDatum(0);
+	worker.bgw_extra[0] = 0;
+	memcpy(worker.bgw_function_name, "aqo_bgworker_cleanup", 21);
+	memcpy(worker.bgw_library_name, "aqo", 4);
+	memcpy(worker.bgw_name, "aqo cleanup", 12);
+
+	/* must set notify PID to wait for startup */
+	worker.bgw_notify_pid = MyProcPid;
+
+	if (!RegisterDynamicBackgroundWorker(&worker, &handle))
+		ereport(NOTICE,
+				(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
+				 errmsg("could not register background process"),
+				 errhint("You might need to increase max_worker_processes.")));
+
+	status = WaitForBackgroundWorkerStartup(handle, &pid);
+	if (status != BGWH_STARTED)
+		ereport(NOTICE,
+				(errcode(ERRCODE_INSUFFICIENT_RESOURCES),
+				 errmsg("could not start background process"),
+				 errhint("More details may be available in the server log.")));
+
+	LWLockAcquire(&aqo_state->lock, LW_EXCLUSIVE);
+	aqo_state->bgw_handle = handle;
+	LWLockRelease(&aqo_state->lock);
 }
 
 void
@@ -309,6 +401,18 @@ _PG_init(void)
 							NULL
 	);
 
+	DefineCustomBoolVariable("aqo.cleanup_bgworker",
+							 "Enable bgworker which responsible for doing cleanup after drop",
+							 NULL,
+							 &cleanup_bgworker,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL
+	);
+
 	prev_shmem_startup_hook						= shmem_startup_hook;
 	shmem_startup_hook							= aqo_init_shmem;
 	prev_planner_hook							= planner_hook;
@@ -348,6 +452,9 @@ _PG_init(void)
 
 	prev_shmem_request_hook = shmem_request_hook;
 	shmem_request_hook = aqo_shmem_request;
+
+	prev_object_access_hook						= object_access_hook;
+	object_access_hook							= aqo_drop_access_hook;
 
 	init_deactivated_queries_storage();
 
