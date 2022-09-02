@@ -334,7 +334,7 @@ _PG_init(void)
 	shmem_request_hook = aqo_shmem_request;
 
 	init_deactivated_queries_storage();
-	
+
 	/*
 	 * Create own Top memory Context for reporting AQO memory in the future.
 	 */

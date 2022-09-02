@@ -196,7 +196,7 @@ aqo_planner(Query *parse,
 
 	selectivity_cache_clear();
 	MemoryContextSwitchTo(oldctx);
- 
+
 	oldctx = MemoryContextSwitchTo(AQOUtilityMemCtx);
 	query_context.query_hash = get_query_hash(parse, query_string);
 	MemoryContextSwitchTo(oldctx);
@@ -497,6 +497,7 @@ jointree_walker(Node *jtnode, void *context)
 static bool
 isQueryUsingSystemRelation_walker(Node *node, void *context)
 {
+	MemoryContext oldctx = MemoryContextSwitchTo(AQOLearnMemCtx);
 	AQOPreWalkerCtx   *ctx = (AQOPreWalkerCtx *) context;
 
 	if (node == NULL)
@@ -538,6 +539,7 @@ isQueryUsingSystemRelation_walker(Node *node, void *context)
 		}
 
 		jointree_walker((Node *) query->jointree, context);
+		MemoryContextSwitchTo(oldctx);
 
 		/* Recursively plunge into subqueries and CTEs */
 		return query_tree_walker(query,
