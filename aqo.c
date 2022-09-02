@@ -316,7 +316,7 @@ _PG_init(void)
 	create_upper_paths_hook						= aqo_store_upper_signature_hook;
 
 	init_deactivated_queries_storage();
-	
+
 	/*
 	 * Create own Top memory Context for reporting AQO memory in the future.
 	 */

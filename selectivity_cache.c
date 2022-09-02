@@ -51,7 +51,7 @@ cache_selectivity(int clause_hash,
 		AQOCacheSelectivity = AllocSetContextCreate(AQOTopMemCtx,
 													"AQOCacheSelectivity",
 													ALLOCSET_DEFAULT_SIZES);
- 
+
 
 	foreach(l, objects)
 	{

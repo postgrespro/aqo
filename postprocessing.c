@@ -615,6 +615,7 @@ static int exec_nested_level = 0;
 static void
 aqo_timeout_handler(void)
 {
+	MemoryContext oldctx = MemoryContextSwitchTo(AQOLearnMemCtx);
 	aqo_obj_stat ctx = {NIL, NIL, NIL, false, false};
 
 	if (!timeoutCtl.queryDesc || !ExtractFromQueryEnv(timeoutCtl.queryDesc))
@@ -627,6 +628,7 @@ aqo_timeout_handler(void)
 
 	elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data.");
 	learnOnPlanState(timeoutCtl.queryDesc->planstate, (void *) &ctx);
+	MemoryContextSwitchTo(oldctx);
 }
 
 static bool
