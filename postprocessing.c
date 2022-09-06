@@ -216,6 +216,11 @@ restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 		else
 			cur_sel = &rinfo->outer_selec;
 
+		if (*cur_sel < 0)
+			*cur_sel = 0;
+
+		Assert(cur_sel > 0);
+
 		lst = lappend(lst, cur_sel);
 		i++;
 	}

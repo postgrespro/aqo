@@ -260,6 +260,7 @@ get_fss_for_object(List *relsigns, List *clauselist,
 		if (nfeatures != NULL)
 		{
 			(*features)[inverse_idx[i]] = log(*s);
+			Assert(!isnan(log(*s)));
 			if ((*features)[inverse_idx[i]] < log_selectivity_lower_bound)
 				(*features)[inverse_idx[i]] = log_selectivity_lower_bound;
 		}
@@ -693,7 +694,7 @@ get_eclasses(List *clauselist, int *nargs, int **args_hash, int **eclass_hash)
 	e_hashes = palloc((*nargs) * sizeof(*e_hashes));
 
 	MemoryContextSwitchTo(old_ctx_m);
-	
+
 	for (i = 0; i < *nargs; ++i)
 		lsts[i] = NIL;
 
