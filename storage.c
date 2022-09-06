@@ -145,7 +145,10 @@ form_matrix(double *matrix, int nrows, int ncols)
 	elems = palloc(sizeof(*elems) * nrows * ncols);
 	for (i = 0; i < nrows; ++i)
 		for (j = 0; j < ncols; ++j)
+		{
 			elems[i * ncols + j] = Float8GetDatum(matrix[i * ncols + j]);
+			Assert(!isnan(matrix[i * ncols + j]));
+		}
 
 	array = construct_md_array(elems, NULL, 2, dims, lbs,
 							   FLOAT8OID, 8, FLOAT8PASSBYVAL, 'd');

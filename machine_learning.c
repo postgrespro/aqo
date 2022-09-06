@@ -69,7 +69,10 @@ fs_distance(double *a, double *b, int len)
 	int			i;
 
 	for (i = 0; i < len; ++i)
+	{
+		Assert(!isnan(a[i]));
 		res += (a[i] - b[i]) * (a[i] - b[i]);
+	}
 	if (len != 0)
 		res = sqrt(res / len);
 	return res;
