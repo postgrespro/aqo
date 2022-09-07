@@ -69,17 +69,17 @@ SELECT obj_description('aqo_reset'::regproc::oid);
 (1 row)
 
 \df aqo_cardinality_error
-                                                                List of functions
- Schema |         Name          |                                  Result data type                                  | Argument data types | Type 
---------+-----------------------+------------------------------------------------------------------------------------+---------------------+------
- public | aqo_cardinality_error | TABLE(num bigint, id bigint, fshash bigint, error double precision, nexecs bigint) | controlled boolean  | func
+                                                                 List of functions
+ Schema |         Name          |                                  Result data type                                   | Argument data types | Type 
+--------+-----------------------+-------------------------------------------------------------------------------------+---------------------+------
+ public | aqo_cardinality_error | TABLE(num integer, id bigint, fshash bigint, error double precision, nexecs bigint) | controlled boolean  | func
 (1 row)
 
 \df aqo_execution_time
                                                                  List of functions
- Schema |        Name        |                                    Result data type                                    | Argument data types | Type 
---------+--------------------+----------------------------------------------------------------------------------------+---------------------+------
- public | aqo_execution_time | TABLE(num bigint, id bigint, fshash bigint, exec_time double precision, nexecs bigint) | controlled boolean  | func
+ Schema |        Name        |                                    Result data type                                     | Argument data types | Type 
+--------+--------------------+-----------------------------------------------------------------------------------------+---------------------+------
+ public | aqo_execution_time | TABLE(num integer, id bigint, fshash bigint, exec_time double precision, nexecs bigint) | controlled boolean  | func
 (1 row)
 
 \df aqo_drop_class

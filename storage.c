@@ -447,9 +447,10 @@ _form_qtext_record_cb(void *ctx, size_t *size)
 
 	Assert(DsaPointerIsValid(entry->qtext_dp));
 	query_string = dsa_get_address(qtext_dsa, entry->qtext_dp);
+	Assert(query_string != NULL);
 	*size = sizeof(entry->queryid) + strlen(query_string) + 1;
-	data = palloc(*size);
-	ptr = data;
+	ptr = data = palloc(*size);
+	Assert(ptr != NULL);
 	memcpy(ptr, &entry->queryid, sizeof(entry->queryid));
 	ptr += sizeof(entry->queryid);
 	memcpy(ptr, query_string, strlen(query_string) + 1);
@@ -646,7 +647,7 @@ _deform_stat_record_cb(void *data, size_t size)
 
 	queryid = ((StatEntry *) data)->queryid;
 	entry = (StatEntry *) hash_search(stat_htab, &queryid, HASH_ENTER, &found);
-	Assert(!found);
+	Assert(!found && entry);
 	memcpy(entry, data, sizeof(StatEntry));
 	return true;
 }
@@ -756,7 +757,9 @@ _deform_data_record_cb(void *data, size_t size)
 	char	   *ptr = (char *) data,
 			   *dsa_ptr;
 
+	Assert(ptr != NULL);
 	Assert(LWLockHeldByMeInMode(&aqo_state->data_lock, LW_EXCLUSIVE));
+
 	entry = (DataEntry *) hash_search(data_htab, &fentry->key,
 									  HASH_ENTER, &found);
 	Assert(!found);
@@ -780,6 +783,7 @@ _deform_data_record_cb(void *data, size_t size)
 	}
 
 	dsa_ptr = (char *) dsa_get_address(data_dsa, entry->data_dp);
+	Assert(dsa_ptr != NULL);
 	memcpy(dsa_ptr, ptr, sz);
 	return true;
 }
@@ -1319,7 +1323,8 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	if (entry->cols != data->cols || entry->nrels != list_length(reloids))
 	{
 		/* Collision happened? */
-		elog(LOG, "[AQO] Does a collision happened? Check it if possible (fs: %lu, fss: %d).",
+		elog(LOG, "[AQO] Does a collision happened? Check it if possible (fs: "
+			 UINT64_FORMAT", fss: %d).",
 			 fs, fss);
 		goto end;
 	}
@@ -1344,6 +1349,7 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 		}
 	}
 	ptr = (char *) dsa_get_address(data_dsa, entry->data_dp);
+	Assert(ptr != NULL);
 
 	/*
 	 * Copy AQO data into allocated DSA segment
@@ -1355,6 +1361,7 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	{
 		for (i = 0; i < entry->rows; i++)
 		{
+			Assert(data->matrix[i]);
 			memcpy(ptr, data->matrix[i], sizeof(double) * data->cols);
 			ptr += sizeof(double) * data->cols;
 		}
@@ -1384,6 +1391,7 @@ static void
 build_knn_matrix(OkNNrdata *data, const OkNNrdata *temp_data)
 {
 	Assert(data->cols == temp_data->cols);
+	Assert(data->matrix);
 
 	if (data->rows > 0)
 		/* trivial strategy - use first suitable record and ignore others */
@@ -1395,7 +1403,10 @@ build_knn_matrix(OkNNrdata *data, const OkNNrdata *temp_data)
 		int i;
 
 		for (i = 0; i < data->rows; i++)
+		{
+			Assert(data->matrix[i]);
 			memcpy(data->matrix[i], temp_data->matrix[i], data->cols * sizeof(double));
+		}
 	}
 }
 
@@ -1417,6 +1428,7 @@ _fill_knn_data(const DataEntry *entry, List **reloids)
 	Assert(entry->rows <= aqo_K);
 	Assert(ptr != NULL);
 	Assert(entry->key.fss == ((data_key *)ptr)->fss);
+	Assert(data->matrix);
 
 	ptr += sizeof(data_key);
 
@@ -1424,6 +1436,7 @@ _fill_knn_data(const DataEntry *entry, List **reloids)
 	{
 		for (i = 0; i < entry->rows; i++)
 		{
+			Assert(data->matrix[i]);
 			memcpy(data->matrix[i], ptr, sizeof(double) * data->cols);
 			ptr += sizeof(double) * data->cols;
 		}
@@ -1490,7 +1503,8 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 		if (entry->cols != data->cols)
 		{
 			/* Collision happened? */
-			elog(LOG, "[AQO] Does a collision happened? Check it if possible (fs: %lu, fss: %d).",
+			elog(LOG, "[AQO] Does a collision happened? Check it if possible "
+				 "(fs: "UINT64_FORMAT", fss: %d).",
 				 fs, fss);
 			found = false;
 			goto end;
@@ -1598,7 +1612,7 @@ aqo_data(PG_FUNCTION_ARGS)
 		memset(nulls, 0, AD_TOTAL_NCOLS);
 
 		values[AD_FS] = Int64GetDatum(entry->key.fs);
-		values[AD_FSS] = Int64GetDatum(entry->key.fss);
+		values[AD_FSS] = Int32GetDatum((int) entry->key.fss);
 		values[AD_NFEATURES] = Int32GetDatum(entry->cols);
 
 		/* Fill values from the DSA data chunk */
@@ -1864,7 +1878,8 @@ aqo_enable_query(PG_FUNCTION_ARGS)
 			entry->auto_tuning = true;
 	}
 	else
-		elog(ERROR, "[AQO] Entry with queryid %ld not contained in table", queryid);
+		elog(ERROR, "[AQO] Entry with queryid "INT64_FORMAT
+			 " not contained in table", (int64) queryid);
 
 	hash_search(deactivated_queries, &queryid, HASH_REMOVE, NULL);
 	LWLockRelease(&aqo_state->queries_lock);
@@ -1891,7 +1906,8 @@ aqo_disable_query(PG_FUNCTION_ARGS)
 	}
 	else
 	{
-		elog(ERROR, "[AQO] Entry with %ld not contained in table", queryid);
+		elog(ERROR, "[AQO] Entry with "INT64_FORMAT" not contained in table",
+			 (int64) queryid);
 	}
 	LWLockRelease(&aqo_state->queries_lock);
 	PG_RETURN_VOID();
@@ -1942,11 +1958,11 @@ aqo_queries_update(PG_FUNCTION_ARGS)
 	if (!PG_ARGISNULL(AQ_FS))
 		entry->fs = PG_GETARG_INT64(AQ_FS);
 	if (!PG_ARGISNULL(AQ_LEARN_AQO))
-		entry->learn_aqo = PG_GETARG_INT64(AQ_LEARN_AQO);
+		entry->learn_aqo = PG_GETARG_BOOL(AQ_LEARN_AQO);
 	if (!PG_ARGISNULL(AQ_USE_AQO))
-		entry->use_aqo = PG_GETARG_INT64(AQ_USE_AQO);
+		entry->use_aqo = PG_GETARG_BOOL(AQ_USE_AQO);
 	if (!PG_ARGISNULL(AQ_AUTO_TUNING))
-		entry->auto_tuning = PG_GETARG_INT64(AQ_AUTO_TUNING);
+		entry->auto_tuning = PG_GETARG_BOOL(AQ_AUTO_TUNING);
 
 	/* Remove the class from cache of deactivated queries */
 	hash_search(deactivated_queries, &queryid, HASH_REMOVE, NULL);
@@ -2052,8 +2068,9 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 				 */
 				ereport(PANIC,
 						(errcode(ERRCODE_INTERNAL_ERROR),
-						 errmsg("AQO detected incorrect behaviour: fs=%lu fss=%ld",
-						dentry->key.fs, dentry->key.fss)));
+						 errmsg("AQO detected incorrect behaviour: fs="
+						 UINT64_FORMAT" fss=%d",
+						dentry->key.fs, (int32) dentry->key.fss)));
 			}
 
 			LWLockRelease(&aqo_state->data_lock);
@@ -2172,24 +2189,27 @@ aqo_drop_class(PG_FUNCTION_ARGS)
 	long			cnt;
 
 	if (queryid == 0)
-		elog(ERROR, "[AQO] Cannot remove basic class %lu.", queryid);
+		elog(ERROR, "[AQO] Cannot remove basic class "INT64_FORMAT".",
+			 (int64) queryid);
 
 	/* Extract FS value for the queryid */
 	LWLockAcquire(&aqo_state->queries_lock, LW_SHARED);
 	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, HASH_FIND,
 										 &found);
 	if (!found)
-		elog(ERROR, "[AQO] Nothing to remove for the class %lu.", queryid);
+		elog(ERROR, "[AQO] Nothing to remove for the class "INT64_FORMAT".",
+			 (int64) queryid);
 
 	fs = entry->fs;
 	LWLockRelease(&aqo_state->queries_lock);
 
 	if (fs == 0)
-		elog(ERROR, "[AQO] Cannot remove class %lu with default FS.", queryid);
+		elog(ERROR, "[AQO] Cannot remove class "INT64_FORMAT" with default FS.",
+			 (int64) queryid);
 	if (fs != queryid)
 		elog(WARNING,
-			 "[AQO] Removing query class has non-generic feature space value: id = %lu, fs = %lu.",
-			 queryid, fs);
+			 "[AQO] Removing query class has non-generic feature space value: "
+			 "id = "INT64_FORMAT", fs = "UINT64_FORMAT".", (int64) queryid, fs);
 
 	/* Now, remove all data related to the class */
 	_aqo_queries_remove(queryid);

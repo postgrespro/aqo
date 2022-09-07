@@ -62,7 +62,7 @@ CREATE FUNCTION aqo_data (
   OUT features		double precision[][],
   OUT targets		double precision[],
   OUT reliability	double precision[],
-  OUT oids			integer[]
+  OUT oids			Oid[]
 )
 RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'aqo_data'
@@ -106,7 +106,7 @@ LANGUAGE C VOLATILE;
 -- nexecs - number of executions of queries associated with this ID.
 --
 CREATE OR REPLACE FUNCTION aqo_cardinality_error(controlled boolean)
-RETURNS TABLE(num bigint, id bigint, fshash bigint, error float, nexecs bigint)
+RETURNS TABLE(num integer, id bigint, fshash bigint, error double precision, nexecs bigint)
 AS 'MODULE_PATHNAME', 'aqo_cardinality_error'
 LANGUAGE C STRICT VOLATILE;
 COMMENT ON FUNCTION aqo_cardinality_error(boolean) IS
@@ -119,7 +119,7 @@ COMMENT ON FUNCTION aqo_cardinality_error(boolean) IS
 -- Last case is possible in disabled mode with aqo.force_collect_stat = 'on'.
 --
 CREATE OR REPLACE FUNCTION aqo_execution_time(controlled boolean)
-RETURNS TABLE(num bigint, id bigint, fshash bigint, exec_time float, nexecs bigint)
+RETURNS TABLE(num integer, id bigint, fshash bigint, exec_time double precision, nexecs bigint)
 AS 'MODULE_PATHNAME', 'aqo_execution_time'
 LANGUAGE C STRICT VOLATILE;
 COMMENT ON FUNCTION aqo_execution_time(boolean) IS

@@ -294,7 +294,6 @@ extern double *selectivity_cache_find_global_relid(int clause_hash,
 												   int global_relid);
 extern void selectivity_cache_clear(void);
 
-extern Oid get_aqo_schema(void);
 extern bool IsQueryDisabled(void);
 
 extern List *cur_classes;

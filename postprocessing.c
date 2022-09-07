@@ -318,7 +318,7 @@ should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
 			/* This node s*/
 			if (aqo_show_details)
 				elog(NOTICE,
-					 "[AQO] Learn on a plan node (%lu, %d), "
+					 "[AQO] Learn on a plan node ("UINT64_FORMAT", %d), "
 					"predicted rows: %.0lf, updated prediction: %.0lf",
 					 query_context.query_hash, node->fss, predicted, *nrows);
 
@@ -334,7 +334,7 @@ should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
 			if (ctx->learn && aqo_show_details &&
 				fabs(*nrows - predicted) / predicted > 0.2)
 				elog(NOTICE,
-					 "[AQO] Learn on a finished plan node (%lu, %d), "
+					 "[AQO] Learn on a finished plan node ("UINT64_FORMAT", %d), "
 					 "predicted rows: %.0lf, updated prediction: %.0lf",
 					 query_context.query_hash, node->fss, predicted, *nrows);
 
@@ -845,6 +845,7 @@ StoreToQueryEnv(QueryDesc *queryDesc)
 	enr->md.reliddesc = InvalidOid;
 	enr->md.tupdesc = NULL;
 	enr->reldata = palloc0(qcsize);
+	Assert(enr->reldata != NULL);
 	memcpy(enr->reldata, &query_context, qcsize);
 
 	if (newentry)
@@ -906,6 +907,7 @@ StorePlanInternals(QueryDesc *queryDesc)
 	enr->md.reliddesc = InvalidOid;
 	enr->md.tupdesc = NULL;
 	enr->reldata = palloc0(sizeof(int));
+	Assert(enr->reldata != NULL);
 	memcpy(enr->reldata, &njoins, sizeof(int));
 
 	if (newentry)
@@ -935,6 +937,7 @@ ExtractFromQueryEnv(QueryDesc *queryDesc)
 	if (enr == NULL)
 		return false;
 
+	Assert(enr->reldata != NULL);
 	memcpy(&query_context, enr->reldata, sizeof(QueryContextData));
 
 	return true;

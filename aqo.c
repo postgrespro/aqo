@@ -333,52 +333,6 @@ _PG_init(void)
 }
 
 /*
- * Return AQO schema's Oid or InvalidOid if that's not possible.
- */
-Oid
-get_aqo_schema(void)
-{
-	Oid				result;
-	Relation		rel;
-	SysScanDesc		scandesc;
-	HeapTuple		tuple;
-	ScanKeyData		entry[1];
-	Oid				ext_oid;
-
-	/* It's impossible to fetch pg_aqo's schema now */
-	if (!IsTransactionState())
-		return InvalidOid;
-
-	ext_oid = get_extension_oid("aqo", true);
-	if (ext_oid == InvalidOid)
-		return InvalidOid; /* exit if pg_aqo does not exist */
-
-	ScanKeyInit(&entry[0],
-#if PG_VERSION_NUM >= 120000
-				Anum_pg_extension_oid,
-#else
-				ObjectIdAttributeNumber,
-#endif
-				BTEqualStrategyNumber, F_OIDEQ,
-				ObjectIdGetDatum(ext_oid));
-
-	rel = relation_open(ExtensionRelationId, AccessShareLock);
-	scandesc = systable_beginscan(rel, ExtensionOidIndexId, true,
-								  NULL, 1, entry);
-	tuple = systable_getnext(scandesc);
-
-	/* We assume that there can be at most one matching tuple */
-	if (HeapTupleIsValid(tuple))
-		result = ((Form_pg_extension) GETSTRUCT(tuple))->extnamespace;
-	else
-		result = InvalidOid;
-
-	systable_endscan(scandesc);
-	relation_close(rel, AccessShareLock);
-	return result;
-}
-
-/*
  * AQO is really needed for any activity?
  */
 bool
