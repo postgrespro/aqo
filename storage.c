@@ -17,6 +17,9 @@
 
 #include "postgres.h"
 
+#include "nodes/value.h"
+#include "postgres.h"
+
 #include "access/heapam.h"
 #include "access/table.h"
 #include "access/tableam.h"
@@ -449,7 +452,7 @@ load_fss(uint64 fs, int fss, OkNNrdata *data, List **relnames)
 			elog(ERROR, "unexpected number of features for hash (" \
 						UINT64_FORMAT", %d):\
 						expected %d features, obtained %d",
-						fs, fss, ncols, DatumGetInt32(values[2]));
+						fs, fss, data->cols, DatumGetInt32(values[2]));
 	}
 	else
 		success = false;
@@ -584,7 +587,7 @@ update_fss(uint64 fs, int fss, OkNNrdata *data, List *relnames)
 			 */
 			elog(ERROR, "AQO data piece ("UINT64_FORMAT" %d) concurrently"
 				 " updated by a stranger backend.",
-				 fhash, fsshash);
+				 fs, fss);
 			result = false;
 		}
 	}

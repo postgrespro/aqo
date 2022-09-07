@@ -101,6 +101,7 @@ set_joinrel_size_estimates_hook_type		prev_set_joinrel_size_estimates_hook;
 get_parameterized_joinrel_size_hook_type	prev_get_parameterized_joinrel_size_hook;
 ExplainOnePlan_hook_type					prev_ExplainOnePlan_hook;
 ExplainOneNode_hook_type					prev_ExplainOneNode_hook;
+static shmem_request_hook_type				prev_shmem_request_hook = NULL;
 
 /*****************************************************************************
  *
@@ -122,6 +123,18 @@ aqo_free_callback(ResourceReleasePhase phase,
 		list_free_deep(cur_classes);
 		cur_classes = NIL;
 	}
+}
+
+/*
+ * Requests any additional shared memory required for aqo.
+ */
+static void
+aqo_shmem_request(void)
+{
+	if (prev_shmem_request_hook)
+		prev_shmem_request_hook();
+
+	RequestAddinShmemSpace(aqo_memsize());
 }
 
 void
@@ -239,6 +252,9 @@ _PG_init(void)
 	prev_create_upper_paths_hook				= create_upper_paths_hook;
 	create_upper_paths_hook						= aqo_store_upper_signature_hook;
 
+	prev_shmem_request_hook = shmem_request_hook;
+	shmem_request_hook = aqo_shmem_request;
+
 	init_deactivated_queries_storage();
 	AQOMemoryContext = AllocSetContextCreate(TopMemoryContext,
 											 "AQOMemoryContext",
@@ -250,7 +266,6 @@ _PG_init(void)
 	RegisterAQOPlanNodeMethods();
 
 	MarkGUCPrefixReserved("aqo");
-	RequestAddinShmemSpace(aqo_memsize());
 }
 
 PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
