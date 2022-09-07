@@ -5,7 +5,7 @@
  *
  *******************************************************************************
  *
- * Copyright (c) 2016-2021, Postgres Professional
+ * Copyright (c) 2016-2022, Postgres Professional
  *
  * IDENTIFICATION
  *	  aqo/path_utils.c

@@ -18,7 +18,7 @@
  *
  *******************************************************************************
  *
- * Copyright (c) 2016-2021, Postgres Professional
+ * Copyright (c) 2016-2022, Postgres Professional
  *
  * IDENTIFICATION
  *	  aqo/cardinality_hooks.c
@@ -439,7 +439,8 @@ predict_num_groups(PlannerInfo *root, Path *subpath, List *group_exprs,
 
 	*fss = get_grouped_exprs_hash(child_fss, group_exprs);
 
-	if (!load_fss(query_context.fspace_hash, *fss, 0, NULL, &target, &rows, NULL))
+	if (!load_fss_ext(query_context.fspace_hash, *fss, 0, NULL,
+					  &target, &rows, NULL, true))
 		return -1;
 
 	Assert(rows == 1);

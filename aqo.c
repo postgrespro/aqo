@@ -2,7 +2,7 @@
  * aqo.c
  *		Adaptive query optimization extension
  *
- * Copyright (c) 2016-2021, Postgres Professional
+ * Copyright (c) 2016-2022, Postgres Professional
  *
  * IDENTIFICATION
  *	  aqo/aqo.c
@@ -21,6 +21,7 @@
 #include "cardinality_hooks.h"
 #include "path_utils.h"
 #include "preprocessing.h"
+#include "learn_cache.h"
 
 
 PG_MODULE_MAGIC;
@@ -103,6 +104,7 @@ int njoins;
 post_parse_analyze_hook_type				prev_post_parse_analyze_hook;
 planner_hook_type							prev_planner_hook;
 ExecutorStart_hook_type						prev_ExecutorStart_hook;
+ExecutorRun_hook_type						prev_ExecutorRun;
 ExecutorEnd_hook_type						prev_ExecutorEnd_hook;
 set_baserel_rows_estimate_hook_type			prev_set_foreign_rows_estimate_hook;
 set_baserel_rows_estimate_hook_type			prev_set_baserel_rows_estimate_hook;
@@ -203,6 +205,8 @@ _PG_init(void)
 	planner_hook								= aqo_planner;
 	prev_ExecutorStart_hook						= ExecutorStart_hook;
 	ExecutorStart_hook							= aqo_ExecutorStart;
+	prev_ExecutorRun							= ExecutorRun_hook;
+	ExecutorRun_hook							= aqo_ExecutorRun;
 	prev_ExecutorEnd_hook						= ExecutorEnd_hook;
 	ExecutorEnd_hook							= aqo_ExecutorEnd;
 
@@ -241,6 +245,7 @@ _PG_init(void)
 											 ALLOCSET_DEFAULT_SIZES);
 	RegisterResourceReleaseCallback(aqo_free_callback, NULL);
 	RegisterAQOPlanNodeMethods();
+	lc_init();
 }
 
 PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
