@@ -76,8 +76,8 @@ WHERE 'a'::regclass = ANY (d1.oids) AND 'b'::regclass = ANY (d1.oids) order by t
 
 DROP TABLE a,b CASCADE;
 SELECT true FROM aqo_reset();
- bool 
-------
+ ?column? 
+----------
  t
 (1 row)
 

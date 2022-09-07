@@ -143,8 +143,8 @@ COMMENT ON FUNCTION aqo_drop_class(bigint) IS
 -- tables even if only one oid for one feature subspace of the space is illegal.
 -- Returns number of deleted rows from aqo_queries and aqo_data tables.
 --
-CREATE OR REPLACE FUNCTION aqo_cleanup(OUT nfs integer, OUT nfss integer)
-AS 'MODULE_PATHNAME', 'aqo_cleanup'
+CREATE OR REPLACE FUNCTION aqo_cleanup()
+RETURNS TABLE(nfs integer, nfss integer) AS 'MODULE_PATHNAME', 'aqo_cleanup'
 LANGUAGE C STRICT VOLATILE;
 COMMENT ON FUNCTION aqo_cleanup() IS
 'Remove unneeded rows from the AQO ML storage';

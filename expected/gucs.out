@@ -6,8 +6,8 @@ CREATE TABLE t(x int);
 INSERT INTO t (x) (SELECT * FROM generate_series(1, 100) AS gs);
 ANALYZE t;
 SELECT true FROM aqo_reset(); -- Remember! DROP EXTENSION doesn't remove any AQO data gathered.
- bool 
-------
+ ?column? 
+----------
  t
 (1 row)
 
@@ -90,10 +90,10 @@ SELECT obj_description('aqo_reset'::regproc::oid);
 (1 row)
 
 \df aqo_cleanup
-                                 List of functions
- Schema |    Name     | Result data type |        Argument data types        | Type 
---------+-------------+------------------+-----------------------------------+------
- public | aqo_cleanup | record           | OUT nfs integer, OUT nfss integer | func
+                                  List of functions
+ Schema |    Name     |         Result data type         | Argument data types | Type 
+--------+-------------+----------------------------------+---------------------+------
+ public | aqo_cleanup | TABLE(nfs integer, nfss integer) |                     | func
 (1 row)
 
 \df aqo_reset
@@ -111,8 +111,8 @@ SELECT count(*) FROM aqo_query_stat;
 (1 row)
 
 SELECT true FROM aqo_reset(); -- Remove one record from all tables
- bool 
-------
+ ?column? 
+----------
  t
 (1 row)
 

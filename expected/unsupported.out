@@ -44,7 +44,7 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
    AQO not used
    Group Key: x
    ->  Seq Scan on t (actual rows=801 loops=1)
-         AQO not used
+         AQO: rows=801, error=0%
          Filter: (x > 3)
          Rows Removed by Filter: 199
  Using aqo: true
@@ -605,13 +605,13 @@ DROP TABLE t,t1 CASCADE; -- delete all tables used in the test
 SELECT count(*) FROM aqo_data; -- Just to detect some changes in the logic. May some false positives really bother us here?
  count 
 -------
-    42
+    44
 (1 row)
 
 SELECT * FROM aqo_cleanup();
  nfs | nfss 
 -----+------
-  12 |   42
+  13 |   44
 (1 row)
 
 SELECT count(*) FROM aqo_data; -- No one row should be returned

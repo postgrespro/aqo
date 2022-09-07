@@ -232,8 +232,8 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
 
 DROP TABLE a,b CASCADE;
 SELECT true FROM aqo_reset();
- bool 
-------
+ ?column? 
+----------
  t
 (1 row)
 
