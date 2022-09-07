@@ -53,7 +53,7 @@ lc_init(void)
 	ctl.entrysize = sizeof(htab_entry);
 	ctl.hcxt = LearnCacheMemoryContext;
 
-	fss_htab = hash_create("Remote Con hash", 32, &ctl, HASH_ELEM | HASH_BLOBS);
+	fss_htab = hash_create("ML AQO cache", 256, &ctl, HASH_ELEM | HASH_BLOBS);
 }
 
 bool
@@ -102,11 +102,13 @@ lc_has_fss(uint64 fs, int fss)
 	Assert(fss_htab);
 
 	(void) hash_search(fss_htab, &key, HASH_FIND, &found);
-	if (!found)
-		return false;
-	return true;
+	return found;
 }
 
+/*
+ * Load ML data from a memory cache, not from a table.
+ * XXX That to do with learning tails, living in the cache?
+ */
 bool
 lc_load_fss(uint64 fs, int fss, int ncols, double **matrix,
 			double *targets, int *nrows, List **relids)
@@ -122,11 +124,15 @@ lc_load_fss(uint64 fs, int fss, int ncols, double **matrix,
 	if (!found)
 		return false;
 
+	if (aqo_show_details)
+		elog(NOTICE, "[AQO] Load ML data for fs %lu, fss %d from the cache",
+			 fs, fss);
+
 	*nrows = entry->nrows;
 	Assert(entry->ncols == ncols);
 	for (i = 0; i < entry->nrows; ++i)
 		memcpy(matrix[i], entry->matrix[i], sizeof(double) * ncols);
-	memcpy(targets, entry->targets, sizeof(double) *  entry->nrows);
+	memcpy(targets, entry->targets, sizeof(double) * entry->nrows);
 	if (relids)
 		*relids = list_copy(entry->relids);
 	return true;
