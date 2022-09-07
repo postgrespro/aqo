@@ -376,7 +376,6 @@ load_fss_ext(uint64 fs, int fss,
 		if (matrix == NULL && targets == NULL && rows == NULL)
 			return true;
 
-		elog(DEBUG1, "Load ML data for fs %lu, fss %d", fs, fss);
 		return lc_load_fss(fs, fss, ncols, matrix, targets, rows, relids);
 	}
 }
