@@ -8,7 +8,7 @@
  *
  *******************************************************************************
  *
- * Copyright (c) 2016-2021, Postgres Professional
+ * Copyright (c) 2016-2022, Postgres Professional
  *
  * IDENTIFICATION
  *	  aqo/storage.c
@@ -23,6 +23,7 @@
 
 #include "aqo.h"
 #include "preprocessing.h"
+#include "learn_cache.h"
 
 
 HTAB *deactivated_queries = NULL;
@@ -363,6 +364,23 @@ deform_oids_vector(Datum datum)
 	return relids;
 }
 
+bool
+load_fss_ext(uint64 fs, int fss,
+			 int ncols, double **matrix, double *targets, int *rows,
+			 List **relids, bool isSafe)
+{
+	if (isSafe && !lc_has_fss(fs, fss))
+		return load_fss(fs, fss, ncols, matrix, targets, rows, relids);
+	else
+	{
+		if (matrix == NULL && targets == NULL && rows == NULL)
+			return true;
+
+		elog(DEBUG1, "Load ML data for fs %lu, fss %d", fs, fss);
+		return lc_load_fss(fs, fss, ncols, matrix, targets, rows, relids);
+	}
+}
+
 /*
  * Loads feature subspace (fss) from table aqo_data into memory.
  * The last column of the returned matrix is for target values of objects.
@@ -446,6 +464,18 @@ load_fss(uint64 fhash, int fss_hash,
 	table_close(hrel, AccessShareLock);
 
 	return success;
+}
+
+bool
+update_fss_ext(uint64 fhash, int fsshash, int nrows, int ncols,
+			   double **matrix, double *targets, List *relids, bool isTimedOut)
+{
+	if (!isTimedOut)
+		return update_fss(fhash, fsshash, nrows, ncols, matrix, targets,
+						  relids);
+	else
+		return lc_update_fss(fhash, fsshash, nrows, ncols, matrix, targets,
+							 relids);
 }
 
 /*

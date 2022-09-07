@@ -327,7 +327,7 @@ Dynamically generated constants are okay.
 
 ## License
 
-© [Postgres Professional](https://postgrespro.com/), 2016-2021. Licensed under
+© [Postgres Professional](https://postgrespro.com/), 2016-2022. Licensed under
 [The PostgreSQL License](LICENSE).
 
 ## Reference
