@@ -53,7 +53,7 @@ create_aqo_plan_node()
 {
 	AQOPlanNode *node = (AQOPlanNode *) newNode(sizeof(AQOPlanNode),
 															T_ExtensibleNode);
-
+	Assert(node != NULL);
 	memcpy(node, &DefaultAQOPlanNode, sizeof(AQOPlanNode));
 	node->rels = palloc(sizeof(RelSortOut));
 	node->rels->hrels = NIL;
@@ -570,6 +570,7 @@ AQOnodeCopy(struct ExtensibleNode *enew, const struct ExtensibleNode *eold)
 
 	Assert(IsA(old, ExtensibleNode));
 	Assert(strcmp(old->node.extnodename, AQO_PLAN_NODE) == 0);
+	Assert(new && old);
 
 	/* Copy static fields in one command */
 	memcpy(new, old, sizeof(AQOPlanNode));

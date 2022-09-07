@@ -112,11 +112,19 @@ lc_update_fss(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	ptr = (char *) hdr + sizeof(dsm_block_hdr); /* start point of variable data */
 
 	/* copy the matrix into DSM storage */
-	for (i = 0; i < aqo_K; ++i)
+
+	if (hdr->cols > 0)
 	{
-		if (i < hdr->rows)
+		for (i = 0; i < aqo_K; ++i)
+		{
+			if (i >= hdr->rows)
+				break;
+
+			if (!ptr || !data->matrix[i])
+				elog(PANIC, "Something disruptive have happened! %d, %d (%d %d)", i, hdr->rows, found, hdr->cols);
 			memcpy(ptr, data->matrix[i], sizeof(double) * hdr->cols);
-		ptr += sizeof(double) * data->cols;
+			ptr += sizeof(double) * data->cols;
+		}
 	}
 
 	/* copy targets into DSM storage */
@@ -177,7 +185,7 @@ lc_load_fss(uint64 fs, int fss, OkNNrdata *data, List **reloids)
 	Assert(fss_htab && aqo_learn_statement_timeout);
 
 	if (aqo_show_details)
-		elog(NOTICE, "[AQO] Load ML data for fs %lu, fss %d from the cache",
+		elog(NOTICE, "[AQO] Load ML data for fs "UINT64_FORMAT", fss %d from the cache",
 			 fs, fss);
 
 	LWLockAcquire(&aqo_state->lock, LW_SHARED);
@@ -213,6 +221,7 @@ init_with_dsm(OkNNrdata *data, dsm_block_hdr *hdr, List **reloids)
 	Assert(LWLockHeldByMeInMode(&aqo_state->lock, LW_EXCLUSIVE) ||
 		   LWLockHeldByMeInMode(&aqo_state->lock, LW_SHARED));
 	Assert(hdr->magic == AQO_SHARED_MAGIC);
+	Assert(hdr && ptr);
 
 	data->rows = hdr->rows;
 	data->cols = hdr->cols;
@@ -264,7 +273,7 @@ lc_flush_data(void)
 	ptr = get_dsm_all(&size);
 
 	/* Iterate through records and store them into the aqo_data table */
-	while(size > 0)
+	while (size > 0)
 	{
 		dsm_block_hdr  *hdr = (dsm_block_hdr *) ptr;
 		OkNNrdata		data;
