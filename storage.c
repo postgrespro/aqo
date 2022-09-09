@@ -391,8 +391,11 @@ aqo_stat_reset(void)
 			elog(ERROR, "[AQO] hash table corrupted");
 		num_remove++;
 	}
+	aqo_state->stat_changed = true;
 	LWLockRelease(&aqo_state->stat_lock);
-	Assert(num_remove == num_entries); /* Is it really impossible? */
+
+	if (num_remove != num_entries)
+		elog(ERROR, "[AQO] Stat memory storage is corrupted or parallel access without a lock was detected.");
 
 	aqo_stat_flush();
 
@@ -1231,9 +1234,10 @@ aqo_qtexts_reset(void)
 	}
 	aqo_state->qtexts_changed = true;
 	LWLockRelease(&aqo_state->qtexts_lock);
-	Assert(num_remove == num_entries - 1); /* Is it really impossible? */
+	if (num_remove != num_entries - 1)
+		elog(ERROR, "[AQO] Query texts memory storage is corrupted or parallel access without a lock was detected.");
 
-	/* TODO: clean disk storage */
+	aqo_qtexts_flush();
 
 	return num_remove;
 }
@@ -1441,6 +1445,7 @@ _fill_knn_data(const DataEntry *entry, List **reloids)
 			ptr += sizeof(double) * data->cols;
 		}
 	}
+
 	/* copy targets from DSM storage */
 	memcpy(data->targets, ptr, sizeof(double) * entry->rows);
 	ptr += sizeof(double) * entry->rows;
@@ -1463,7 +1468,11 @@ _fill_knn_data(const DataEntry *entry, List **reloids)
 		*reloids = lappend_oid(*reloids, ObjectIdGetDatum(*(Oid*)ptr));
 		ptr += sizeof(Oid);
 	}
-	Assert(ptr - (char *) dsa_get_address(data_dsa, entry->data_dp) == sz);
+
+	offset = ptr - (char *) dsa_get_address(data_dsa, entry->data_dp);
+	if (offset != sz)
+		elog(PANIC, "[AQO] Shared memory ML storage is corrupted.");
+
 	return data;
 }
 
@@ -1712,9 +1721,10 @@ aqo_data_reset(void)
 	}
 	aqo_state->data_changed = true;
 	LWLockRelease(&aqo_state->data_lock);
-	Assert(num_remove == num_entries);
+	if (num_remove != num_entries)
+		elog(ERROR, "[AQO] Query ML memory storage is corrupted or parallel access without a lock has detected.");
 
-	/* TODO: clean disk storage */
+	aqo_data_flush();
 
 	return num_remove;
 }
@@ -1846,8 +1856,11 @@ aqo_queries_reset(void)
 			elog(ERROR, "[AQO] hash table corrupted");
 		num_remove++;
 	}
+	aqo_state->queries_changed = true;
 	LWLockRelease(&aqo_state->queries_lock);
-	Assert(num_remove == num_entries - 1);
+
+	if (num_remove != num_entries - 1)
+		elog(ERROR, "[AQO] Queries memory storage is corrupted or parallel access without a lock has detected.");
 
 	aqo_queries_flush();
 
