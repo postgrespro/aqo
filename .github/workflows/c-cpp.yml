@@ -19,7 +19,7 @@ jobs:
         git config --global user.name "CI PgPro admin"
         git clone https://github.com/postgres/postgres.git pg
         cd pg
-        git checkout master
+        git checkout REL_15_STABLE
         ./configure --prefix=`pwd`/tmp_install
         git subtree add --prefix=contrib/aqo https://github.com/postgrespro/aqo.git $GITHUB_REF
         patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg15.patch
