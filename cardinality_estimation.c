@@ -21,6 +21,7 @@
 
 #include "aqo.h"
 #include "hash.h"
+#include "machine_learning.h"
 
 #ifdef AQO_DEBUG_PRINT
 static void
@@ -59,15 +60,12 @@ predict_debug_output(List *clauses, List *selectivities,
  */
 double
 predict_for_relation(List *clauses, List *selectivities,
-					 List *relids, int *fss_hash)
+					 List *relids, int *fss)
 {
-	int		nfeatures;
-	double	*matrix[aqo_K];
-	double	targets[aqo_K];
-	double	*features;
-	double	result;
-	int		rows;
-	int		i;
+	double	   *features;
+	double		result;
+	int			i;
+	OkNNrdata	data;
 
 	if (relids == NIL)
 		/*
@@ -76,16 +74,15 @@ predict_for_relation(List *clauses, List *selectivities,
 		 */
 		return -4.;
 
-	*fss_hash = get_fss_for_object(relids, clauses,
-								   selectivities, &nfeatures, &features);
+	*fss = get_fss_for_object(relids, clauses,
+								   selectivities, &data.cols, &features);
 
-	if (nfeatures > 0)
+	if (data.cols > 0)
 		for (i = 0; i < aqo_K; ++i)
-			matrix[i] = palloc0(sizeof(**matrix) * nfeatures);
+			data.matrix[i] = palloc0(sizeof(double) * data.cols);
 
-	if (load_fss_ext(query_context.fspace_hash, *fss_hash, nfeatures, matrix,
-					 targets, &rows, NULL, true))
-		result = OkNNr_predict(rows, nfeatures, matrix, targets, features);
+	if (load_fss_ext(query_context.fspace_hash, *fss, &data, NULL, true))
+		result = OkNNr_predict(&data, features);
 	else
 	{
 		/*
@@ -100,10 +97,10 @@ predict_for_relation(List *clauses, List *selectivities,
 	predict_debug_output(clauses, selectivities, relids, *fss_hash, result);
 #endif
 	pfree(features);
-	if (nfeatures > 0)
+	if (data.cols > 0)
 	{
 		for (i = 0; i < aqo_K; ++i)
-			pfree(matrix[i]);
+			pfree(data.matrix[i]);
 	}
 
 	if (result < 0)
