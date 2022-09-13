@@ -156,8 +156,7 @@ OkNNr_predict(OkNNrdata *data, double *features)
  * partially executed statement.
  */
 int
-OkNNr_learn(OkNNrdata *data,
-			double *features, double target, double rfactor)
+OkNNr_learn(OkNNrdata *data, double *features, double target, double rfactor)
 {
 	double	distances[aqo_K];
 	int		i;
@@ -191,10 +190,10 @@ OkNNr_learn(OkNNrdata *data,
 
 	if (data->rows < aqo_K)
 	{
-		/* We can't reached limit of stored neighbors */
+		/* We don't reach a limit of stored neighbors */
 
 		/*
-		 * Add new line into the matrix. We can do this because matrix_rows
+		 * Add new line into the matrix. We can do this because data->rows
 		 * is not the boundary of matrix. Matrix has aqo_K free lines
 		 */
 		for (j = 0; j < data->cols; ++j)
@@ -206,7 +205,7 @@ OkNNr_learn(OkNNrdata *data,
 	}
 	else
 	{
-		double	*feature;
+		double *feature;
 		double	avg_target = 0;
 		double	tc_coef; /* Target correction coefficient */
 		double	fc_coef; /* Feature correction coefficient */
