@@ -1315,6 +1315,7 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 			 * that caller recognize it and don't try to call us more.
 			 */
 			(void) hash_search(data_htab, &key, HASH_REMOVE, NULL);
+			LWLockRelease(&aqo_state->data_lock);
 			return false;
 		}
 	}
@@ -1347,6 +1348,7 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 			 * that caller recognize it and don't try to call us more.
 			 */
 			(void) hash_search(data_htab, &key, HASH_REMOVE, NULL);
+			LWLockRelease(&aqo_state->data_lock);
 			return false;
 		}
 	}
