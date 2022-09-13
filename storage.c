@@ -22,6 +22,7 @@
 #include "access/tableam.h"
 
 #include "aqo.h"
+#include "machine_learning.h"
 #include "preprocessing.h"
 #include "learn_cache.h"
 
@@ -347,11 +348,11 @@ form_oids_vector(List *relids)
 static List *
 deform_oids_vector(Datum datum)
 {
-	ArrayType	*array = DatumGetArrayTypePCopy(PG_DETOAST_DATUM(datum));
-	Datum		*values;
+	ArrayType  *array = DatumGetArrayTypePCopy(PG_DETOAST_DATUM(datum));
+	Datum	   *values;
 	int			i;
 	int			nelems = 0;
-	List		*relids = NIL;
+	List	   *relids = NIL;
 
 	deconstruct_array(array,
 					  OIDOID, sizeof(Oid), true, TYPALIGN_INT,
@@ -365,20 +366,14 @@ deform_oids_vector(Datum datum)
 }
 
 bool
-load_fss_ext(uint64 fs, int fss,
-			 int ncols, double **matrix, double *targets, int *rows,
-			 List **relids, bool isSafe)
+load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **relids, bool isSafe)
 {
 	if (isSafe && (!aqo_learn_statement_timeout || !lc_has_fss(fs, fss)))
-		return load_fss(fs, fss, ncols, matrix, targets, rows, relids);
+		return load_fss(fs, fss, data, relids);
 	else
 	{
 		Assert(aqo_learn_statement_timeout);
-
-		if (matrix == NULL && targets == NULL && rows == NULL)
-			return true;
-
-		return lc_load_fss(fs, fss, ncols, matrix, targets, rows, relids);
+		return lc_load_fss(fs, fss, data, relids);
 	}
 }
 
@@ -397,9 +392,7 @@ load_fss_ext(uint64 fs, int fss,
  *			objects in the given feature space
  */
 bool
-load_fss(uint64 fhash, int fss_hash,
-		 int ncols, double **matrix, double *targets, int *rows,
-		 List **relids)
+load_fss(uint64 fs, int fss, OkNNrdata *data, List **relids)
 {
 	Relation	hrel;
 	Relation	irel;
@@ -419,33 +412,28 @@ load_fss(uint64 fhash, int fss_hash,
 		return false;
 
 	scan = index_beginscan(hrel, irel, SnapshotSelf, 2, 0);
-	ScanKeyInit(&key[0], 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(fhash));
-	ScanKeyInit(&key[1], 2, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fss_hash));
+	ScanKeyInit(&key[0], 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(fs));
+	ScanKeyInit(&key[1], 2, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fss));
 	index_rescan(scan, key, 2, NULL, 0);
 
 	slot = MakeSingleTupleTableSlot(hrel->rd_att, &TTSOpsBufferHeapTuple);
 	find_ok = index_getnext_slot(scan, ForwardScanDirection, slot);
 
-	if (matrix == NULL && targets == NULL && rows == NULL)
-	{
-		/* Just check availability */
-		success = find_ok;
-	}
-	else if (find_ok)
+	if (find_ok)
 	{
 		tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
 		Assert(shouldFree != true);
 		heap_deform_tuple(tuple, hrel->rd_att, values, isnull);
 
-		if (DatumGetInt32(values[2]) == ncols)
+		if (DatumGetInt32(values[2]) == data->cols)
 		{
-			if (ncols > 0)
+			if (data->cols > 0)
 				/*
 				 * The case than an object has not any filters and selectivities
 				 */
-				deform_matrix(values[3], matrix);
+				deform_matrix(values[3], data->matrix);
 
-			deform_vector(values[4], targets, rows);
+			deform_vector(values[4], data->targets, &(data->rows));
 
 			if (relids != NULL)
 				*relids = deform_oids_vector(values[5]);
@@ -454,7 +442,7 @@ load_fss(uint64 fhash, int fss_hash,
 			elog(ERROR, "unexpected number of features for hash (" \
 						UINT64_FORMAT", %d):\
 						expected %d features, obtained %d",
-						fhash, fss_hash, ncols, DatumGetInt32(values[2]));
+						fs, fss, ncols, DatumGetInt32(values[2]));
 	}
 	else
 		success = false;
@@ -468,15 +456,13 @@ load_fss(uint64 fhash, int fss_hash,
 }
 
 bool
-update_fss_ext(uint64 fhash, int fsshash, int nrows, int ncols,
-			   double **matrix, double *targets, List *relids, bool isTimedOut)
+update_fss_ext(uint64 fs, int fsshash, OkNNrdata *data, List *relids,
+			   bool isTimedOut)
 {
 	if (!isTimedOut)
-		return update_fss(fhash, fsshash, nrows, ncols, matrix, targets,
-						  relids);
+		return update_fss(fs, fsshash, data, relids);
 	else
-		return lc_update_fss(fhash, fsshash, nrows, ncols, matrix, targets,
-							 relids);
+		return lc_update_fss(fs, fsshash, data, relids);
 }
 
 /*
@@ -492,8 +478,7 @@ update_fss_ext(uint64 fhash, int fsshash, int nrows, int ncols,
  * Caller guaranteed that no one AQO process insert or update this data row.
  */
 bool
-update_fss(uint64 fhash, int fsshash, int nrows, int ncols,
-		   double **matrix, double *targets, List *relids)
+update_fss(uint64 fhash, int fsshash, OkNNrdata *data, List *relids)
 {
 	Relation	hrel;
 	Relation	irel;
@@ -537,14 +522,14 @@ update_fss(uint64 fhash, int fsshash, int nrows, int ncols,
 	{
 		values[0] = Int64GetDatum(fhash);
 		values[1] = Int32GetDatum(fsshash);
-		values[2] = Int32GetDatum(ncols);
+		values[2] = Int32GetDatum(data->cols);
 
-		if (ncols > 0)
-			values[3] = PointerGetDatum(form_matrix(matrix, nrows, ncols));
+		if (data->cols > 0)
+			values[3] = PointerGetDatum(form_matrix(data->matrix, data->rows, data->cols));
 		else
 			isnull[3] = true;
 
-		values[4] = PointerGetDatum(form_vector(targets, nrows));
+		values[4] = PointerGetDatum(form_vector(data->targets, data->rows));
 
 		/* Form array of relids. Only once. */
 		values[5] = PointerGetDatum(form_oids_vector(relids));
@@ -567,12 +552,12 @@ update_fss(uint64 fhash, int fsshash, int nrows, int ncols,
 		Assert(shouldFree != true);
 		heap_deform_tuple(tuple, hrel->rd_att, values, isnull);
 
-		if (ncols > 0)
-			values[3] = PointerGetDatum(form_matrix(matrix, nrows, ncols));
+		if (data->cols > 0)
+			values[3] = PointerGetDatum(form_matrix(data->matrix, data->rows, data->cols));
 		else
 			isnull[3] = true;
 
-		values[4] = PointerGetDatum(form_vector(targets, nrows));
+		values[4] = PointerGetDatum(form_vector(data->targets, data->rows));
 		nw_tuple = heap_modify_tuple(tuple, tupDesc,
 									 values, isnull, replace);
 		if (my_simple_heap_update(hrel, &(nw_tuple->t_self), nw_tuple,

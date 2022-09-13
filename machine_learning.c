@@ -22,6 +22,19 @@
 #include "postgres.h"
 
 #include "aqo.h"
+#include "machine_learning.h"
+
+
+/*
+ * This parameter tell us that the new learning sample object has very small
+ * distance from one whose features stored in matrix already.
+ * In this case we will not to add new line in matrix, but will modify this
+ * nearest neighbor features and cardinality with linear smoothing by
+ * learning_rate coefficient.
+ */
+const double	object_selection_threshold = 0.1;
+const double	learning_rate = 1e-1;
+
 
 static double fs_distance(double *a, double *b, int len);
 static double fs_similarity(double dist);
@@ -31,7 +44,7 @@ static double compute_weights(double *distances, int nrows, double *w, int *idx)
 /*
  * Computes L2-distance between two given vectors.
  */
-double
+static double
 fs_distance(double *a, double *b, int len)
 {
 	double		res = 0;
@@ -47,7 +60,7 @@ fs_distance(double *a, double *b, int len)
 /*
  * Returns similarity between objects based on distance between them.
  */
-double
+static double
 fs_similarity(double dist)
 {
 	return 1.0 / (0.001 + dist);
@@ -60,7 +73,7 @@ fs_similarity(double dist)
  * Appeared as a separate function because of "don't repeat your code"
  * principle.
  */
-double
+static double
 compute_weights(double *distances, int nrows, double *w, int *idx)
 {
 	int		i,
@@ -103,31 +116,30 @@ compute_weights(double *distances, int nrows, double *w, int *idx)
  * positive targets are assumed.
  */
 double
-OkNNr_predict(int nrows, int ncols, double **matrix, const double *targets,
-			  double *features)
+OkNNr_predict(OkNNrdata *data, double *features)
 {
 	double	distances[aqo_K];
 	int		i;
 	int		idx[aqo_K]; /* indexes of nearest neighbors */
 	double	w[aqo_K];
 	double	w_sum;
-	double	result = 0;
+	double	result = 0.;
 
-	for (i = 0; i < nrows; ++i)
-		distances[i] = fs_distance(matrix[i], features, ncols);
+	for (i = 0; i < data->rows; ++i)
+		distances[i] = fs_distance(data->matrix[i], features, data->cols);
 
-	w_sum = compute_weights(distances, nrows, w, idx);
+	w_sum = compute_weights(distances, data->rows, w, idx);
 
 	for (i = 0; i < aqo_k; ++i)
 		if (idx[i] != -1)
-			result += targets[idx[i]] * w[i] / w_sum;
+			result += data->targets[idx[i]] * w[i] / w_sum;
 
-	if (result < 0)
-		result = 0;
+	if (result < 0.)
+		result = 0.;
 
 	/* this should never happen */
 	if (idx[0] == -1)
-		result = -1;
+		result = -1.;
 
 	return result;
 }
@@ -139,23 +151,26 @@ OkNNr_predict(int nrows, int ncols, double **matrix, const double *targets,
  * updates this line in database, otherwise adds new line with given index.
  * It is supposed that indexes of new lines are consequent numbers
  * starting from matrix_rows.
+ * reliability: 1 - value after normal end of a query; 0.1 - data from partially
+ * executed node (we don't want this part); 0.9 - from finished node, but
+ * partially executed statement.
  */
 int
-OkNNr_learn(int nrows, int nfeatures, double **matrix, double *targets,
-			double *features, double target)
+OkNNr_learn(OkNNrdata *data,
+			double *features, double target, double rfactor)
 {
-	double	   distances[aqo_K];
-	int			i,
-				j;
-	int			mid = 0; /* index of row with minimum distance value */
-	int		   idx[aqo_K];
+	double	distances[aqo_K];
+	int		i;
+	int		j;
+	int		mid = 0; /* index of row with minimum distance value */
+	int		idx[aqo_K];
 
 	/*
 	 * For each neighbor compute distance and search for nearest object.
 	 */
-	for (i = 0; i < nrows; ++i)
+	for (i = 0; i < data->rows; ++i)
 	{
-		distances[i] = fs_distance(matrix[i], features, nfeatures);
+		distances[i] = fs_distance(data->matrix[i], features, data->cols);
 		if (distances[i] < distances[mid])
 			mid = i;
 	}
@@ -165,16 +180,16 @@ OkNNr_learn(int nrows, int nfeatures, double **matrix, double *targets,
 	 * replace data for the neighbor to avoid some fluctuations.
 	 * We will change it's row with linear smoothing by learning_rate.
 	 */
-	if (nrows > 0 && distances[mid] < object_selection_threshold)
+	if (data->rows > 0 && distances[mid] < object_selection_threshold)
 	{
-		for (j = 0; j < nfeatures; ++j)
-			matrix[mid][j] += learning_rate * (features[j] - matrix[mid][j]);
-		targets[mid] += learning_rate * (target - targets[mid]);
+		for (j = 0; j < data->cols; ++j)
+			data->matrix[mid][j] += learning_rate * (features[j] - data->matrix[mid][j]);
+		data->targets[mid] += learning_rate * (target - data->targets[mid]);
 
-		return nrows;
+		return data->rows;
 	}
 
-	if (nrows < aqo_K)
+	if (data->rows < aqo_K)
 	{
 		/* We can't reached limit of stored neighbors */
 
@@ -182,11 +197,12 @@ OkNNr_learn(int nrows, int nfeatures, double **matrix, double *targets,
 		 * Add new line into the matrix. We can do this because matrix_rows
 		 * is not the boundary of matrix. Matrix has aqo_K free lines
 		 */
-		for (j = 0; j < nfeatures; ++j)
-			matrix[nrows][j] = features[j];
-		targets[nrows] = target;
+		for (j = 0; j < data->cols; ++j)
+			data->matrix[data->rows][j] = features[j];
+		data->targets[data->rows] = target;
+		data->rfactors[data->rows] = rfactor;
 
-		return nrows+1;
+		return data->rows + 1;
 	}
 	else
 	{
@@ -208,7 +224,7 @@ OkNNr_learn(int nrows, int nfeatures, double **matrix, double *targets,
 		 * idx array. Compute weight for each nearest neighbor and total weight
 		 * of all nearest neighbor.
 		 */
-		w_sum = compute_weights(distances, nrows, w, idx);
+		w_sum = compute_weights(distances, data->rows, w, idx);
 
 		/*
 		 * Compute average value for target by nearest neighbors. We need to
@@ -216,26 +232,27 @@ OkNNr_learn(int nrows, int nfeatures, double **matrix, double *targets,
 		 * neighbors than aqo_k.
 		 * Semantics of coef1: it is defined distance between new object and
 		 * this superposition value (with linear smoothing).
+		 * fc_coef - feature changing rate.
 		 * */
 		for (i = 0; i < aqo_k && idx[i] != -1; ++i)
-			avg_target += targets[idx[i]] * w[i] / w_sum;
+			avg_target += data->targets[idx[i]] * w[i] / w_sum;
 		tc_coef = learning_rate * (avg_target - target);
 
 		/* Modify targets and features of each nearest neighbor row. */
 		for (i = 0; i < aqo_k && idx[i] != -1; ++i)
 		{
-			fc_coef = tc_coef * (targets[idx[i]] - avg_target) * w[i] * w[i] /
-				sqrt(nfeatures) / w_sum;
+			fc_coef = tc_coef * (data->targets[idx[i]] - avg_target) * w[i] * w[i] /
+				sqrt(data->cols) / w_sum;
 
-			targets[idx[i]] -= tc_coef * w[i] / w_sum;
-			for (j = 0; j < nfeatures; ++j)
+			data->targets[idx[i]] -= tc_coef * w[i] / w_sum;
+			for (j = 0; j < data->cols; ++j)
 			{
-				feature = matrix[idx[i]];
+				feature = data->matrix[idx[i]];
 				feature[j] -= fc_coef * (features[j] - feature[j]) /
 					distances[idx[i]];
 			}
 		}
 	}
 
-	return nrows;
+	return data->rows;
 }
