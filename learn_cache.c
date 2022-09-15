@@ -56,7 +56,7 @@ calculate_size(int cols, List *relnames)
 	/* Calculate memory size needed to store relation names */
 	foreach(lc, relnames)
 	{
-		size += strlen(lfirst_node(String, lc)->sval) + 1;
+		size += strlen(strVal(lfirst(lc))) + 1;
 	}
 
 	return size;
@@ -134,7 +134,7 @@ lc_update_fss(uint64 fs, int fss, OkNNrdata *data, List *relnames)
 	/* store strings of relation names. Each string ends with 0-byte */
 	foreach(lc, relnames)
 	{
-		char *relname = lfirst_node(String, lc)->sval;
+		char *relname = strVal(lfirst(lc));
 		int len = strlen(relname) + 1;
 
 		memcpy(ptr, relname, len);
@@ -245,11 +245,9 @@ init_with_dsm(OkNNrdata *data, dsm_block_hdr *hdr, List **relnames)
 		*relnames = NIL;
 		for (i = 0; i < hdr->nrelids; i++)
 		{
-			String *s = makeNode(String);
 			int		len = strlen(ptr) + 1;
 
-			s->sval = pstrdup(ptr);
-			*relnames = lappend(*relnames, s);
+			*relnames = lappend(*relnames, makeString(pstrdup(ptr)));
 			ptr += len;
 		}
 		return calculate_size(hdr->cols, *relnames);
