@@ -1040,6 +1040,7 @@ aqo_qtext_store(uint64 queryid, const char *query_string)
 			 * that caller recognize it and don't try to call us more.
 			 */
 			(void) hash_search(qtexts_htab, &queryid, HASH_REMOVE, NULL);
+			LWLockRelease(&aqo_state->qtexts_lock);
 			return false;
 		}
 
