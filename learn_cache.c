@@ -86,6 +86,7 @@ lc_update_fss(uint64 fs, int fss, OkNNrdata *data, List *relids)
 			 * Collision found: the same {fs,fss}, but something different.
 			 * For simplicity - just don't update.
 			 */
+			elog(DEBUG5, "[AQO]: A collision found in the temporary storage.");
 			LWLockRelease(&aqo_state->lock);
 			return false;
 		}
@@ -134,6 +135,8 @@ lc_update_fss(uint64 fs, int fss, OkNNrdata *data, List *relids)
 	/* Check the invariant */
 	Assert((uint32)(ptr - (char *) hdr) == size);
 
+	elog(DEBUG5, "DSM entry: %s, targets: %d.",
+		 found ? "Reused" : "New entry", hdr->rows);
 	LWLockRelease(&aqo_state->lock);
 	return true;
 }
