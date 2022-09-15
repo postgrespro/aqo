@@ -581,15 +581,9 @@ update_fss(uint64 fs, int fss, OkNNrdata *data, List *relnames)
 			 * Ooops, somebody concurrently updated the tuple. It is possible
 			 * only in the case of changes made by third-party code.
 			 */
-<<<<<<< HEAD
 			elog(ERROR, "AQO data piece ("UINT64_FORMAT" %d) concurrently"
 				 " updated by a stranger backend.",
 				 fhash, fsshash);
-=======
-			elog(ERROR, "AQO data piece (%ld %d) concurrently updated"
-				 " by a stranger backend.",
-				 fs, fss);
->>>>>>> ecac693 (Move AQO from a relid based approach to a relation name based approach.)
 			result = false;
 		}
 	}
