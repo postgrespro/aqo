@@ -34,9 +34,9 @@ EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 
 -- Check existence of the interface functions.
 SELECT obj_description('public.show_cardinality_errors'::regproc::oid);
-                                     obj_description                                     
------------------------------------------------------------------------------------------
- Get cardinality error of last query execution. Return queries having the largest error.
+                                                obj_description                                                
+---------------------------------------------------------------------------------------------------------------
+ Get cardinality error of queries the last time they were executed. Order queries according to an error value.
 (1 row)
 
 DROP EXTENSION aqo;
