@@ -32,4 +32,11 @@ EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
  JOINS: 0
 (6 rows)
 
+-- Check existence of the interface functions.
+SELECT obj_description('public.show_cardinality_errors'::regproc::oid);
+                                     obj_description
+-----------------------------------------------------------------------------------------
+ Get cardinality error of last query execution. Return queries having the largest error.
+(1 row)
+
 DROP EXTENSION aqo;
