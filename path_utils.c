@@ -148,12 +148,7 @@ get_relnames(PlannerInfo *root, Relids relids)
 	{
 		rte = planner_rt_fetch(i, root);
 		if (OidIsValid(rte->relid))
-		{
-			String *s = makeNode(String);
-
-			s->sval = pstrdup(rte->eref->aliasname);
-			l = lappend(l, s);
-		}
+			l = lappend(l, makeString(pstrdup(rte->eref->aliasname)));
 	}
 	return l;
 }
@@ -648,9 +643,9 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 	set_cheapest(input_rel);
 	clauses = get_path_clauses(input_rel->cheapest_total_path,
 													root, &selectivities);
-	relids = get_list_of_relids(root, input_rel->relids);
+	relnames = get_relnames(root, input_rel->relids);
 	fss_node->val.type = T_Integer;
 	fss_node->location = -1;
-	fss_node->val.val.ival = get_fss_for_object(relids, clauses, NIL, NULL, NULL);
+	fss_node->val.val.ival = get_fss_for_object(relnames, clauses, NIL, NULL, NULL);
 	output_rel->ext_nodes = lappend(output_rel->ext_nodes, (void *) fss_node);
 }

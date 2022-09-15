@@ -17,6 +17,9 @@
 
 #include "postgres.h"
 
+#include "nodes/value.h"
+#include "postgres.h"
+
 #include "access/heapam.h"
 #include "access/table.h"
 #include "access/tableam.h"
@@ -336,7 +339,7 @@ form_strings_vector(List *relnames)
 
 	foreach(lc, relnames)
 	{
-		char *relname = (lfirst_node(String, lc))->sval;
+		char *relname = strVal(lfirst(lc));
 
 		rels[i++] = CStringGetTextDatum(relname);
 	}
@@ -359,9 +362,9 @@ deform_strings_vector(Datum datum)
 					  &values, NULL, &nelems);
 	for (i = 0; i < nelems; ++i)
 	{
-		String *s = makeNode(String);
+		Value *s;
 
-		s->sval = pstrdup(TextDatumGetCString(values[i]));
+		s = makeString(pstrdup(TextDatumGetCString(values[i])));
 		relnames = lappend(relnames, s);
 	}
 
@@ -448,7 +451,7 @@ load_fss(uint64 fs, int fss, OkNNrdata *data, List **relnames)
 			elog(ERROR, "unexpected number of features for hash (" \
 						UINT64_FORMAT", %d):\
 						expected %d features, obtained %d",
-						fs, fss, ncols, DatumGetInt32(values[2]));
+						fs, fss, data->cols, DatumGetInt32(values[2]));
 	}
 	else
 		success = false;
@@ -583,7 +586,7 @@ update_fss(uint64 fs, int fss, OkNNrdata *data, List *relnames)
 			 */
 			elog(ERROR, "AQO data piece ("UINT64_FORMAT" %d) concurrently"
 				 " updated by a stranger backend.",
-				 fhash, fsshash);
+				 fs, fss);
 			result = false;
 		}
 	}
