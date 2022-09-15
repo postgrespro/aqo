@@ -322,60 +322,63 @@ add_query_text(uint64 qhash, const char *query_string)
 
 
 static ArrayType *
-form_oids_vector(List *relids)
+form_strings_vector(List *relnames)
 {
-	Datum	   *oids;
+	Datum	   *rels;
 	ArrayType  *array;
 	ListCell   *lc;
 	int			i = 0;
 
-	if (relids == NIL)
+	if (relnames == NIL)
 		return NULL;
 
-	oids = (Datum *) palloc(list_length(relids) * sizeof(Datum));
+	rels = (Datum *) palloc(list_length(relnames) * sizeof(Datum));
 
-	foreach(lc, relids)
+	foreach(lc, relnames)
 	{
-		Oid relid = lfirst_oid(lc);
+		char *relname = (lfirst_node(String, lc))->sval;
 
-		oids[i++] = ObjectIdGetDatum(relid);
+		rels[i++] = CStringGetTextDatum(relname);
 	}
 
-	Assert(i == list_length(relids));
-	array = construct_array(oids, i, OIDOID, sizeof(Oid), true, TYPALIGN_INT);
-	pfree(oids);
+	array = construct_array(rels, i, TEXTOID, -1, false, TYPALIGN_INT);
+	pfree(rels);
 	return array;
 }
 
 static List *
-deform_oids_vector(Datum datum)
+deform_strings_vector(Datum datum)
 {
 	ArrayType  *array = DatumGetArrayTypePCopy(PG_DETOAST_DATUM(datum));
 	Datum	   *values;
 	int			i;
 	int			nelems = 0;
-	List	   *relids = NIL;
+	List	   *relnames = NIL;
 
-	deconstruct_array(array,
-					  OIDOID, sizeof(Oid), true, TYPALIGN_INT,
+	deconstruct_array(array, TEXTOID, -1, false, TYPALIGN_INT,
 					  &values, NULL, &nelems);
 	for (i = 0; i < nelems; ++i)
-		relids = lappend_oid(relids, DatumGetObjectId(values[i]));
+	{
+		String *s = makeNode(String);
+
+		s->sval = pstrdup(TextDatumGetCString(values[i]));
+		relnames = lappend(relnames, s);
+	}
 
 	pfree(values);
 	pfree(array);
-	return relids;
+	return relnames;
 }
 
 bool
-load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **relids, bool isSafe)
+load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **relnames, bool isSafe)
 {
 	if (isSafe && (!aqo_learn_statement_timeout || !lc_has_fss(fs, fss)))
-		return load_fss(fs, fss, data, relids);
+		return load_fss(fs, fss, data, relnames);
 	else
 	{
 		Assert(aqo_learn_statement_timeout);
-		return lc_load_fss(fs, fss, data, relids);
+		return lc_load_fss(fs, fss, data, relnames);
 	}
 }
 
@@ -394,7 +397,7 @@ load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **relids, bool isSafe)
  *			objects in the given feature space
  */
 bool
-load_fss(uint64 fs, int fss, OkNNrdata *data, List **relids)
+load_fss(uint64 fs, int fss, OkNNrdata *data, List **relnames)
 {
 	Relation	hrel;
 	Relation	irel;
@@ -438,8 +441,8 @@ load_fss(uint64 fs, int fss, OkNNrdata *data, List **relids)
 			deform_vector(values[4], data->targets, &(data->rows));
 			deform_vector(values[6], data->rfactors, &(data->rows));
 
-			if (relids != NULL)
-				*relids = deform_oids_vector(values[5]);
+			if (relnames != NULL)
+				*relnames = deform_strings_vector(values[5]);
 		}
 		else
 			elog(ERROR, "unexpected number of features for hash (" \
@@ -459,13 +462,13 @@ load_fss(uint64 fs, int fss, OkNNrdata *data, List **relids)
 }
 
 bool
-update_fss_ext(uint64 fs, int fsshash, OkNNrdata *data, List *relids,
+update_fss_ext(uint64 fs, int fss, OkNNrdata *data, List *relnames,
 			   bool isTimedOut)
 {
 	if (!isTimedOut)
-		return update_fss(fs, fsshash, data, relids);
+		return update_fss(fs, fss, data, relnames);
 	else
-		return lc_update_fss(fs, fsshash, data, relids);
+		return lc_update_fss(fs, fss, data, relnames);
 }
 
 /*
@@ -481,7 +484,7 @@ update_fss_ext(uint64 fs, int fsshash, OkNNrdata *data, List *relids,
  * Caller guaranteed that no one AQO process insert or update this data row.
  */
 bool
-update_fss(uint64 fhash, int fsshash, OkNNrdata *data, List *relids)
+update_fss(uint64 fs, int fss, OkNNrdata *data, List *relnames)
 {
 	Relation	hrel;
 	Relation	irel;
@@ -513,9 +516,8 @@ update_fss(uint64 fhash, int fsshash, OkNNrdata *data, List *relids)
 	tupDesc = RelationGetDescr(hrel);
 	InitDirtySnapshot(snap);
 	scan = index_beginscan(hrel, irel, &snap, 2, 0);
-
-	ScanKeyInit(&key[0], 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(fhash));
-	ScanKeyInit(&key[1], 2, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fsshash));
+	ScanKeyInit(&key[0], 1, BTEqualStrategyNumber, F_INT8EQ, Int64GetDatum(fs));
+	ScanKeyInit(&key[1], 2, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(fss));
 
 	index_rescan(scan, key, 2, NULL, 0);
 
@@ -524,8 +526,8 @@ update_fss(uint64 fhash, int fsshash, OkNNrdata *data, List *relids)
 
 	if (!find_ok)
 	{
-		values[0] = Int64GetDatum(fhash);
-		values[1] = Int32GetDatum(fsshash);
+		values[0] = Int64GetDatum(fs);
+		values[1] = Int32GetDatum(fss);
 		values[2] = Int32GetDatum(data->cols);
 
 		if (data->cols > 0)
@@ -536,7 +538,7 @@ update_fss(uint64 fhash, int fsshash, OkNNrdata *data, List *relids)
 		values[4] = PointerGetDatum(form_vector(data->targets, data->rows));
 
 		/* Form array of relids. Only once. */
-		values[5] = PointerGetDatum(form_oids_vector(relids));
+		values[5] = PointerGetDatum(form_strings_vector(relnames));
 		if ((void *) values[5] == NULL)
 			isnull[5] = true;
 		values[6] = PointerGetDatum(form_vector(data->rfactors, data->rows));
@@ -549,7 +551,7 @@ update_fss(uint64 fhash, int fsshash, OkNNrdata *data, List *relids)
 		 */
 		simple_heap_insert(hrel, tuple);
 		my_index_insert(irel, values, isnull, &(tuple->t_self),
-														hrel, UNIQUE_CHECK_YES);
+						hrel, UNIQUE_CHECK_YES);
 	}
 	else if (!TransactionIdIsValid(snap.xmin) && !TransactionIdIsValid(snap.xmax))
 	{
@@ -569,8 +571,7 @@ update_fss(uint64 fhash, int fsshash, OkNNrdata *data, List *relids)
 															&update_indexes))
 		{
 			if (update_indexes)
-				my_index_insert(irel, values, isnull,
-								&(nw_tuple->t_self),
+				my_index_insert(irel, values, isnull, &(nw_tuple->t_self),
 								hrel, UNIQUE_CHECK_YES);
 			result = true;
 		}
@@ -580,9 +581,15 @@ update_fss(uint64 fhash, int fsshash, OkNNrdata *data, List *relids)
 			 * Ooops, somebody concurrently updated the tuple. It is possible
 			 * only in the case of changes made by third-party code.
 			 */
+<<<<<<< HEAD
 			elog(ERROR, "AQO data piece ("UINT64_FORMAT" %d) concurrently"
 				 " updated by a stranger backend.",
 				 fhash, fsshash);
+=======
+			elog(ERROR, "AQO data piece (%ld %d) concurrently updated"
+				 " by a stranger backend.",
+				 fs, fss);
+>>>>>>> ecac693 (Move AQO from a relid based approach to a relation name based approach.)
 			result = false;
 		}
 	}

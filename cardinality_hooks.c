@@ -139,8 +139,8 @@ void
 aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 {
 	double	predicted;
-	Oid		relid;
-	List   *relids = NIL;
+	RangeTblEntry *rte;
+	List   *relnames = NIL;
 	List   *selectivities = NULL;
 	List   *clauses;
 	int		fss = 0;
@@ -161,19 +161,24 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 		goto default_estimator;
 	}
 
-	relid = planner_rt_fetch(rel->relid, root)->relid;
-	if (OidIsValid(relid))
-		/* Predict for a plane table only. */
-		relids = list_make1_int(relid);
+	rte = planner_rt_fetch(rel->relid, root);
+	if (rte && OidIsValid(rte->relid))
+	{
+		String *s = makeNode(String);
+
+		/* Predict for a plane table. */
+		Assert(rte->eref && rte->eref->aliasname);
+		s->sval = pstrdup(rte->eref->aliasname);
+		relnames = list_make1(s);
+	}
 
 	clauses = aqo_get_clauses(root, rel->baserestrictinfo);
-	predicted = predict_for_relation(clauses, selectivities,
-									 relids, &fss);
+	predicted = predict_for_relation(clauses, selectivities, relnames, &fss);
 	rel->fss_hash = fss;
 
 	list_free_deep(selectivities);
 	list_free(clauses);
-	list_free(relids);
+	list_free(relnames);
 
 	if (predicted >= 0)
 	{
@@ -209,8 +214,8 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 								   List *param_clauses)
 {
 	double		predicted;
-	Oid			relid = InvalidOid;
-	List	   *relids = NIL;
+	RangeTblEntry *rte = NULL;
+	List	   *relnames = NIL;
 	List	   *allclauses = NULL;
 	List	   *selectivities = NULL;
 	ListCell   *l;
@@ -219,7 +224,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	int		   *args_hash;
 	int		   *eclass_hash;
 	int			current_hash;
-	int fss = 0;
+	int			fss = 0;
 
 	if (IsQueryDisabled())
 		/* Fast path */
@@ -239,7 +244,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 		/* Make specific copy of clauses with mutated subplans */
 		allclauses = list_concat(aqo_get_clauses(root, param_clauses),
 								 aqo_get_clauses(root, rel->baserestrictinfo));
-		relid = planner_rt_fetch(rel->relid, root)->relid;
+		rte = planner_rt_fetch(rel->relid, root);
 		get_eclasses(allclauses, &nargs, &args_hash, &eclass_hash);
 
 		old_ctx_m = MemoryContextSwitchTo(AQO_cache_mem_ctx);
@@ -249,7 +254,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 			current_hash = get_clause_hash(
 										((RestrictInfo *) lfirst(l))->clause,
 										   nargs, args_hash, eclass_hash);
-			cache_selectivity(current_hash, rel->relid, relid,
+			cache_selectivity(current_hash, rel->relid, rte->relid,
 							  *((double *) lfirst(l2)));
 		}
 
@@ -269,11 +274,17 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 		goto default_estimator;
 	}
 
-	if (OidIsValid(relid))
-		/* Predict for a plane table only. */
-		relids = list_make1_int(relid);
+	if (rte && OidIsValid(rte->relid))
+	{
+		String *s = makeNode(String);
 
-	predicted = predict_for_relation(allclauses, selectivities, relids, &fss);
+		/* Predict for a plane table. */
+		Assert(rte->eref && rte->eref->aliasname);
+		s->sval = pstrdup(rte->eref->aliasname);
+		relnames = list_make1(s);
+	}
+
+	predicted = predict_for_relation(allclauses, selectivities, relnames, &fss);
 
 	predicted_ppi_rows = predicted;
 	fss_ppi_hash = fss;
@@ -298,7 +309,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 							   List *restrictlist)
 {
 	double		predicted;
-	List	   *relids;
+	List	   *relnames;
 	List	   *outer_clauses;
 	List	   *inner_clauses;
 	List	   *allclauses;
@@ -324,7 +335,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 		goto default_estimator;
 	}
 
-	relids = get_list_of_relids(root, rel->relids);
+	relnames = get_relnames(root, rel->relids);
 	outer_clauses = get_path_clauses(outer_rel->cheapest_total_path, root,
 									 &outer_selectivities);
 	inner_clauses = get_path_clauses(inner_rel->cheapest_total_path, root,
@@ -335,7 +346,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 								list_concat(outer_selectivities,
 											inner_selectivities));
 
-	predicted = predict_for_relation(allclauses, selectivities, relids, &fss);
+	predicted = predict_for_relation(allclauses, selectivities, relnames, &fss);
 	rel->fss_hash = fss;
 
 	if (predicted >= 0)
@@ -366,7 +377,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 								   List *clauses)
 {
 	double		predicted;
-	List	   *relids;
+	List	   *relnames;
 	List	   *outer_clauses;
 	List	   *inner_clauses;
 	List	   *allclauses;
@@ -392,7 +403,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 		goto default_estimator;
 	}
 
-	relids = get_list_of_relids(root, rel->relids);
+	relnames = get_relnames(root, rel->relids);
 	outer_clauses = get_path_clauses(outer_path, root, &outer_selectivities);
 	inner_clauses = get_path_clauses(inner_path, root, &inner_selectivities);
 	allclauses = list_concat(aqo_get_clauses(root, clauses),
@@ -401,7 +412,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 								list_concat(outer_selectivities,
 											inner_selectivities));
 
-	predicted = predict_for_relation(allclauses, selectivities, relids, &fss);
+	predicted = predict_for_relation(allclauses, selectivities, relnames, &fss);
 
 	predicted_ppi_rows = predicted;
 	fss_ppi_hash = fss;
@@ -428,13 +439,13 @@ predict_num_groups(PlannerInfo *root, Path *subpath, List *group_exprs,
 		child_fss = subpath->parent->fss_hash;
 	else
 	{
-		List *relids;
+		List *relnames;
 		List *clauses;
 		List *selectivities = NIL;
 
-		relids = get_list_of_relids(root, subpath->parent->relids);
+		relnames = get_relnames(root, subpath->parent->relids);
 		clauses = get_path_clauses(subpath, root, &selectivities);
-		(void) predict_for_relation(clauses, selectivities, relids, &child_fss);
+		(void) predict_for_relation(clauses, selectivities, relnames, &child_fss);
 	}
 
 	*fss = get_grouped_exprs_hash(child_fss, group_exprs);

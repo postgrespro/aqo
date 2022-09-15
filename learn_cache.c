@@ -45,18 +45,25 @@ static uint32 init_with_dsm(OkNNrdata *data, dsm_block_hdr *hdr, List **relids);
 
 /* Calculate, how many data we need to store an ML record. */
 static uint32
-calculate_size(int cols, int nrelids)
+calculate_size(int cols, List *relnames)
 {
-	uint32 size = sizeof(dsm_block_hdr); /* header's size */
+	uint32		size = sizeof(dsm_block_hdr); /* header's size */
+	ListCell   *lc;
 
 	size += sizeof(double) * cols * aqo_K; /* matrix */
 	size += 2 * sizeof(double) * aqo_K; /* targets, rfactors */
-	size += sizeof(int) * nrelids; /* relids */
+
+	/* Calculate memory size needed to store relation names */
+	foreach(lc, relnames)
+	{
+		size += strlen(lfirst_node(String, lc)->sval) + 1;
+	}
+
 	return size;
 }
 
 bool
-lc_update_fss(uint64 fs, int fss, OkNNrdata *data, List *relids)
+lc_update_fss(uint64 fs, int fss, OkNNrdata *data, List *relnames)
 {
 	htab_key		key = {fs, fss};
 	htab_entry	   *entry;
@@ -69,7 +76,7 @@ lc_update_fss(uint64 fs, int fss, OkNNrdata *data, List *relids)
 
 	Assert(fss_htab && aqo_learn_statement_timeout);
 
-	size = calculate_size(data->cols, list_length(relids));
+	size = calculate_size(data->cols, relnames);
 	LWLockAcquire(&aqo_state->lock, LW_EXCLUSIVE);
 
 	entry = (htab_entry *) hash_search(fss_htab, &key, HASH_ENTER, &found);
@@ -80,7 +87,7 @@ lc_update_fss(uint64 fs, int fss, OkNNrdata *data, List *relids)
 		Assert(hdr->magic == AQO_SHARED_MAGIC);
 		Assert(hdr->key.fs == fs && hdr->key.fss == fss);
 
-		if (data->cols != hdr->cols || list_length(relids) != hdr->nrelids)
+		if (data->cols != hdr->cols || list_length(relnames) != hdr->nrelids)
 		{
 			/*
 			 * Collision found: the same {fs,fss}, but something different.
@@ -102,7 +109,7 @@ lc_update_fss(uint64 fs, int fss, OkNNrdata *data, List *relids)
 		hdr->key.fs = fs;
 		hdr->key.fss = fss;
 		hdr->cols = data->cols;
-		hdr->nrelids = list_length(relids);
+		hdr->nrelids = list_length(relnames);
 	}
 
 	hdr->rows = data->rows;
@@ -124,12 +131,14 @@ lc_update_fss(uint64 fs, int fss, OkNNrdata *data, List *relids)
 	memcpy(ptr, data->rfactors, sizeof(double) * hdr->rows);
 	ptr += sizeof(double) * aqo_K;
 
-	/* store relids */
-	i = 0;
-	foreach(lc, relids)
+	/* store strings of relation names. Each string ends with 0-byte */
+	foreach(lc, relnames)
 	{
-		memcpy(ptr, &lfirst_int(lc), sizeof(int));
-		ptr += sizeof(int);
+		char *relname = lfirst_node(String, lc)->sval;
+		int len = strlen(relname) + 1;
+
+		memcpy(ptr, relname, len);
+		ptr += len;
 	}
 
 	/* Check the invariant */
@@ -163,7 +172,7 @@ lc_has_fss(uint64 fs, int fss)
  * Load ML data from a memory cache, not from a table.
  */
 bool
-lc_load_fss(uint64 fs, int fss, OkNNrdata *data, List **relids)
+lc_load_fss(uint64 fs, int fss, OkNNrdata *data, List **relnames)
 {
 	htab_key		key = {fs, fss};
 	htab_entry	   *entry;
@@ -195,13 +204,13 @@ lc_load_fss(uint64 fs, int fss, OkNNrdata *data, List **relids)
 		return false;
 	}
 
-	init_with_dsm(data, hdr, relids);
+	init_with_dsm(data, hdr, relnames);
 	LWLockRelease(&aqo_state->lock);
 	return true;
 }
 
 static uint32
-init_with_dsm(OkNNrdata *data, dsm_block_hdr *hdr, List **relids)
+init_with_dsm(OkNNrdata *data, dsm_block_hdr *hdr, List **relnames)
 {
 	int		i;
 	char   *ptr = (char *) hdr + sizeof(dsm_block_hdr);
@@ -225,22 +234,27 @@ init_with_dsm(OkNNrdata *data, dsm_block_hdr *hdr, List **relids)
 			ptr += sizeof(double) * data->cols;
 		}
 	}
+
 	memcpy(data->targets, ptr, sizeof(double) * hdr->rows);
 	ptr += sizeof(double) * aqo_K;
 	memcpy(data->rfactors, ptr, sizeof(double) * hdr->rows);
 	ptr += sizeof(double) * aqo_K;
 
-	if (relids)
+	if (relnames)
 	{
-		*relids = NIL;
+		*relnames = NIL;
 		for (i = 0; i < hdr->nrelids; i++)
 		{
-			*relids = lappend_int(*relids, *((int *)ptr));
-			ptr += sizeof(int);
+			String *s = makeNode(String);
+			int		len = strlen(ptr) + 1;
+
+			s->sval = pstrdup(ptr);
+			*relnames = lappend(*relnames, s);
+			ptr += len;
 		}
 	}
 
-	return calculate_size(hdr->cols, hdr->nrelids);
+	return calculate_size(hdr->cols, *relnames);
 }
 
 void
@@ -261,13 +275,13 @@ lc_flush_data(void)
 	{
 		dsm_block_hdr  *hdr = (dsm_block_hdr *) ptr;
 		OkNNrdata		data;
-		List		   *relids;
+		List		   *relnames;
 		uint32			delta = 0;
 
-		delta = init_with_dsm(&data, hdr, &relids);
+		delta = init_with_dsm(&data, hdr, &relnames);
 		ptr += delta;
 		size -= delta;
-		update_fss(hdr->key.fs, hdr->key.fss, &data, relids);
+		update_fss(hdr->key.fs, hdr->key.fss, &data, relnames);
 
 		if (!hash_search(fss_htab, (void *) &hdr->key, HASH_REMOVE, NULL))
 			elog(ERROR, "[AQO] Flush: local ML cache is corrupted.");
