@@ -407,12 +407,19 @@ disable_aqo_for_query(void)
 
 /*
  * Examine a fully-parsed query, and return TRUE iff any relation underlying
- * the query is a system relation.
+ * the query is a system relation or no one relation touched by the query.
  */
 static bool
 isQueryUsingSystemRelation(Query *query)
 {
-	return isQueryUsingSystemRelation_walker((Node *) query, NULL);
+	bool trivQuery = true;
+	bool result;
+
+	result = isQueryUsingSystemRelation_walker((Node *) query, &trivQuery);
+
+	if (result || trivQuery)
+		return true;
+	return false;
 }
 
 
@@ -451,10 +458,13 @@ isQueryUsingSystemRelation_walker(Node *node, void *context)
 				Relation	rel = table_open(rte->relid, AccessShareLock);
 				bool		is_catalog = IsCatalogRelation(rel);
 				bool		is_aqo_rel = IsAQORelation(rel);
+				bool		*trivQuery = (bool *) context;
 
 				table_close(rel, AccessShareLock);
 				if (is_catalog || is_aqo_rel)
 					return true;
+
+				*trivQuery = false;
 			}
 			else if (rte->rtekind == RTE_FUNCTION)
 			{
