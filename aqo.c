@@ -213,6 +213,19 @@ _PG_init(void)
 							 NULL
 	);
 
+	DefineCustomBoolVariable(
+							 "aqo.wide_search",
+							 "Search ML data in neighbour feature spaces.",
+							 NULL,
+							 &use_wide_search,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL
+	);
+
 	DefineCustomIntVariable("aqo.join_threshold",
 							"Sets the threshold of number of JOINs in query beyond which AQO is used.",
 							NULL,

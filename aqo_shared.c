@@ -191,16 +191,18 @@ aqo_init_shmem(void)
 	{
 		/* First time through ... */
 
-		LWLockInitialize(&aqo_state->lock, LWLockNewTrancheId());
 		aqo_state->dsm_handler = DSM_HANDLE_INVALID;
-
 		aqo_state->qtexts_dsa_handler = DSM_HANDLE_INVALID;
-		aqo_state->qtext_trancheid = LWLockNewTrancheId();
-		aqo_state->qtexts_changed = false;
 		aqo_state->data_dsa_handler = DSM_HANDLE_INVALID;
+
+		aqo_state->qtext_trancheid = LWLockNewTrancheId();
+
+		aqo_state->qtexts_changed = false;
+		aqo_state->stat_changed = false;
 		aqo_state->data_changed = false;
 		aqo_state->queries_changed = false;
 
+		LWLockInitialize(&aqo_state->lock, LWLockNewTrancheId());
 		LWLockInitialize(&aqo_state->stat_lock, LWLockNewTrancheId());
 		LWLockInitialize(&aqo_state->qtexts_lock, LWLockNewTrancheId());
 		LWLockInitialize(&aqo_state->data_lock, LWLockNewTrancheId());
@@ -245,7 +247,7 @@ aqo_init_shmem(void)
 	LWLockRegisterTranche(aqo_state->data_lock.tranche, "AQO Data Lock Tranche");
 	LWLockRegisterTranche(aqo_state->queries_lock.tranche, "AQO Queries Lock Tranche");
 
-	if (!IsUnderPostmaster)
+	if (!IsUnderPostmaster && !found)
 	{
 		before_shmem_exit(on_shmem_shutdown, (Datum) 0);
 
@@ -261,8 +263,16 @@ aqo_init_shmem(void)
 static void
 on_shmem_shutdown(int code, Datum arg)
 {
+	Assert(!IsUnderPostmaster);
+
+	/*
+	 * Save ML data to a permanent storage. Do it on postmaster shutdown only
+	 * to save time. We can't do so for query_texts and aqo_data because of DSM
+	 * limits.
+	 */
 	aqo_stat_flush();
 	aqo_queries_flush();
+	return;
 }
 
 Size

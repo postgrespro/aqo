@@ -171,7 +171,6 @@ restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 {
 	List		*lst = NIL;
 	ListCell	*l;
-	int			i = 0;
 	bool		parametrized_sel;
 	int			nargs;
 	int			*args_hash;
@@ -220,7 +219,6 @@ restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 		Assert(cur_sel > 0);
 
 		lst = lappend(lst, cur_sel);
-		i++;
 	}
 
 	if (parametrized_sel)

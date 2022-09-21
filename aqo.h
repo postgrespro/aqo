@@ -173,6 +173,7 @@ extern bool	force_collect_stat;
 extern bool aqo_show_hash;
 extern bool aqo_show_details;
 extern int aqo_join_threshold;
+extern bool use_wide_search;
 
 /* Parameters for current query */
 typedef struct QueryContextData
