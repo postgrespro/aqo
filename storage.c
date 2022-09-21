@@ -303,7 +303,9 @@ aqo_stat_store(uint64 queryid, bool use_aqo,
 		entry->exec_time[pos] = exec_time;
 		entry->est_error[pos] = est_error;
 	}
+
 	entry = memcpy(palloc(sizeof(StatEntry)), entry, sizeof(StatEntry));
+	aqo_state->stat_changed = true;
 	LWLockRelease(&aqo_state->stat_lock);
 	return entry;
 }
@@ -425,14 +427,24 @@ aqo_stat_flush(void)
 	int				ret;
 	long			entries;
 
-	LWLockAcquire(&aqo_state->stat_lock, LW_SHARED);
+	/* Use exclusive lock to prevent concurrent flushing in different backends. */
+	LWLockAcquire(&aqo_state->stat_lock, LW_EXCLUSIVE);
+
+	if (!aqo_state->stat_changed)
+		/* Hash table wasn't changed, meaningless to store it in permanent storage */
+		goto end;
+
 	entries = hash_get_num_entries(stat_htab);
 	hash_seq_init(&hash_seq, stat_htab);
 	ret = data_store(PGAQO_STAT_FILE, _form_stat_record_cb, entries,
 					 (void *) &hash_seq);
 	if (ret != 0)
 		hash_seq_term(&hash_seq);
+	else
+		/* Hash table and disk storage are now consistent */
+		aqo_state->stat_changed = false;
 
+end:
 	LWLockRelease(&aqo_state->stat_lock);
 }
 
@@ -469,7 +481,7 @@ aqo_qtexts_flush(void)
 	long			entries;
 
 	dsa_init();
-	LWLockAcquire(&aqo_state->qtexts_lock, LW_SHARED);
+	LWLockAcquire(&aqo_state->qtexts_lock, LW_EXCLUSIVE);
 
 	if (!aqo_state->qtexts_changed)
 		/* XXX: mull over forced mode. */
@@ -481,7 +493,9 @@ aqo_qtexts_flush(void)
 					 (void *) &hash_seq);
 	if (ret != 0)
 		hash_seq_term(&hash_seq);
-	aqo_state->qtexts_changed = false;
+	else
+		/* Hash table and disk storage are now consistent */
+		aqo_state->qtexts_changed = false;
 
 end:
 	LWLockRelease(&aqo_state->qtexts_lock);
@@ -531,7 +545,7 @@ aqo_data_flush(void)
 	long			entries;
 
 	dsa_init();
-	LWLockAcquire(&aqo_state->data_lock, LW_SHARED);
+	LWLockAcquire(&aqo_state->data_lock, LW_EXCLUSIVE);
 
 	if (!aqo_state->data_changed)
 		/* XXX: mull over forced mode. */
@@ -548,6 +562,7 @@ aqo_data_flush(void)
 		 */
 		hash_seq_term(&hash_seq);
 	else
+		/* Hash table and disk storage are now consistent */
 		aqo_state->data_changed = false;
 end:
 	LWLockRelease(&aqo_state->data_lock);
@@ -574,14 +589,22 @@ aqo_queries_flush(void)
 	int				ret;
 	long			entries;
 
-	LWLockAcquire(&aqo_state->queries_lock, LW_SHARED);
+	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
+
+	if (!aqo_state->queries_changed)
+		goto end;
+
 	entries = hash_get_num_entries(queries_htab);
 	hash_seq_init(&hash_seq, queries_htab);
 	ret = data_store(PGAQO_QUERIES_FILE, _form_queries_record_cb, entries,
 					 (void *) &hash_seq);
 	if (ret != 0)
 		hash_seq_term(&hash_seq);
+	else
+		/* Hash table and disk storage are now consistent */
+		aqo_state->queries_changed = false;
 
+end:
 	LWLockRelease(&aqo_state->queries_lock);
 }
 
@@ -621,7 +644,8 @@ data_store(const char *filename, form_record_t callback,
 		goto error;
 	}
 
-	(void) durable_rename(tmpfile, filename, LOG);
+	/* Parallel (re)writing into a file haven't happen. */
+	(void) durable_rename(tmpfile, filename, PANIC);
 	elog(LOG, "[AQO] %d records stored in file %s.", counter, filename);
 	return 0;
 
@@ -839,7 +863,7 @@ aqo_queries_load(void)
 
 	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
 
-	/* Load on postmaster sturtup. So no any concurrent actions possible here. */
+	/* Load on postmaster startup. So no any concurrent actions possible here. */
 	Assert(hash_get_num_entries(queries_htab) == 0);
 
 	data_load(PGAQO_QUERIES_FILE, _deform_queries_record_cb, NULL);
@@ -926,6 +950,9 @@ fail:
 static void
 on_shmem_shutdown(int code, Datum arg)
 {
+	/*
+	 * XXX: It can be expensive to rewrite a file on each shutdown of a backend.
+	 */
 	aqo_qtexts_flush();
 	aqo_data_flush();
 }
@@ -1201,6 +1228,7 @@ _aqo_data_remove(data_key *key)
 
 		if (hash_search(data_htab, key, HASH_REMOVE, NULL) == NULL)
 			elog(PANIC, "[AQO] Inconsistent data hash table");
+
 		aqo_state->data_changed = true;
 	}
 
@@ -1270,8 +1298,9 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	char	   *ptr;
 	ListCell   *lc;
 	size_t		size;
-	bool			tblOverflow;
-	HASHACTION		action;
+	bool		tblOverflow;
+	HASHACTION	action;
+	bool		result;
 
 	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
 
@@ -1387,8 +1416,9 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 
 	aqo_state->data_changed = true;
 end:
+	result = aqo_state->data_changed;
 	LWLockRelease(&aqo_state->data_lock);
-	return aqo_state->data_changed;
+	return result;
 }
 
 static void
@@ -1496,7 +1526,7 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 
 	dsa_init();
 
-	LWLockAcquire(&aqo_state->data_lock, LW_EXCLUSIVE);
+	LWLockAcquire(&aqo_state->data_lock, LW_SHARED);
 
 	if (!wideSearch)
 	{
@@ -1631,7 +1661,8 @@ aqo_data(PG_FUNCTION_ARGS)
 		ptr += sizeof(data_key);
 
 		if (entry->cols > 0)
-		values[AD_FEATURES] = PointerGetDatum(form_matrix((double *)ptr, entry->rows, entry->cols));
+			values[AD_FEATURES] = PointerGetDatum(form_matrix((double *) ptr,
+													entry->rows, entry->cols));
 		else
 			nulls[AD_FEATURES] = true;
 
@@ -1719,7 +1750,9 @@ aqo_data_reset(void)
 			elog(ERROR, "[AQO] hash table corrupted");
 		num_remove++;
 	}
-	aqo_state->data_changed = true;
+
+	if (num_remove > 0)
+		aqo_state->data_changed = true;
 	LWLockRelease(&aqo_state->data_lock);
 	if (num_remove != num_entries)
 		elog(ERROR, "[AQO] Query ML memory storage is corrupted or parallel access without a lock has detected.");
@@ -1831,6 +1864,7 @@ aqo_queries_store(uint64 queryid,
 	entry->use_aqo = use_aqo;
 	entry->auto_tuning = auto_tuning;
 
+	aqo_state->queries_changed = true;
 	LWLockRelease(&aqo_state->queries_lock);
 	return true;
 }
@@ -1856,7 +1890,10 @@ aqo_queries_reset(void)
 			elog(ERROR, "[AQO] hash table corrupted");
 		num_remove++;
 	}
-	aqo_state->queries_changed = true;
+
+	if (num_remove > 0)
+		aqo_state->queries_changed = true;
+
 	LWLockRelease(&aqo_state->queries_lock);
 
 	if (num_remove != num_entries - 1)

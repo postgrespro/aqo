@@ -151,6 +151,8 @@ hashTempTupleDesc(TupleDesc desc)
 	return s;
 }
 
+#include "storage/lmgr.h"
+
 /*
  * Get list of relation indexes and prepare list of permanent table reloids,
  * list of temporary table reloids (can be changed between query launches) and
@@ -173,6 +175,8 @@ get_list_of_relids(PlannerInfo *root, Relids relids, RelSortOut *rels)
 		HeapTuple		htup;
 		Form_pg_class	classForm;
 		char		   *relname = NULL;
+		Oid				relrewrite;
+		char			relpersistence;
 
 		entry = planner_rt_fetch(index, root);
 
@@ -187,15 +191,23 @@ get_list_of_relids(PlannerInfo *root, Relids relids, RelSortOut *rels)
 		if (!HeapTupleIsValid(htup))
 			elog(PANIC, "cache lookup failed for reloid %u", entry->relid);
 
+		/* Copy the fields from syscache and release the slot as quickly as possible. */
 		classForm = (Form_pg_class) GETSTRUCT(htup);
+		relpersistence = classForm->relpersistence;
+		relrewrite = classForm->relrewrite;
+		relname = pstrdup(NameStr(classForm->relname));
+		ReleaseSysCache(htup);
 
-		if (classForm->relpersistence == RELPERSISTENCE_TEMP)
+		if (relpersistence == RELPERSISTENCE_TEMP)
 		{
 			/* The case of temporary table */
 
-			Relation trel = relation_open(entry->relid, NoLock);
-			TupleDesc tdesc = RelationGetDescr(trel);
+			Relation	trel;
+			TupleDesc	tdesc;
 
+			trel = relation_open(entry->relid, NoLock);
+			tdesc = RelationGetDescr(trel);
+			Assert(CheckRelationLockedByMe(trel, AccessShareLock, true));
 			hashes = lappend_uint64(hashes, hashTempTupleDesc(tdesc));
 			relation_close(trel, NoLock);
 		}
@@ -203,18 +215,15 @@ get_list_of_relids(PlannerInfo *root, Relids relids, RelSortOut *rels)
 		{
 			/* The case of regular table */
 			relname = quote_qualified_identifier(
-				get_namespace_name(get_rel_namespace(entry->relid)),
-				classForm->relrewrite ?
-										get_rel_name(classForm->relrewrite) :
-										NameStr(classForm->relname));
+						get_namespace_name(get_rel_namespace(entry->relid)),
+							relrewrite ? get_rel_name(relrewrite) : relname);
+
 			hashes = lappend_uint64(hashes, DatumGetInt64(hash_any_extended(
 											(unsigned char *) relname,
 											strlen(relname), 0)));
 
 			hrels = lappend_oid(hrels, entry->relid);
 		}
-
-		ReleaseSysCache(htup);
 	}
 
 	rels->hrels = list_concat(rels->hrels, hrels);
