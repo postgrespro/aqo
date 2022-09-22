@@ -1322,7 +1322,6 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	}
 
 	Assert(DsaPointerIsValid(entry->data_dp));
-	Assert(entry->rows <= data->rows); /* Reserved for the future features */
 
 	if (entry->cols != data->cols || entry->nrels != list_length(reloids))
 	{
