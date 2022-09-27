@@ -1,4 +1,0 @@
-autovacuum = off
-shared_preload_libraries = 'postgres_fdw, aqo'
-max_parallel_workers_per_gather = 1 # switch off parallel workers because of unsteadiness
-aqo.wide_search = 'on'
