@@ -76,7 +76,7 @@ index 3f8e58626cc..996e21f6946 100644
  	WRITE_NODE_FIELD(initPlan);
  	WRITE_BITMAPSET_FIELD(extParam);
  	WRITE_BITMAPSET_FIELD(allParam);
-+	/*WRITE_NODE_FIELD(private); */
++	/*WRITE_NODE_FIELD(ext_nodes); */
  }
 
  /*
@@ -89,7 +89,7 @@ index c84e5af3a26..7ded7f5397b 100644
  	READ_BITMAPSET_FIELD(extParam);
  	READ_BITMAPSET_FIELD(allParam);
 +	local_node->ext_nodes = NIL;
-+	/* READ_NODE_FIELD(private);
++	/* READ_NODE_FIELD(ext_nodes);
 +	 * Don't serialize this field. It is required to serialize RestrictInfo and
 +	 * EqualenceClass.
 +	*/
