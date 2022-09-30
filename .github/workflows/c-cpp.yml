@@ -1,10 +1,10 @@
-name: C/C++ CI for the stable14 branch.
+name: 'C/C++ CI for the stable13'
 
 on:
   push:
-    branches: [ stable14 ]
+    branches: [ stable13 ]
   pull_request:
-    branches: [ stable14 ]
+    branches: [ stable13 ]
 
 jobs:
   build:
@@ -19,9 +19,9 @@ jobs:
         git config --global user.name "CI PgPro admin"
         git clone https://github.com/postgres/postgres.git pg
         cd pg
-        git checkout REL_14_STABLE
+        git checkout REL_13_STABLE
         ./configure --prefix=`pwd`/tmp_install
         git subtree add --prefix=contrib/aqo https://github.com/postgrespro/aqo.git $GITHUB_REF
-        patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg14.patch
+        patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg13.patch
         make -j4 > /dev/null && make -j4 -C contrib > /dev/null
         env CLIENTS=50 THREADS=50 make -C contrib/aqo check

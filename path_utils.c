@@ -11,16 +11,22 @@
  *	  aqo/path_utils.c
  *
  */
-
 #include "postgres.h"
 
+#include "access/relation.h"
 #include "nodes/readfuncs.h"
 #include "optimizer/optimizer.h"
 #include "path_utils.h"
+#include "utils/syscache.h"
+#include "utils/lsyscache.h"
 
 #include "aqo.h"
 #include "hash.h"
 
+#ifdef PGPRO_STD
+# define expression_tree_mutator(node, mutator, context) \
+     expression_tree_mutator(node, mutator, context, 0)
+#endif
 
 /*
  * Hook on creation of a plan node. We need to store AQO-specific data to
@@ -35,7 +41,7 @@ static AQOPlanNode DefaultAQOPlanNode =
 	.node.type = T_ExtensibleNode,
 	.node.extnodename = AQO_PLAN_NODE,
 	.had_path = false,
-	.relids = NIL,
+	.rels = NULL,
 	.clauses = NIL,
 	.selectivities = NIL,
 	.grouping_exprs = NIL,
@@ -51,8 +57,11 @@ create_aqo_plan_node()
 {
 	AQOPlanNode *node = (AQOPlanNode *) newNode(sizeof(AQOPlanNode),
 															T_ExtensibleNode);
-
+	Assert(node != NULL);
 	memcpy(node, &DefaultAQOPlanNode, sizeof(AQOPlanNode));
+	node->rels = palloc(sizeof(RelSortOut));
+	node->rels->hrels = NIL;
+	node->rels->signatures = NIL;
 	return node;
 }
 
@@ -124,33 +133,97 @@ get_selectivities(PlannerInfo *root,
 }
 
 /*
- * Transforms given relids from path optimization stage format to list of
- * an absolute (independent on query optimization context) relnames.
+ * Based on the hashTupleDesc() routine
  */
-List *
-get_relnames(PlannerInfo *root, Relids relids)
+static uint64
+hashTempTupleDesc(TupleDesc desc)
 {
-	int				i;
-	RangeTblEntry  *rte;
-	List		   *l = NIL;
+	uint64		s;
+	int			i;
+
+	s = hash_combine(0, hash_uint32(desc->natts));
+
+	for (i = 0; i < desc->natts; ++i)
+	{
+		const char *attname = NameStr(TupleDescAttr(desc, i)->attname);
+		uint64		s1;
+
+		s = hash_combine64(s, hash_uint32(TupleDescAttr(desc, i)->atttypid));
+		s1 = hash_bytes_extended((const unsigned char *) attname, strlen(attname), 0);
+		s = hash_combine64(s, s1);
+	}
+	return s;
+}
+
+/*
+ * Get list of relation indexes and prepare list of permanent table reloids,
+ * list of temporary table reloids (can be changed between query launches) and
+ * array of table signatures.
+ */
+void
+get_list_of_relids(PlannerInfo *root, Relids relids, RelSortOut *rels)
+{
+	int				index;
+	RangeTblEntry  *entry;
+	List		   *hrels = NIL;
+	List		   *hashes = NIL;
 
 	if (relids == NULL)
-		return NIL;
+		return;
 
-	/*
-	 * Check: don't take into account relations without underlying plane
-	 * source table.
-	 */
-	Assert(!bms_is_member(0, relids));
-
-	i = -1;
-	while ((i = bms_next_member(relids, i)) >= 0)
+	index = -1;
+	while ((index = bms_next_member(relids, index)) >= 0)
 	{
-		rte = planner_rt_fetch(i, root);
-		if (OidIsValid(rte->relid))
-			l = lappend(l, makeString(pstrdup(rte->eref->aliasname)));
+		HeapTuple		htup;
+		Form_pg_class	classForm;
+		char		   *relname = NULL;
+
+		entry = planner_rt_fetch(index, root);
+
+		if (!OidIsValid(entry->relid))
+		{
+			/* Invalid oid */
+			hashes = lappend_uint64(hashes, (UINT64_MAX / 7));
+			continue;
+		}
+
+		htup = SearchSysCache1(RELOID, ObjectIdGetDatum(entry->relid));
+		if (!HeapTupleIsValid(htup))
+			elog(PANIC, "cache lookup failed for reloid %u", entry->relid);
+
+		classForm = (Form_pg_class) GETSTRUCT(htup);
+
+		if (classForm->relpersistence == RELPERSISTENCE_TEMP)
+		{
+			/* The case of temporary table */
+
+			Relation trel = relation_open(entry->relid, NoLock);
+			TupleDesc tdesc = RelationGetDescr(trel);
+
+			hashes = lappend_uint64(hashes, hashTempTupleDesc(tdesc));
+			relation_close(trel, NoLock);
+		}
+		else
+		{
+			/* The case of regular table */
+			relname = quote_qualified_identifier(
+				get_namespace_name(get_rel_namespace(entry->relid)),
+				classForm->relrewrite ?
+										get_rel_name(classForm->relrewrite) :
+										NameStr(classForm->relname));
+			hashes = lappend_uint64(hashes, DatumGetInt64(hash_any_extended(
+											(unsigned char *) relname,
+											strlen(relname), 0)));
+
+			hrels = lappend_oid(hrels, entry->relid);
+		}
+
+		ReleaseSysCache(htup);
 	}
-	return l;
+
+	rels->hrels = list_concat(rels->hrels, hrels);
+	rels->signatures = list_concat(rels->signatures, hashes);
+	return;
 }
 
 /*
@@ -264,12 +337,12 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 			return get_path_clauses(((MaterialPath *) path)->subpath, root,
 									selectivities);
 			break;
-		case T_MemoizePath:
-			return get_path_clauses(((MemoizePath *) path)->subpath, root,
-									selectivities);
-			break;
 		case T_ProjectionPath:
 			return get_path_clauses(((ProjectionPath *) path)->subpath, root,
+									selectivities);
+			break;
+		case T_ProjectSetPath:
+			return get_path_clauses(((ProjectSetPath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_SortPath:
@@ -386,7 +459,6 @@ is_appropriate_path(Path *path)
 	{
 		case T_SortPath:
 		case T_IncrementalSortPath:
-		case T_MemoizePath:
 		case T_GatherPath:
 		case T_GatherMergePath:
 			appropriate = false;
@@ -400,6 +472,8 @@ is_appropriate_path(Path *path)
 
 /*
  * Converts path info into plan node for collecting it after query execution.
+ * Don't switch here to any AQO-specific memory contexts, because we should
+ * store AQO prediction in the same context, as the plan.
  */
 void
 aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
@@ -444,7 +518,7 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 												(*dest)->lefttree->targetlist);
 		/* Copy bare expressions for further AQO learning case. */
 		node->grouping_exprs = copyObject(groupExprs);
-		node->relids = get_relnames(root, ap->subpath->parent->relids);
+		get_list_of_relids(root, ap->subpath->parent->relids, node->rels);
 		node->jointype = JOIN_INNER;
 	}
 	else if (is_appropriate_path(src))
@@ -455,8 +529,7 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 		node->jointype = JOIN_INNER;
 	}
 
-	node->relids = list_concat(node->relids,
-							   get_relnames(root, src->parent->relids));
+	get_list_of_relids(root, src->parent->relids, node->rels);
 
 	if (src->parallel_workers > 0)
 		node->parallel_divisor = get_parallel_divisor(src);
@@ -484,12 +557,16 @@ AQOnodeCopy(struct ExtensibleNode *enew, const struct ExtensibleNode *eold)
 
 	Assert(IsA(old, ExtensibleNode));
 	Assert(strcmp(old->node.extnodename, AQO_PLAN_NODE) == 0);
+	Assert(new && old);
 
 	/* Copy static fields in one command */
 	memcpy(new, old, sizeof(AQOPlanNode));
 
 	/* These lists couldn't contain AQO nodes. Use basic machinery */
-	new->relids = copyObject(old->relids);
+	new->rels = palloc(sizeof(RelSortOut));
+	new->rels->hrels = list_copy(old->rels->hrels);
+	new->rels->signatures = list_copy_uint64(old->rels->signatures);
+
 	new->clauses = copyObject(old->clauses);
 	new->grouping_exprs = copyObject(old->grouping_exprs);
 	new->selectivities = copyObject(old->selectivities);
@@ -530,7 +607,7 @@ AQOnodeOut(struct StringInfoData *str, const struct ExtensibleNode *enode)
 
 	Assert(0);
 	WRITE_BOOL_FIELD(had_path);
-	WRITE_NODE_FIELD(relids);
+	WRITE_NODE_FIELD(rels);
 	WRITE_NODE_FIELD(clauses);
 	WRITE_NODE_FIELD(selectivities);
 	WRITE_NODE_FIELD(grouping_exprs);
@@ -583,7 +660,7 @@ AQOnodeRead(struct ExtensibleNode *enode)
 
 	Assert(0);
 	READ_BOOL_FIELD(had_path);
-	READ_NODE_FIELD(relids);
+	READ_NODE_FIELD(rels);
 	READ_NODE_FIELD(clauses);
 	READ_NODE_FIELD(selectivities);
 	READ_NODE_FIELD(grouping_exprs);
@@ -625,10 +702,10 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 							   RelOptInfo *output_rel,
 							   void *extra)
 {
-	A_Const	*fss_node = makeNode(A_Const);
-	List	*relnames;
-	List	*clauses;
-	List	*selectivities;
+	A_Const	   *fss_node = makeNode(A_Const);
+	RelSortOut	rels = {NIL, NIL};
+	List	   *clauses;
+	List	   *selectivities;
 
 	if (prev_create_upper_paths_hook)
 		(*prev_create_upper_paths_hook)(root, stage, input_rel, output_rel, extra);
@@ -643,9 +720,10 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 	set_cheapest(input_rel);
 	clauses = get_path_clauses(input_rel->cheapest_total_path,
 													root, &selectivities);
-	relnames = get_relnames(root, input_rel->relids);
+	get_list_of_relids(root, input_rel->relids, &rels);
 	fss_node->val.type = T_Integer;
 	fss_node->location = -1;
-	fss_node->val.val.ival = get_fss_for_object(relnames, clauses, NIL, NULL, NULL);
+	fss_node->val.val.ival = get_fss_for_object(rels.signatures, clauses, NIL,
+												NULL, NULL);
 	output_rel->ext_nodes = lappend(output_rel->ext_nodes, (void *) fss_node);
 }

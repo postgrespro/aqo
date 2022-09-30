@@ -1,6 +1,5 @@
 -- Check the learning-on-timeout feature
 -- For stabilized reproduction autovacuum must be disabled.
-
 CREATE FUNCTION check_estimated_rows(text) RETURNS TABLE (estimated int)
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -24,6 +23,7 @@ ANALYZE t;
 DELETE FROM t WHERE x > 5; -- Force optimizer to make overestimated prediction.
 
 CREATE EXTENSION IF NOT EXISTS aqo;
+SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'off';
 SET aqo.learn_statement_timeout = 'on';
@@ -46,7 +46,7 @@ SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
 DELETE FROM t WHERE x > 2;
 ANALYZE t;
 INSERT INTO t (x) (SELECT * FROM generate_series(3,5) AS x);
-TRUNCATE aqo_data;
+SELECT 1 FROM aqo_reset();
 
 SET statement_timeout = 800;
 SELECT *, pg_sleep(1) FROM t; -- Not learned
@@ -61,4 +61,6 @@ SELECT *, pg_sleep(1) FROM t; -- Get reliable data
 SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
 
 DROP TABLE t;
+SELECT 1 FROM aqo_reset();
 DROP EXTENSION aqo;
+DROP FUNCTION check_estimated_rows;

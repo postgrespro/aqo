@@ -1,8 +1,3 @@
--- Switch off parallel workers because of unsteadiness.
--- Do this in each aqo test separately, so that server regression tests pass
--- with aqo's temporary configuration file loaded.
-SET max_parallel_workers TO 0;
-
 CREATE TABLE aqo_test0(a int, b int, c int, d int);
 WITH RECURSIVE t(a, b, c, d)
 AS (
@@ -24,6 +19,7 @@ CREATE INDEX aqo_test1_idx_a ON aqo_test1 (a);
 ANALYZE aqo_test1;
 
 CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
 
 SET aqo.mode = 'intelligent';
 
@@ -149,7 +145,10 @@ DROP TABLE tmp1;
 
 SET aqo.mode = 'controlled';
 
-UPDATE aqo_queries SET learn_aqo = false, use_aqo = false, auto_tuning = false;
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, false, false, false)
+; -- Disable all query classes
 
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -178,7 +177,10 @@ EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c, t4.a AS d
 FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
 WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
 
-UPDATE aqo_queries SET learn_aqo = false, use_aqo = true, auto_tuning = false;
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, false, true, false)
+; -- set learn = false, use = true, tuning = false
 
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -212,5 +214,8 @@ DROP TABLE aqo_test0;
 
 DROP INDEX aqo_test1_idx_a;
 DROP TABLE aqo_test1;
+
+-- XXX: extension dropping doesn't clear file storage. Do it manually.
+SELECT 1 FROM aqo_reset();
 
 DROP EXTENSION aqo;

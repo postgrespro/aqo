@@ -41,6 +41,24 @@ static double fs_similarity(double dist);
 static double compute_weights(double *distances, int nrows, double *w, int *idx);
 
 
+OkNNrdata*
+OkNNr_allocate(int ncols)
+{
+	OkNNrdata  *data = palloc(sizeof(OkNNrdata));
+	int			i;
+
+	if (ncols > 0)
+		for (i = 0; i < aqo_K; i++)
+			data->matrix[i] = palloc0(ncols * sizeof(double));
+	else
+		for (i = 0; i < aqo_K; i++)
+			data->matrix[i] = NULL;
+
+	data->cols = ncols;
+	data->rows  = -1;
+	return data;
+}
+
 /*
  * Computes L2-distance between two given vectors.
  */
@@ -51,7 +69,10 @@ fs_distance(double *a, double *b, int len)
 	int			i;
 
 	for (i = 0; i < len; ++i)
+	{
+		Assert(!isnan(a[i]));
 		res += (a[i] - b[i]) * (a[i] - b[i]);
+	}
 	if (len != 0)
 		res = sqrt(res / len);
 	return res;
@@ -124,6 +145,8 @@ OkNNr_predict(OkNNrdata *data, double *features)
 	double	w[aqo_K];
 	double	w_sum;
 	double	result = 0.;
+
+	Assert(data != NULL);
 
 	for (i = 0; i < data->rows; ++i)
 		distances[i] = fs_distance(data->matrix[i], features, data->cols);
