@@ -18,8 +18,10 @@
  *	  aqo/hash.c
  *
  */
-
 #include "postgres.h"
+
+#include "access/htup.h"
+#include "common/fe_memutils.h"
 
 #include "math.h"
 
@@ -31,7 +33,7 @@ static int	get_node_hash(Node *node);
 static int	get_unsorted_unsafe_int_array_hash(int *arr, int len);
 static int	get_unordered_int_list_hash(List *lst);
 
-static int64 get_relations_hash(List *relnames);
+static int64 get_relations_hash(List *relsigns);
 static int get_fss_hash(int clauses_hash, int eclasses_hash,
 			 int relidslist_hash);
 
@@ -69,7 +71,6 @@ get_query_hash(Query *parse, const char *query_text)
 	/* XXX: remove_locations and remove_consts are heavy routines. */
 	str_repr = remove_locations(remove_consts(nodeToString(parse)));
 	hash = DatumGetUInt64(hash_any_extended((void *) str_repr, strlen(str_repr),0));
-	pfree(str_repr);
 
 	return hash;
 }
@@ -96,6 +97,29 @@ list_member_uint64(const List *list, uint64 datum)
 	return false;
 }
 
+/*
+ * Deep copy of uint64 list.
+ * Each element here is dynamically allocated in some memory context.
+ * If we copy the list in another memctx we should allocate memory for new
+ * elements too.
+ */
+List *
+list_copy_uint64(List *list)
+{
+	ListCell *lc;
+	List	 *nlist = NIL;
+
+	foreach(lc, list)
+	{
+		uint64 *val = palloc(sizeof(uint64));
+
+		*val = *(uint64 *) lfirst(lc);
+		nlist = lappend(nlist, (void *) val);
+	}
+
+	return nlist;
+}
+
 List *
 lappend_uint64(List *list, uint64 datum)
 {
@@ -106,6 +130,11 @@ lappend_uint64(List *list, uint64 datum)
 	return list;
 }
 
+/*
+ * Remove element from a list and free the memory which was allocated to it.
+ * Looks unconventional, but we unconventionally allocate memory on append, so
+ * it maybe ok.
+ */
 List *
 ldelete_uint64(List *list, uint64 datum)
 {
@@ -145,11 +174,12 @@ get_grouped_exprs_hash(int child_fss, List *group_exprs)
 
 	final_hashes[0] = child_fss;
 	final_hashes[1] = get_int_array_hash(hashes, i);
+
 	return get_int_array_hash(final_hashes, 2);
 }
 
 /*
- * For given object (clauselist, selectivities, relnames) creates feature
+ * For given object (clauselist, selectivities, reloids) creates feature
  * subspace:
  *		sets nfeatures
  *		creates and computes fss_hash
@@ -158,7 +188,7 @@ get_grouped_exprs_hash(int child_fss, List *group_exprs)
  * Special case for nfeatures == NULL: don't calculate features.
  */
 int
-get_fss_for_object(List *relnames, List *clauselist,
+get_fss_for_object(List *relsigns, List *clauselist,
 				   List *selectivities, int *nfeatures, double **features)
 {
 	int			n;
@@ -172,7 +202,7 @@ get_fss_for_object(List *relnames, List *clauselist,
 	int		   *eclass_hash;
 	int			clauses_hash;
 	int			eclasses_hash;
-	int			relnames_hash;
+	int			relations_hash;
 	List	  **args;
 	ListCell   *lc;
 	int			i,
@@ -182,6 +212,7 @@ get_fss_for_object(List *relnames, List *clauselist,
 	int			sh = 0,
 				old_sh;
 	int			fss_hash;
+	MemoryContext old_ctx_m;
 
 	n = list_length(clauselist);
 
@@ -190,13 +221,14 @@ get_fss_for_object(List *relnames, List *clauselist,
 		   (nfeatures == NULL && features == NULL));
 
 	get_eclasses(clauselist, &nargs, &args_hash, &eclass_hash);
+	if (nfeatures != NULL)
+		*features = palloc0(sizeof(**features) * n);
+
+	old_ctx_m = MemoryContextSwitchTo(AQOUtilityMemCtx);
 
 	clause_hashes = palloc(sizeof(*clause_hashes) * n);
 	clause_has_consts = palloc(sizeof(*clause_has_consts) * n);
 	sorted_clauses = palloc(sizeof(*sorted_clauses) * n);
-
-	if (nfeatures != NULL)
-		*features = palloc0(sizeof(**features) * n);
 
 	i = 0;
 	foreach(lc, clauselist)
@@ -228,6 +260,7 @@ get_fss_for_object(List *relnames, List *clauselist,
 		if (nfeatures != NULL)
 		{
 			(*features)[inverse_idx[i]] = log(*s);
+			Assert(!isnan(log(*s)));
 			if ((*features)[inverse_idx[i]] < log_selectivity_lower_bound)
 				(*features)[inverse_idx[i]] = log_selectivity_lower_bound;
 		}
@@ -260,18 +293,14 @@ get_fss_for_object(List *relnames, List *clauselist,
 	/*
 	 * Generate feature subspace hash.
 	 */
+
 	clauses_hash = get_int_array_hash(sorted_clauses, n - sh);
 	eclasses_hash = get_int_array_hash(eclass_hash, nargs);
-	relnames_hash = (int) get_relations_hash(relnames);
-	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relnames_hash);
+	relations_hash = (int) get_relations_hash(relsigns);
+	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relations_hash);
 
-	pfree(clause_hashes);
-	pfree(sorted_clauses);
-	pfree(idx);
-	pfree(inverse_idx);
-	pfree(clause_has_consts);
-	pfree(args_hash);
-	pfree(eclass_hash);
+	MemoryContextSwitchTo(old_ctx_m);
+	MemoryContextReset(AQOUtilityMemCtx);
 
 	if (nfeatures != NULL)
 	{
@@ -439,32 +468,27 @@ get_fss_hash(int clauses_hash, int eclasses_hash, int relidslist_hash)
  * Each element of a list must have a String type,
  */
 static int64
-get_relations_hash(List *relnames)
+get_relations_hash(List *relsigns)
 {
-	int64	   *hashes = palloc(list_length(relnames) * sizeof(int64));
+	int			nhashes = 0;
+	int64	   *hashes = palloc(list_length(relsigns) * sizeof(uint64));
 	ListCell   *lc;
-	int64		hash = 0;
-	int			i = 0;
+	int64		result;
 
-	/* generate array of hashes. */
-	foreach(lc, relnames)
+	foreach(lc, relsigns)
 	{
-		Value *relname = (Value *) lfirst(lc);
-
-		hashes[i++] = DatumGetInt64(hash_any_extended(
-											(unsigned char *) strVal(relname),
-											strlen(strVal(relname)), 0));
+		hashes[nhashes++] = *(int64 *) lfirst(lc);
 	}
 
 	/* Sort the array to make query insensitive to input order of relations. */
-	qsort(hashes, i, sizeof(int64), int64_compare);
+	qsort(hashes, nhashes, sizeof(int64), int64_compare);
 
 	/* Make a final hash value */
-	hash = DatumGetInt64(hash_any_extended((unsigned char *) hashes,
-										   i * sizeof(int64), 0));
 
-	pfree(hashes);
-	return hash;
+	result = DatumGetInt64(hash_any_extended((const unsigned char *) hashes,
+										   nhashes * sizeof(int64), 0));
+
+	return result;
 }
 
 /*
@@ -658,13 +682,19 @@ get_eclasses(List *clauselist, int *nargs, int **args_hash, int **eclass_hash)
 	int			i,
 				v;
 	int		   *e_hashes;
+	MemoryContext old_ctx_m;
 
 	get_clauselist_args(clauselist, nargs, args_hash);
+	*eclass_hash = palloc((*nargs) * sizeof(**eclass_hash));
+
+	old_ctx_m = MemoryContextSwitchTo(AQOUtilityMemCtx);
 
 	p = perform_eclasses_join(clauselist, *nargs, *args_hash);
-
 	lsts = palloc((*nargs) * sizeof(*lsts));
 	e_hashes = palloc((*nargs) * sizeof(*e_hashes));
+
+	MemoryContextSwitchTo(old_ctx_m);
+
 	for (i = 0; i < *nargs; ++i)
 		lsts[i] = NIL;
 
@@ -676,15 +706,10 @@ get_eclasses(List *clauselist, int *nargs, int **args_hash, int **eclass_hash)
 	for (i = 0; i < *nargs; ++i)
 		e_hashes[i] = get_unordered_int_list_hash(lsts[i]);
 
-	*eclass_hash = palloc((*nargs) * sizeof(**eclass_hash));
 	for (i = 0; i < *nargs; ++i)
 		(*eclass_hash)[i] = e_hashes[disjoint_set_get_parent(p, i)];
 
-	for (i = 0; i < *nargs; ++i)
-		list_free(lsts[i]);
-	pfree(lsts);
-	pfree(p);
-	pfree(e_hashes);
+	MemoryContextReset(AQOUtilityMemCtx);
 }
 
 /*

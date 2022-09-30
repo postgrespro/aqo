@@ -1,0 +1,122 @@
+CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
+SET aqo.mode = 'learn'; -- use this mode for unconditional learning
+CREATE TABLE test AS (SELECT id, 'payload' || id FROM generate_series(1,100) id);
+ANALYZE test;
+-- Learn on a query
+SELECT count(*) FROM test;
+ count 
+-------
+   100
+(1 row)
+
+SELECT query_text, learn_aqo, use_aqo, auto_tuning
+FROM aqo_query_texts aqt JOIN aqo_queries aq ON (aqt.queryid = aq.queryid)
+ORDER BY (md5(query_text))
+; -- Check result. TODO: use aqo_status()
+              query_text               | learn_aqo | use_aqo | auto_tuning 
+---------------------------------------+-----------+---------+-------------
+ SELECT count(*) FROM test;            | t         | t       | f
+ COMMON feature space (do not delete!) | f         | f       | f
+(2 rows)
+
+-- Create a schema and move AQO into it.
+CREATE SCHEMA IF NOT EXISTS test;
+ALTER EXTENSION aqo SET SCHEMA test;
+-- Do something to be confident that AQO works
+SELECT count(*) FROM test;
+ count 
+-------
+   100
+(1 row)
+
+SELECT count(*) FROM test WHERE id < 10;
+ count 
+-------
+     9
+(1 row)
+
+SELECT query_text, learn_aqo, use_aqo, auto_tuning
+FROM test.aqo_query_texts aqt JOIN test.aqo_queries aq ON (aqt.queryid = aq.queryid)
+ORDER BY (md5(query_text))
+; -- Find out both queries executed above
+                query_text                | learn_aqo | use_aqo | auto_tuning 
+------------------------------------------+-----------+---------+-------------
+ SELECT count(*) FROM test;               | t         | t       | f
+ COMMON feature space (do not delete!)    | f         | f       | f
+ SELECT count(*) FROM test WHERE id < 10; | t         | t       | f
+(3 rows)
+
+-- Add schema which contains AQO to the end of search_path
+SELECT set_config('search_path', current_setting('search_path') || ', test', false);
+      set_config       
+-----------------------
+ "$user", public, test
+(1 row)
+
+SELECT count(*) FROM test;
+ count 
+-------
+   100
+(1 row)
+
+SELECT count(*) FROM test WHERE id < 10;
+ count 
+-------
+     9
+(1 row)
+
+SELECT query_text, learn_aqo, use_aqo, auto_tuning
+FROM test.aqo_query_texts aqt JOIN test.aqo_queries aq ON (aqt.queryid = aq.queryid)
+ORDER BY (md5(query_text))
+; -- Check result.
+                query_text                | learn_aqo | use_aqo | auto_tuning 
+------------------------------------------+-----------+---------+-------------
+ SELECT count(*) FROM test;               | t         | t       | f
+ COMMON feature space (do not delete!)    | f         | f       | f
+ SELECT count(*) FROM test WHERE id < 10; | t         | t       | f
+(3 rows)
+
+/*
+ * Below, we should check each UI function
+ */
+SELECT aqo_disable_query(id) FROM (
+  SELECT queryid AS id FROM aqo_queries WHERE queryid <> 0) AS q1;
+ aqo_disable_query 
+-------------------
+ 
+ 
+(2 rows)
+
+SELECT learn_aqo, use_aqo, auto_tuning FROM test.aqo_queries
+ORDER BY (learn_aqo, use_aqo, auto_tuning);
+ learn_aqo | use_aqo | auto_tuning 
+-----------+---------+-------------
+ f         | f       | f
+ t         | t       | f
+ t         | t       | f
+(3 rows)
+
+SELECT aqo_enable_query(id) FROM (
+  SELECT queryid AS id FROM aqo_queries WHERE queryid <> 0) AS q1;
+ aqo_enable_query 
+------------------
+ 
+ 
+(2 rows)
+
+SELECT learn_aqo, use_aqo, auto_tuning FROM test.aqo_queries
+ORDER BY (learn_aqo, use_aqo, auto_tuning);
+ learn_aqo | use_aqo | auto_tuning 
+-----------+---------+-------------
+ f         | f       | f
+ t         | t       | f
+ t         | t       | f
+(3 rows)
+
+RESET search_path;
+DROP TABLE test CASCADE;
+DROP SCHEMA IF EXISTS test CASCADE;
+NOTICE:  drop cascades to extension aqo
+DROP EXTENSION IF EXISTS aqo CASCADE;
+NOTICE:  extension "aqo" does not exist, skipping

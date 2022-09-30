@@ -1,8 +1,3 @@
--- Switch off parallel workers because of unsteadiness.
--- Do this in each aqo test separately, so that server regression tests pass
--- with aqo's temporary configuration file loaded.
-SET max_parallel_workers TO 0;
-
 CREATE TABLE aqo_test0(a int, b int, c int, d int);
 WITH RECURSIVE t(a, b, c, d)
 AS (
@@ -22,6 +17,26 @@ AS (
 ) INSERT INTO aqo_test1 (SELECT * FROM t);
 CREATE INDEX aqo_test1_idx_a ON aqo_test1 (a);
 ANALYZE aqo_test1;
+CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
+
+SET aqo.mode = 'controlled';
+
+CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
+WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
+SELECT count(*) FROM tmp1;
+DROP TABLE tmp1;
+CREATE TABLE tmp1 AS SELECT t1.a, t2.b, t3.c
+FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
+WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
+SELECT count(*) FROM tmp1;
+DROP TABLE tmp1;
+EXPLAIN SELECT * FROM aqo_test0
+WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
+EXPLAIN SELECT t1.a, t2.b, t3.c
+FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
+WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
 
 SET aqo.mode = 'disabled';
 
@@ -43,8 +58,7 @@ EXPLAIN SELECT t1.a, t2.b, t3.c
 FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
 WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
 
-CREATE EXTENSION aqo;
-
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
 SET aqo.mode = 'intelligent';
 
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
@@ -58,9 +72,13 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
 SELECT count(*) FROM tmp1;
 DROP TABLE tmp1;
 
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
 SET aqo.mode = 'controlled';
 
-UPDATE aqo_queries SET learn_aqo = true, use_aqo = true, auto_tuning = false;
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, true, true, false)
+; -- Enable all disabled query classes
 
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -69,6 +87,7 @@ EXPLAIN SELECT t1.a, t2.b, t3.c
 FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
 WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
 
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
 SET aqo.mode = 'disabled';
 
 EXPLAIN SELECT * FROM aqo_test0
@@ -77,6 +96,10 @@ WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
 EXPLAIN SELECT t1.a, t2.b, t3.c
 FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
 WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
+
+-- XXX: extension dropping doesn't clear file storage. Do it manually.
+SELECT 1 FROM aqo_reset();
 
 DROP EXTENSION aqo;
 

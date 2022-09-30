@@ -1,13 +1,17 @@
--- Switch off parallel workers because of unsteadiness.
--- Do this in each aqo test separately, so that server regression tests pass
--- with aqo's temporary configuration file loaded.
-SET max_parallel_workers TO 0;
 CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = true;
 CREATE TABLE t(x int);
 INSERT INTO t (x) (SELECT * FROM generate_series(1, 100) AS gs);
 ANALYZE t;
+SELECT true FROM aqo_reset(); -- Remember! DROP EXTENSION doesn't remove any AQO data gathered.
+ bool 
+------
+ t
+(1 row)
+
+-- Check AQO addons to explain (the only stable data)
 EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 	SELECT x FROM t;
                    QUERY PLAN                   
@@ -32,11 +36,90 @@ EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
  JOINS: 0
 (6 rows)
 
+SET aqo.mode = 'disabled';
 -- Check existence of the interface functions.
-SELECT obj_description('public.show_cardinality_errors'::regproc::oid);
+SELECT obj_description('aqo_cardinality_error'::regproc::oid);
                                                 obj_description                                                
 ---------------------------------------------------------------------------------------------------------------
  Get cardinality error of queries the last time they were executed. Order queries according to an error value.
+(1 row)
+
+SELECT obj_description('aqo_execution_time'::regproc::oid);
+                                                                                                             obj_description                                                                                                              
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Get execution time of queries. If controlled = true (AQO could advise cardinality estimations), show time of last execution attempt. Another case (AQO not used), return an average value of execution time across all known executions.
+(1 row)
+
+SELECT obj_description('aqo_drop_class'::regproc::oid);
+                       obj_description                        
+--------------------------------------------------------------
+ Remove info about an query class from AQO ML knowledge base.
+(1 row)
+
+SELECT obj_description('aqo_cleanup'::regproc::oid);
+               obj_description                
+----------------------------------------------
+ Remove unneeded rows from the AQO ML storage
+(1 row)
+
+SELECT obj_description('aqo_reset'::regproc::oid);
+        obj_description         
+--------------------------------
+ Reset all data gathered by AQO
+(1 row)
+
+\df aqo_cardinality_error
+                                                                 List of functions
+ Schema |         Name          |                                  Result data type                                   | Argument data types | Type 
+--------+-----------------------+-------------------------------------------------------------------------------------+---------------------+------
+ public | aqo_cardinality_error | TABLE(num integer, id bigint, fshash bigint, error double precision, nexecs bigint) | controlled boolean  | func
+(1 row)
+
+\df aqo_execution_time
+                                                                 List of functions
+ Schema |        Name        |                                    Result data type                                     | Argument data types | Type 
+--------+--------------------+-----------------------------------------------------------------------------------------+---------------------+------
+ public | aqo_execution_time | TABLE(num integer, id bigint, fshash bigint, exec_time double precision, nexecs bigint) | controlled boolean  | func
+(1 row)
+
+\df aqo_drop_class
+                            List of functions
+ Schema |      Name      | Result data type | Argument data types | Type 
+--------+----------------+------------------+---------------------+------
+ public | aqo_drop_class | integer          | queryid bigint      | func
+(1 row)
+
+\df aqo_cleanup
+                                 List of functions
+ Schema |    Name     | Result data type |        Argument data types        | Type 
+--------+-------------+------------------+-----------------------------------+------
+ public | aqo_cleanup | record           | OUT nfs integer, OUT nfss integer | func
+(1 row)
+
+\df aqo_reset
+                         List of functions
+ Schema |   Name    | Result data type | Argument data types | Type 
+--------+-----------+------------------+---------------------+------
+ public | aqo_reset | bigint           |                     | func
+(1 row)
+
+-- Check stat reset
+SELECT count(*) FROM aqo_query_stat;
+ count 
+-------
+     1
+(1 row)
+
+SELECT true FROM aqo_reset(); -- Remove one record from all tables
+ bool 
+------
+ t
+(1 row)
+
+SELECT count(*) FROM aqo_query_stat;
+ count 
+-------
+     0
 (1 row)
 
 DROP EXTENSION aqo;

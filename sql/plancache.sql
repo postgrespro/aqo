@@ -1,11 +1,7 @@
 -- Tests on interaction of AQO with cached plans.
 
--- Switch off parallel workers because of unsteadiness.
--- Do this in each aqo test separately, so that server regression tests pass
--- with aqo's temporary configuration file loaded.
-SET max_parallel_workers TO 0;
-
 CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
 SET aqo.mode = 'intelligent';
 SET aqo.show_details = 'on';
 SET aqo.show_hash = 'off';
@@ -31,13 +27,13 @@ BEGIN
     execute 'EXECUTE fooplan(1)';
   END LOOP;
 
-  SELECT query_hash FROM aqo_query_texts
+  SELECT queryid FROM aqo_query_texts
     WHERE query_text LIKE '%count(*) FROM test WHERE x%' INTO qhash;
 
   RETURN QUERY SELECT executions_without_aqo nnex,
   					  executions_with_aqo nex,
   					  planning_time_with_aqo pt
-    FROM  aqo_query_stat WHERE query_hash = qhash;
+    FROM  aqo_query_stat WHERE queryid = qhash;
 END $$ LANGUAGE 'plpgsql';
 
 -- The function shows 6 executions without an AQO support (nnex) and

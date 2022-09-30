@@ -23,6 +23,7 @@
 #include "path_utils.h"
 #include "preprocessing.h"
 #include "learn_cache.h"
+#include "storage.h"
 
 
 PG_MODULE_MAGIC;
@@ -33,8 +34,6 @@ void _PG_init(void);
 
 /* Strategy of determining feature space for new queries. */
 int		aqo_mode;
-bool	aqo_enabled = false; /* Signals that CREATE EXTENSION have executed and
-								all extension tables is ready for use. */
 bool	force_collect_stat;
 
 /*
@@ -62,7 +61,7 @@ static const struct config_enum_entry format_options[] = {
 };
 
 /* Parameters of autotuning */
-int			aqo_stat_size = 20;
+int			aqo_stat_size = STAT_SAMPLE_SIZE;
 int			auto_tuning_window_size = 5;
 double		auto_tuning_exploration = 0.1;
 int			auto_tuning_max_iterations = 50;
@@ -80,9 +79,23 @@ double		log_selectivity_lower_bound = -30;
  * Currently we use it only to store query_text string which is initialized
  * after a query parsing and is used during the query planning.
  */
-MemoryContext		AQOMemoryContext;
-MemoryContext		AQO_cache_mem_ctx;
+
 QueryContextData	query_context;
+
+MemoryContext		AQOTopMemCtx = NULL;
+
+/* Is released at the end of transaction */
+MemoryContext		AQOCacheMemCtx = NULL;
+
+/* Should be released in-place, just after a huge calculation */
+MemoryContext		AQOUtilityMemCtx = NULL;
+
+/* Is released at the end of planning */
+MemoryContext 		AQOPredictMemCtx = NULL;
+
+/* Is released at the end of learning */
+MemoryContext 		AQOLearnMemCtx = NULL;
+
 /* Additional plan info */
 int njoins;
 
@@ -117,7 +130,7 @@ aqo_free_callback(ResourceReleasePhase phase,
 
 	if (isTopLevel)
 	{
-		list_free_deep(cur_classes);
+		MemoryContextReset(AQOCacheMemCtx);
 		cur_classes = NIL;
 	}
 }
@@ -200,6 +213,71 @@ _PG_init(void)
 							 NULL
 	);
 
+	DefineCustomIntVariable("aqo.join_threshold",
+							"Sets the threshold of number of JOINs in query beyond which AQO is used.",
+							NULL,
+							&aqo_join_threshold,
+							3,
+							0, INT_MAX / 1000,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL
+	);
+
+	DefineCustomIntVariable("aqo.fs_max_items",
+							"Max number of feature spaces that AQO can operate with.",
+							NULL,
+							&fs_max_items,
+							10000,
+							1, INT_MAX,
+							PGC_SUSET,
+							0,
+							NULL,
+							NULL,
+							NULL
+	);
+
+	DefineCustomIntVariable("aqo.fss_max_items",
+							"Max number of feature subspaces that AQO can operate with.",
+							NULL,
+							&fss_max_items,
+							100000,
+							0, INT_MAX,
+							PGC_SUSET,
+							0,
+							NULL,
+							NULL,
+							NULL
+	);
+
+	DefineCustomIntVariable("aqo.querytext_max_size",
+							"Query max size in aqo_query_texts.",
+							NULL,
+							&querytext_max_size,
+							1000,
+							0, INT_MAX,
+							PGC_SUSET,
+							0,
+							NULL,
+							NULL,
+							NULL
+	);
+
+	DefineCustomIntVariable("aqo.dsm_size_max",
+							"Maximum size of dynamic shared memory which AQO could allocate to store learning data.",
+							NULL,
+							&dsm_size_max,
+							100,
+							0, INT_MAX,
+							PGC_SUSET,
+							0,
+							NULL,
+							NULL,
+							NULL
+	);
+
 	prev_shmem_startup_hook						= shmem_startup_hook;
 	shmem_startup_hook							= aqo_init_shmem;
 	prev_planner_hook							= planner_hook;
@@ -238,93 +316,47 @@ _PG_init(void)
 	create_upper_paths_hook						= aqo_store_upper_signature_hook;
 
 	init_deactivated_queries_storage();
-	AQOMemoryContext = AllocSetContextCreate(TopMemoryContext,
-											 "AQOMemoryContext",
+
+	/*
+	 * Create own Top memory Context for reporting AQO memory in the future.
+	 */
+	AQOTopMemCtx = AllocSetContextCreate(TopMemoryContext,
+											 "AQOTopMemoryContext",
 											 ALLOCSET_DEFAULT_SIZES);
-	AQO_cache_mem_ctx = AllocSetContextCreate(TopMemoryContext,
-											 "AQO_cache_mem_ctx",
+	/*
+	 * AQO Cache Memory Context containe environment data.
+	 */
+	AQOCacheMemCtx = AllocSetContextCreate(AQOTopMemCtx,
+											 "AQOCacheMemCtx",
+											 ALLOCSET_DEFAULT_SIZES);
+	/*
+	 * AQOUtilityMemoryContext containe short-lived information which
+	 * is appeared from having got clause, selectivity arrays and relid lists
+	 * while calculating hashes. It clean up inside calculated
+	 * function or immediately after her having completed.
+	 */
+	AQOUtilityMemCtx = AllocSetContextCreate(AQOTopMemCtx,
+											 "AQOUtilityMemoryContext",
+											 ALLOCSET_DEFAULT_SIZES);
+	/*
+	 * AQOPredictMemoryContext save necessary information for making predict of plan nodes
+	 * and clean up in the execution stage of query.
+	 */
+	AQOPredictMemCtx = AllocSetContextCreate(AQOTopMemCtx,
+											 "AQOPredictMemoryContext",
+											 ALLOCSET_DEFAULT_SIZES);
+	/*
+	 * AQOLearnMemoryContext save necessary information for writing down to AQO knowledge table
+	 * and clean up after doing this operation.
+	 */
+	AQOLearnMemCtx = AllocSetContextCreate(AQOTopMemCtx,
+											 "AQOLearnMemoryContext",
 											 ALLOCSET_DEFAULT_SIZES);
 	RegisterResourceReleaseCallback(aqo_free_callback, NULL);
 	RegisterAQOPlanNodeMethods();
 
 	EmitWarningsOnPlaceholders("aqo");
 	RequestAddinShmemSpace(aqo_memsize());
-}
-
-PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
-
-/*
- * Clears the cache of deactivated queries if the user changed aqo_queries
- * manually.
- */
-Datum
-invalidate_deactivated_queries_cache(PG_FUNCTION_ARGS)
-{
-	fini_deactivated_queries_storage();
-	init_deactivated_queries_storage();
-	PG_RETURN_POINTER(NULL);
-}
-
-/*
- * Return AQO schema's Oid or InvalidOid if that's not possible.
- */
-Oid
-get_aqo_schema(void)
-{
-	Oid				result;
-	Relation		rel;
-	SysScanDesc		scandesc;
-	HeapTuple		tuple;
-	ScanKeyData		entry[1];
-	Oid				ext_oid;
-
-	/* It's impossible to fetch pg_aqo's schema now */
-	if (!IsTransactionState())
-		return InvalidOid;
-
-	ext_oid = get_extension_oid("aqo", true);
-	if (ext_oid == InvalidOid)
-		return InvalidOid; /* exit if pg_aqo does not exist */
-
-	ScanKeyInit(&entry[0],
-#if PG_VERSION_NUM >= 120000
-				Anum_pg_extension_oid,
-#else
-				ObjectIdAttributeNumber,
-#endif
-				BTEqualStrategyNumber, F_OIDEQ,
-				ObjectIdGetDatum(ext_oid));
-
-	rel = relation_open(ExtensionRelationId, AccessShareLock);
-	scandesc = systable_beginscan(rel, ExtensionOidIndexId, true,
-								  NULL, 1, entry);
-	tuple = systable_getnext(scandesc);
-
-	/* We assume that there can be at most one matching tuple */
-	if (HeapTupleIsValid(tuple))
-		result = ((Form_pg_extension) GETSTRUCT(tuple))->extnamespace;
-	else
-		result = InvalidOid;
-
-	systable_endscan(scandesc);
-	relation_close(rel, AccessShareLock);
-	return result;
-}
-
-/*
- * Init userlock
- */
-void
-init_lock_tag(LOCKTAG *tag, uint64 key1, int32 key2)
-{
-	uint32 key = key1 % UINT32_MAX;
-
-	tag->locktag_field1 = AQO_MODULE_MAGIC;
-	tag->locktag_field2 = key;
-	tag->locktag_field3 = (uint32) key2;
-	tag->locktag_field4 = 0;
-	tag->locktag_type = LOCKTAG_USERLOCK;
-	tag->locktag_lockmethodid = USER_LOCKMETHOD;
 }
 
 /*
@@ -341,4 +373,16 @@ IsQueryDisabled(void)
 		return true;
 
 	return false;
+}
+
+PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
+
+/*
+ * Clears the cache of deactivated queries if the user changed aqo_queries
+ * manually.
+ */
+Datum
+invalidate_deactivated_queries_cache(PG_FUNCTION_ARGS)
+{
+       PG_RETURN_POINTER(NULL);
 }

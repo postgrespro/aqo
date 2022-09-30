@@ -29,6 +29,7 @@
 #include "machine_learning.h"
 #include "preprocessing.h"
 #include "learn_cache.h"
+#include "storage.h"
 
 
 typedef struct
@@ -59,25 +60,18 @@ static char *PlanStateInfo = "PlanStateInfo";
 static void atomic_fss_learn_step(uint64 fhash, int fss, OkNNrdata *data,
 								  double *features,
 								  double target, double rfactor,
-								  List *relnames, bool isTimedOut);
+								  List *reloids, bool isTimedOut);
 static bool learnOnPlanState(PlanState *p, void *context);
-static void learn_agg_sample(aqo_obj_stat *ctx, List *relidslist,
+static void learn_agg_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 							 double learned, double rfactor, Plan *plan,
 							 bool notExecuted);
-static void learn_sample(aqo_obj_stat *ctx, List *relidslist,
+static void learn_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 						 double learned, double rfactor,
 						 Plan *plan, bool notExecuted);
 static List *restore_selectivities(List *clauselist,
 								   List *relidslist,
 								   JoinType join_type,
 								   bool was_parametrized);
-static void update_query_stat_row(double *et, int *et_size,
-								  double *pt, int *pt_size,
-								  double *ce, int *ce_size,
-								  double planning_time,
-								  double execution_time,
-								  double cardinality_error,
-								  int64 *n_exec);
 static void StoreToQueryEnv(QueryDesc *queryDesc);
 static void StorePlanInternals(QueryDesc *queryDesc);
 static bool ExtractFromQueryEnv(QueryDesc *queryDesc);
@@ -91,33 +85,25 @@ static bool ExtractFromQueryEnv(QueryDesc *queryDesc);
 static void
 atomic_fss_learn_step(uint64 fs, int fss, OkNNrdata *data,
 					  double *features, double target, double rfactor,
-					  List *relnames, bool isTimedOut)
+					  List *reloids, bool isTimedOut)
 {
-	LOCKTAG		tag;
-
-	init_lock_tag(&tag, fs, fss);
-	LockAcquire(&tag, ExclusiveLock, false, false);
-
 	if (!load_fss_ext(fs, fss, data, NULL, !isTimedOut))
 		data->rows = 0;
 
 	data->rows = OkNNr_learn(data, features, target, rfactor);
-	update_fss_ext(fs, fss, data, relnames, isTimedOut);
-
-	LockRelease(&tag, ExclusiveLock, false);
+	update_fss_ext(fs, fss, data, reloids, isTimedOut);
 }
 
 static void
-learn_agg_sample(aqo_obj_stat *ctx, List *relnames,
+learn_agg_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 			 double learned, double rfactor, Plan *plan, bool notExecuted)
 {
 	AQOPlanNode	   *aqo_node = get_aqo_plan_node(plan, false);
-	uint64			fhash = query_context.fspace_hash;
+	uint64			fs = query_context.fspace_hash;
 	int				child_fss;
 	double			target;
-	OkNNrdata		data;
+	OkNNrdata	   *data = OkNNr_allocate(0);
 	int				fss;
-	int				i;
 
 	/*
 	 * Learn 'not executed' nodes only once, if no one another knowledge exists
@@ -127,16 +113,13 @@ learn_agg_sample(aqo_obj_stat *ctx, List *relnames,
 		return;
 
 	target = log(learned);
-	child_fss = get_fss_for_object(relnames, ctx->clauselist, NIL, NULL, NULL);
+	child_fss = get_fss_for_object(rels->signatures, ctx->clauselist,
+								   NIL, NULL,NULL);
 	fss = get_grouped_exprs_hash(child_fss, aqo_node->grouping_exprs);
 
-	memset(&data, 0, sizeof(OkNNrdata));
-	for (i = 0; i < aqo_K; i++)
-		data.matrix[i] = NULL;
-
 	/* Critical section */
-	atomic_fss_learn_step(fhash, fss, &data, NULL,
-						  target, rfactor, relnames, ctx->isTimedOut);
+	atomic_fss_learn_step(fs, fss, data, NULL,
+						  target, rfactor, rels->hrels, ctx->isTimedOut);
 	/* End of critical section */
 }
 
@@ -145,21 +128,20 @@ learn_agg_sample(aqo_obj_stat *ctx, List *relnames,
  * true cardinalities) performs learning procedure.
  */
 static void
-learn_sample(aqo_obj_stat *ctx, List *relnames,
+learn_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 			 double learned, double rfactor, Plan *plan, bool notExecuted)
 {
 	AQOPlanNode	   *aqo_node = get_aqo_plan_node(plan, false);
 	uint64			fs = query_context.fspace_hash;
 	double		   *features;
 	double			target;
-	OkNNrdata		data;
+	OkNNrdata	   *data;
 	int				fss;
-	int				i;
+	int				ncols;
 
-	memset(&data, 0, sizeof(OkNNrdata));
 	target = log(learned);
-	fss = get_fss_for_object(relnames, ctx->clauselist,
-							 ctx->selectivities, &data.cols, &features);
+	fss = get_fss_for_object(rels->signatures, ctx->clauselist,
+							 ctx->selectivities, &ncols, &features);
 
 	/* Only Agg nodes can have non-empty a grouping expressions list. */
 	Assert(!IsA(plan, Agg) || aqo_node->grouping_exprs != NIL);
@@ -171,20 +153,12 @@ learn_sample(aqo_obj_stat *ctx, List *relnames,
 	if (notExecuted && aqo_node->prediction > 0)
 		return;
 
-	if (data.cols > 0)
-		for (i = 0; i < aqo_K; ++i)
-			data.matrix[i] = palloc(sizeof(double) * data.cols);
+	data = OkNNr_allocate(ncols);
 
 	/* Critical section */
-	atomic_fss_learn_step(fs, fss, &data, features, target, rfactor,
-						  relnames, ctx->isTimedOut);
+	atomic_fss_learn_step(fs, fss, data, features, target, rfactor,
+						  rels->hrels, ctx->isTimedOut);
 	/* End of critical section */
-
-	if (data.cols > 0)
-		for (i = 0; i < aqo_K; ++i)
-			pfree(data.matrix[i]);
-
-	pfree(features);
 }
 
 /*
@@ -205,12 +179,16 @@ restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 	double		*cur_sel;
 	int			cur_hash;
 	int			cur_relid;
+	MemoryContext old_ctx_m;
 
 	parametrized_sel = was_parametrized && (list_length(relidslist) == 1);
 	if (parametrized_sel)
 	{
 		cur_relid = linitial_int(relidslist);
+
+		old_ctx_m = MemoryContextSwitchTo(AQOUtilityMemCtx);
 		get_eclasses(clauselist, &nargs, &args_hash, &eclass_hash);
+		MemoryContextSwitchTo(old_ctx_m);
 	}
 
 	foreach(l, clauselist)
@@ -236,14 +214,18 @@ restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 		else
 			cur_sel = &rinfo->outer_selec;
 
+		if (*cur_sel < 0)
+			*cur_sel = 0;
+
+		Assert(cur_sel > 0);
+
 		lst = lappend(lst, cur_sel);
 		i++;
 	}
 
 	if (parametrized_sel)
 	{
-		pfree(args_hash);
-		pfree(eclass_hash);
+		MemoryContextReset(AQOUtilityMemCtx);
 	}
 
 	return lst;
@@ -338,7 +320,7 @@ should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
 			/* This node s*/
 			if (aqo_show_details)
 				elog(NOTICE,
-					 "[AQO] Learn on a plan node (%lu, %d), "
+					 "[AQO] Learn on a plan node ("UINT64_FORMAT", %d), "
 					"predicted rows: %.0lf, updated prediction: %.0lf",
 					 query_context.query_hash, node->fss, predicted, *nrows);
 
@@ -354,7 +336,7 @@ should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
 			if (ctx->learn && aqo_show_details &&
 				fabs(*nrows - predicted) / predicted > 0.2)
 				elog(NOTICE,
-					 "[AQO] Learn on a finished plan node (%lu, %d), "
+					 "[AQO] Learn on a finished plan node ("UINT64_FORMAT", %d), "
 					 "predicted rows: %.0lf, updated prediction: %.0lf",
 					 query_context.query_hash, node->fss, predicted, *nrows);
 
@@ -510,7 +492,7 @@ learnOnPlanState(PlanState *p, void *context)
 		List *cur_selectivities;
 
 		cur_selectivities = restore_selectivities(aqo_node->clauses,
-												  aqo_node->relids,
+												  aqo_node->rels->hrels,
 												  aqo_node->jointype,
 												  aqo_node->was_parametrized);
 		SubplanCtx.selectivities = list_concat(SubplanCtx.selectivities,
@@ -518,14 +500,14 @@ learnOnPlanState(PlanState *p, void *context)
 		SubplanCtx.clauselist = list_concat(SubplanCtx.clauselist,
 											list_copy(aqo_node->clauses));
 
-		if (aqo_node->relids != NIL)
+		if (aqo_node->rels->hrels != NIL)
 		{
 			/*
 			 * This plan can be stored as a cached plan. In the case we will have
 			 * bogus path_relids field (changed by list_concat routine) at the
 			 * next usage (and aqo-learn) of this plan.
 			 */
-			ctx->relidslist = list_copy(aqo_node->relids);
+			ctx->relidslist = list_copy(aqo_node->rels->hrels);
 
 			if (p->instrument)
 			{
@@ -537,12 +519,12 @@ learnOnPlanState(PlanState *p, void *context)
 				{
 					if (IsA(p, AggState))
 						learn_agg_sample(&SubplanCtx,
-										 aqo_node->relids, learn_rows, rfactor,
+										 aqo_node->rels, learn_rows, rfactor,
 										 p->plan, notExecuted);
 
 					else
 						learn_sample(&SubplanCtx,
-									 aqo_node->relids, learn_rows, rfactor,
+									 aqo_node->rels, learn_rows, rfactor,
 									 p->plan, notExecuted);
 				}
 			}
@@ -553,50 +535,6 @@ learnOnPlanState(PlanState *p, void *context)
 	ctx->selectivities = list_concat(ctx->selectivities,
 													SubplanCtx.selectivities);
 	return false;
-}
-
-/*
- * Updates given row of query statistics:
- * et - execution time
- * pt - planning time
- * ce - cardinality error
- */
-void
-update_query_stat_row(double *et, int *et_size,
-					  double *pt, int *pt_size,
-					  double *ce, int *ce_size,
-					  double planning_time,
-					  double execution_time,
-					  double cardinality_error,
-					  int64 *n_exec)
-{
-	int i;
-
-	/*
-	 * If plan contains one or more "never visited" nodes, cardinality_error
-	 * have -1 value and will be written to the knowledge base. User can use it
-	 * as a sign that AQO ignores this query.
-	 */
-	if (*ce_size >= aqo_stat_size)
-			for (i = 1; i < aqo_stat_size; ++i)
-				ce[i - 1] = ce[i];
-		*ce_size = (*ce_size >= aqo_stat_size) ? aqo_stat_size : (*ce_size + 1);
-		ce[*ce_size - 1] = cardinality_error;
-
-	if (*et_size >= aqo_stat_size)
-		for (i = 1; i < aqo_stat_size; ++i)
-			et[i - 1] = et[i];
-
-	*et_size = (*et_size >= aqo_stat_size) ? aqo_stat_size : (*et_size + 1);
-	et[*et_size - 1] = execution_time;
-
-	if (*pt_size >= aqo_stat_size)
-		for (i = 1; i < aqo_stat_size; ++i)
-			pt[i - 1] = pt[i];
-
-	*pt_size = (*pt_size >= aqo_stat_size) ? aqo_stat_size : (*pt_size + 1);
-	pt[*pt_size - 1] = planning_time; /* Just remember: planning time can be negative. */
-	(*n_exec)++;
 }
 
 /*****************************************************************************
@@ -682,6 +620,7 @@ static int exec_nested_level = 0;
 static void
 aqo_timeout_handler(void)
 {
+	MemoryContext oldctx = MemoryContextSwitchTo(AQOLearnMemCtx);
 	aqo_obj_stat ctx = {NIL, NIL, NIL, false, false};
 
 	if (!timeoutCtl.queryDesc || !ExtractFromQueryEnv(timeoutCtl.queryDesc))
@@ -694,6 +633,7 @@ aqo_timeout_handler(void)
 
 	elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data.");
 	learnOnPlanState(timeoutCtl.queryDesc->planstate, (void *) &ctx);
+	MemoryContextSwitchTo(oldctx);
 }
 
 static bool
@@ -773,12 +713,12 @@ aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count,
 void
 aqo_ExecutorEnd(QueryDesc *queryDesc)
 {
-	double execution_time;
-	double cardinality_error;
-	QueryStat *stat = NULL;
-	instr_time endtime;
-	EphemeralNamedRelation enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
-	LOCKTAG tag;
+	double					execution_time;
+	double					cardinality_error;
+	StatEntry			   *stat;
+	instr_time				endtime;
+	EphemeralNamedRelation	enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
+	MemoryContext oldctx = MemoryContextSwitchTo(AQOLearnMemCtx);
 
 	cardinality_sum_errors = 0.;
 	cardinality_num_objects = 0;
@@ -817,74 +757,42 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		 * Analyze plan if AQO need to learn or need to collect statistics only.
 		 */
 		learnOnPlanState(queryDesc->planstate, (void *) &ctx);
-		list_free(ctx.clauselist);
-		list_free(ctx.relidslist);
-		list_free(ctx.selectivities);
 	}
 
+	/* Calculate execution time. */
+	INSTR_TIME_SET_CURRENT(endtime);
+	INSTR_TIME_SUBTRACT(endtime, query_context.start_execution_time);
+	execution_time = INSTR_TIME_GET_DOUBLE(endtime);
+
+	if (cardinality_num_objects > 0)
+		cardinality_error = cardinality_sum_errors / cardinality_num_objects;
+	else
+		cardinality_error = -1;
+
 	if (query_context.collect_stat)
-		stat = get_aqo_stat(query_context.query_hash);
-
 	{
-		/* Calculate execution time. */
-		INSTR_TIME_SET_CURRENT(endtime);
-		INSTR_TIME_SUBTRACT(endtime, query_context.start_execution_time);
-		execution_time = INSTR_TIME_GET_DOUBLE(endtime);
-
-		if (cardinality_num_objects > 0)
-			cardinality_error = cardinality_sum_errors / cardinality_num_objects;
-		else
-			cardinality_error = -1;
-
-		/* Prevent concurrent updates. */
-		init_lock_tag(&tag, query_context.query_hash, query_context.fspace_hash);
-		LockAcquire(&tag, ExclusiveLock, false, false);
+		/* Write AQO statistics to the aqo_query_stat table */
+		stat = aqo_stat_store(query_context.query_hash,
+							  query_context.use_aqo,
+							  query_context.planning_time, execution_time,
+							  cardinality_error);
 
 		if (stat != NULL)
 		{
-			/* Calculate AQO statistics. */
-			if (query_context.use_aqo)
-				/* For the case, when query executed with AQO predictions. */
-				update_query_stat_row(stat->execution_time_with_aqo,
-									 &stat->execution_time_with_aqo_size,
-									 stat->planning_time_with_aqo,
-									 &stat->planning_time_with_aqo_size,
-									 stat->cardinality_error_with_aqo,
-									 &stat->cardinality_error_with_aqo_size,
-									 query_context.planning_time,
-									 execution_time,
-									 cardinality_error,
-									 &stat->executions_with_aqo);
-			else
-				/* For the case, when query executed without AQO predictions. */
-				update_query_stat_row(stat->execution_time_without_aqo,
-									 &stat->execution_time_without_aqo_size,
-									 stat->planning_time_without_aqo,
-									 &stat->planning_time_without_aqo_size,
-									 stat->cardinality_error_without_aqo,
-									 &stat->cardinality_error_without_aqo_size,
-									 query_context.planning_time,
-									 execution_time,
-									 cardinality_error,
-									 &stat->executions_without_aqo);
-
 			/* Store all learn data into the AQO service relations. */
 			if (!query_context.adding_query && query_context.auto_tuning)
 				automatical_query_tuning(query_context.query_hash, stat);
-
-			/* Write AQO statistics to the aqo_query_stat table */
-			update_aqo_stat(query_context.fspace_hash, stat);
-			pfree_query_stat(stat);
 		}
-
-		/* Allow concurrent queries to update this feature space. */
-		LockRelease(&tag, ExclusiveLock, false);
 	}
 
 	selectivity_cache_clear();
 	cur_classes = ldelete_uint64(cur_classes, query_context.query_hash);
 
 end:
+	/* Release all AQO-specific memory, allocated during learning procedure */
+	MemoryContextSwitchTo(oldctx);
+	MemoryContextReset(AQOLearnMemCtx);
+
 	if (prev_ExecutorEnd_hook)
 		prev_ExecutorEnd_hook(queryDesc);
 	else
@@ -910,14 +818,13 @@ StoreToQueryEnv(QueryDesc *queryDesc)
 {
 	EphemeralNamedRelation	enr;
 	int	qcsize = sizeof(QueryContextData);
-	MemoryContext	oldCxt;
 	bool newentry = false;
-
-	oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc->plannedstmt));
+	MemoryContext oldctx = MemoryContextSwitchTo(AQOCacheMemCtx);
 
 	if (queryDesc->queryEnv == NULL)
-			queryDesc->queryEnv = create_queryEnv();
+		queryDesc->queryEnv = create_queryEnv();
 
+	Assert(queryDesc->queryEnv);
 	enr = get_ENR(queryDesc->queryEnv, AQOPrivateData);
 	if (enr == NULL)
 	{
@@ -932,12 +839,13 @@ StoreToQueryEnv(QueryDesc *queryDesc)
 	enr->md.reliddesc = InvalidOid;
 	enr->md.tupdesc = NULL;
 	enr->reldata = palloc0(qcsize);
+	Assert(enr->reldata != NULL);
 	memcpy(enr->reldata, &query_context, qcsize);
 
 	if (newentry)
 		register_ENR(queryDesc->queryEnv, enr);
 
-	MemoryContextSwitchTo(oldCxt);
+	MemoryContextSwitchTo(oldctx);
 }
 
 static bool
@@ -959,17 +867,16 @@ static void
 StorePlanInternals(QueryDesc *queryDesc)
 {
 	EphemeralNamedRelation enr;
-	MemoryContext	oldCxt;
 	bool newentry = false;
+	MemoryContext oldctx = MemoryContextSwitchTo(AQOCacheMemCtx);
 
 	njoins = 0;
 	planstate_tree_walker(queryDesc->planstate, calculateJoinNum, &njoins);
 
-	oldCxt = MemoryContextSwitchTo(GetMemoryChunkContext(queryDesc->plannedstmt));
-
 	if (queryDesc->queryEnv == NULL)
-			queryDesc->queryEnv = create_queryEnv();
+		queryDesc->queryEnv = create_queryEnv();
 
+	Assert(queryDesc->queryEnv);
 	enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
 	if (enr == NULL)
 	{
@@ -984,12 +891,13 @@ StorePlanInternals(QueryDesc *queryDesc)
 	enr->md.reliddesc = InvalidOid;
 	enr->md.tupdesc = NULL;
 	enr->reldata = palloc0(sizeof(int));
+	Assert(enr->reldata != NULL);
 	memcpy(enr->reldata, &njoins, sizeof(int));
 
 	if (newentry)
 		register_ENR(queryDesc->queryEnv, enr);
 
-	MemoryContextSwitchTo(oldCxt);
+	MemoryContextSwitchTo(oldctx);
 }
 
 /*
@@ -1013,6 +921,7 @@ ExtractFromQueryEnv(QueryDesc *queryDesc)
 	if (enr == NULL)
 		return false;
 
+	Assert(enr->reldata != NULL);
 	memcpy(&query_context, enr->reldata, sizeof(QueryContextData));
 
 	return true;

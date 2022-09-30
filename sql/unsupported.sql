@@ -1,9 +1,5 @@
--- Switch off parallel workers because of unsteadiness.
--- Do this in each aqo test separately, so that server regression tests pass
--- with aqo's temporary configuration file loaded.
-SET max_parallel_workers TO 0;
-
 CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
 
@@ -131,7 +127,7 @@ SELECT * FROM
 	(SELECT * FROM t WHERE x > 20) AS t1
 		USING(x);
 
--- AQO need to predict total fetched tuples in a table.
+-- AQO needs to predict total fetched tuples in a table.
 --
 -- At a non-leaf node we have prediction about input tuples - is a number of
 -- predicted output rows in underlying node. But for Scan nodes we don't have
@@ -174,20 +170,22 @@ EXPLAIN (COSTS OFF)
 
 -- XXX: Do we stuck into an unstable behavior of an error value?
 -- Live with this variant of the test for some time.
-SELECT
-  num, to_char(error, '9.99EEEE')::text AS error, query_text
-FROM public.show_cardinality_errors(true) cef, aqo_query_texts aqt
-WHERE aqt.query_hash = cef.id
-ORDER BY (error, md5(query_text)) DESC;
+SELECT to_char(error, '9.99EEEE')::text AS error, query_text
+FROM aqo_cardinality_error(true) cef, aqo_query_texts aqt
+WHERE aqt.queryid = cef.id
+ORDER BY (md5(query_text),error) DESC;
 
-DROP TABLE t,t1 CASCADE;
+DROP TABLE t,t1 CASCADE; -- delete all tables used in the test
 
-SELECT public.clean_aqo_data();
+SELECT count(*) FROM aqo_data; -- Just to detect some changes in the logic. May some false positives really bother us here?
+SELECT * FROM aqo_cleanup();
+SELECT count(*) FROM aqo_data; -- No one row should be returned
 
 -- Look for any remaining queries in the ML storage.
-SELECT num, to_char(error, '9.99EEEE')::text AS error, query_text
-FROM public.show_cardinality_errors(true) cef, aqo_query_texts aqt
-WHERE aqt.query_hash = cef.id
-ORDER BY (error, md5(query_text)) DESC;
+SELECT to_char(error, '9.99EEEE')::text AS error, query_text
+FROM aqo_cardinality_error(true) cef, aqo_query_texts aqt
+WHERE aqt.queryid = cef.id
+ORDER BY (md5(query_text),error) DESC;
 
+SELECT 1 FROM aqo_reset();
 DROP EXTENSION aqo;
