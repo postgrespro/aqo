@@ -174,7 +174,7 @@ EXPLAIN (COSTS OFF)
 
 -- XXX: Do we stuck into an unstable behavior of an error value?
 -- Live with this variant of the test for some time.
-SELECT to_char(error, '9.99EEEE')::text AS error, query_text
+SELECT round(error::numeric, 3) AS error, query_text
 FROM aqo_cardinality_error(true) cef, aqo_query_texts aqt
 WHERE aqt.queryid = cef.id
 ORDER BY (md5(query_text),error) DESC;

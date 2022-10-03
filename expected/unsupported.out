@@ -571,46 +571,46 @@ EXPLAIN (COSTS OFF)
 
 -- XXX: Do we stuck into an unstable behavior of an error value?
 -- Live with this variant of the test for some time.
-SELECT to_char(error, '9.99EEEE')::text AS error, query_text
+SELECT round(error::numeric, 3) AS error, query_text
 FROM aqo_cardinality_error(true) cef, aqo_query_texts aqt
 WHERE aqt.queryid = cef.id
 ORDER BY (md5(query_text),error) DESC;
-   error   |                                           query_text                                           
------------+------------------------------------------------------------------------------------------------
-  7.68e-01 | SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,y)) AS q1;
-  7.04e-02 | SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
-  1.42e+00 | SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
-  0.00e+00 | SELECT * FROM                                                                                 +
-           |         (SELECT * FROM t WHERE x < 0) AS t0                                                   +
-           |                 JOIN                                                                          +
-           |         (SELECT * FROM t WHERE x > 20) AS t1                                                  +
-           |                 USING(x);
-  0.00e+00 | SELECT count(*) FROM t WHERE x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x);
-  0.00e+00 | EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)                                         +
-           |         SELECT count(*) FROM t WHERE                                                          +
-           |                 x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21) OR                        +
-           |                 x IN (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21);
-  4.54e-01 | SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;
-  0.00e+00 | SELECT count(*) FROM (                                                                        +
-           |         SELECT count(*) AS x FROM (                                                           +
-           |                 SELECT count(*) FROM t1 GROUP BY (x,y)                                        +
-           |         ) AS q1                                                                               +
-           | ) AS q2                                                                                       +
-           | WHERE q2.x > 1;
-  7.68e-01 | SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,x*y)) AS q1;
-  0.00e+00 | SELECT count(*) FROM t WHERE x = (SELECT avg(x) FROM t WHERE x = 1);
-  0.00e+00 | EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)                                         +
-           |         SELECT count(*) FROM t WHERE (SELECT avg(x) FROM t t0 WHERE t0.x = t.x) =             +
-           |         (SELECT avg(x) FROM t t0 WHERE t0.x = t.x);
-  1.06e-01 |                                                                                               +
-           | EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)                                         +
-           |         SELECT * FROM t GROUP BY (x) HAVING x > 3;                                            +
-           | 
-  0.00e+00 | SELECT count(*) FROM                                                                          +
-           |         (SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x = t.x)) AS q1      +
-           |                 JOIN                                                                          +
-           |         (SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x <> t.x)) AS q2     +
-           |                 ON q1.x = q2.x+1;
+ error |                                           query_text                                           
+-------+------------------------------------------------------------------------------------------------
+ 0.768 | SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,y)) AS q1;
+ 0.070 | SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
+ 1.416 | SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
+ 0.000 | SELECT * FROM                                                                                 +
+       |         (SELECT * FROM t WHERE x < 0) AS t0                                                   +
+       |                 JOIN                                                                          +
+       |         (SELECT * FROM t WHERE x > 20) AS t1                                                  +
+       |                 USING(x);
+ 0.000 | SELECT count(*) FROM t WHERE x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x);
+ 0.000 | EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)                                         +
+       |         SELECT count(*) FROM t WHERE                                                          +
+       |                 x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21) OR                        +
+       |                 x IN (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21);
+ 0.454 | SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;
+ 0.000 | SELECT count(*) FROM (                                                                        +
+       |         SELECT count(*) AS x FROM (                                                           +
+       |                 SELECT count(*) FROM t1 GROUP BY (x,y)                                        +
+       |         ) AS q1                                                                               +
+       | ) AS q2                                                                                       +
+       | WHERE q2.x > 1;
+ 0.768 | SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,x*y)) AS q1;
+ 0.000 | SELECT count(*) FROM t WHERE x = (SELECT avg(x) FROM t WHERE x = 1);
+ 0.000 | EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)                                         +
+       |         SELECT count(*) FROM t WHERE (SELECT avg(x) FROM t t0 WHERE t0.x = t.x) =             +
+       |         (SELECT avg(x) FROM t t0 WHERE t0.x = t.x);
+ 0.106 |                                                                                               +
+       | EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)                                         +
+       |         SELECT * FROM t GROUP BY (x) HAVING x > 3;                                            +
+       | 
+ 0.000 | SELECT count(*) FROM                                                                          +
+       |         (SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x = t.x)) AS q1      +
+       |                 JOIN                                                                          +
+       |         (SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x <> t.x)) AS q2     +
+       |                 ON q1.x = q2.x+1;
 (13 rows)
 
 DROP TABLE t,t1 CASCADE; -- delete all tables used in the test

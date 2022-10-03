@@ -118,5 +118,11 @@ SELECT 1 FROM aqo_reset();
         1
 (1 row)
 
+SELECT pg_sleep(5);
+ pg_sleep 
+----------
+ 
+(1 row)
+
 DROP EXTENSION aqo;
 DROP FUNCTION check_estimated_rows;

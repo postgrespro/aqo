@@ -62,5 +62,6 @@ SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
 
 DROP TABLE t;
 SELECT 1 FROM aqo_reset();
+SELECT pg_sleep(5);
 DROP EXTENSION aqo;
 DROP FUNCTION check_estimated_rows;
