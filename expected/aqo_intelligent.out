@@ -17,6 +17,7 @@ AS (
 CREATE INDEX aqo_test1_idx_a ON aqo_test1 (a);
 ANALYZE aqo_test1;
 CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
 SET aqo.mode = 'intelligent';
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -288,7 +289,15 @@ SELECT count(*) FROM tmp1;
 
 DROP TABLE tmp1;
 SET aqo.mode = 'controlled';
-UPDATE aqo_queries SET learn_aqo = false, use_aqo = false, auto_tuning = false;
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, false, false, false)
+; -- Disable all query classes
+ count 
+-------
+    25
+(1 row)
+
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
                                     QUERY PLAN                                    
@@ -393,7 +402,15 @@ WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
          ->  Seq Scan on aqo_test1 t4  (cost=0.00..1.20 rows=20 width=8)
 (13 rows)
 
-UPDATE aqo_queries SET learn_aqo = false, use_aqo = true, auto_tuning = false;
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, false, true, false)
+; -- set learn = false, use = true, tuning = false
+ count 
+-------
+    25
+(1 row)
+
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
                                     QUERY PLAN                                    
@@ -502,4 +519,11 @@ DROP INDEX aqo_test0_idx_a;
 DROP TABLE aqo_test0;
 DROP INDEX aqo_test1_idx_a;
 DROP TABLE aqo_test1;
+-- XXX: extension dropping doesn't clear file storage. Do it manually.
+SELECT 1 FROM aqo_reset();
+ ?column? 
+----------
+        1
+(1 row)
+
 DROP EXTENSION aqo;

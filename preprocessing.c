@@ -11,7 +11,7 @@
  *		'use_aqo': whether to use AQO estimations in query optimization
  *		'learn_aqo': whether to update AQO data based on query execution
  *					 statistics
- *		'fspace_hash': hash of feature space to use with given query
+ *		'fs': hash of feature space to use with given query
  *		'auto_tuning': whether AQO may change use_aqo and learn_aqo values
  *					   for the next execution of such type of query using
  *					   its self-tuning algorithm
@@ -65,6 +65,7 @@
 #include "aqo.h"
 #include "hash.h"
 #include "preprocessing.h"
+#include "storage.h"
 
 
 const char *
@@ -109,6 +110,8 @@ CleanQuerytext(const char *query, int *location, int *len)
 /* List of feature spaces, that are processing in this backend. */
 List *cur_classes = NIL;
 
+int aqo_join_threshold = 0;
+
 static bool isQueryUsingSystemRelation(Query *query);
 static bool isQueryUsingSystemRelation_walker(Node *node, void *context);
 
@@ -134,30 +137,18 @@ call_default_planner(Query *parse,
 }
 
 /*
- * Check, that a 'CREATE EXTENSION aqo' command has been executed.
- * This function allows us to execute the get_extension_oid routine only once
- * at each backend.
- * If any AQO-related table is missed we will set aqo_enabled to false (see
- * a storage implementation module).
+ * Can AQO be used for the query?
  */
 static bool
-aqoIsEnabled(void)
+aqoIsEnabled(Query *parse)
 {
-	if (creating_extension)
-		/* Nothing to tell in this mode. */
+	if (creating_extension ||
+		(aqo_mode == AQO_MODE_DISABLED && !force_collect_stat) ||
+		(parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT &&
+		parse->commandType != CMD_UPDATE && parse->commandType != CMD_DELETE))
 		return false;
 
-	if (aqo_enabled)
-		/*
-		 * Fast path. Dropping should be detected by absence of any AQO-related
-		 * table.
-		 */
-		return true;
-
-	if (get_extension_oid("aqo", true) != InvalidOid)
-		aqo_enabled = true;
-
-	return aqo_enabled;
+	return true;
 }
 
 /*
@@ -174,21 +165,17 @@ aqo_planner(Query *parse,
 			int cursorOptions,
 			ParamListInfo boundParams)
 {
-	bool		query_is_stored = false;
-	LOCKTAG		tag;
-	MemoryContext oldCxt;
+	bool			query_is_stored = false;
+	MemoryContext oldctx;
+	oldctx = MemoryContextSwitchTo(AQOPredictMemCtx);
 
 	 /*
 	  * We do not work inside an parallel worker now by reason of insert into
-	  * the heap during planning. Transactions is synchronized between parallel
+	  * the heap during planning. Transactions are synchronized between parallel
 	  * sections. See GetCurrentCommandId() comments also.
 	  */
-	if (!aqoIsEnabled() ||
-		(parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT &&
-		parse->commandType != CMD_UPDATE && parse->commandType != CMD_DELETE) ||
-		creating_extension ||
+	if (!aqoIsEnabled(parse) ||
 		IsInParallelMode() || IsParallelWorker() ||
-		(aqo_mode == AQO_MODE_DISABLED && !force_collect_stat) ||
 		strstr(application_name, "postgres_fdw") != NULL || /* Prevent distributed deadlocks */
 		strstr(application_name, "pgfdw:") != NULL || /* caused by fdw */
 		isQueryUsingSystemRelation(parse) ||
@@ -198,6 +185,7 @@ aqo_planner(Query *parse,
 		 * We should disable AQO for this query to remember this decision along
 		 * all execution stages.
 		 */
+		MemoryContextSwitchTo(oldctx);
 		disable_aqo_for_query();
 
 		return call_default_planner(parse,
@@ -207,37 +195,45 @@ aqo_planner(Query *parse,
 	}
 
 	selectivity_cache_clear();
-	
-	/* Check unlucky case (get a hash of zero) */
-	if (parse->queryId == UINT64CONST(0))
-		JumbleQuery(parse, query_string);
+	MemoryContextSwitchTo(oldctx);
 
-	Assert(parse->utilityStmt == NULL);
-	Assert(parse->queryId != UINT64CONST(0));
+	oldctx = MemoryContextSwitchTo(AQOUtilityMemCtx);
+	query_context.query_hash = get_query_hash(parse, query_string);
+	MemoryContextSwitchTo(oldctx);
 
-	query_context.query_hash = parse->queryId;
+	MemoryContextReset(AQOUtilityMemCtx);
+
+	oldctx = MemoryContextSwitchTo(AQOPredictMemCtx);
+
+	/* By default, they should be equal */
+	query_context.fspace_hash = query_context.query_hash;
 
 	if (query_is_deactivated(query_context.query_hash) ||
-		list_member_uint64(cur_classes, query_context.query_hash))
+		list_member_uint64(cur_classes,query_context.query_hash))
 	{
 		/*
 		 * Disable AQO for deactivated query or for query belonged to a
 		 * feature space, that is processing yet (disallow invalidation
 		 * recursion, as an example).
 		 */
+		MemoryContextSwitchTo(oldctx);
 		disable_aqo_for_query();
+
 		return call_default_planner(parse,
 									query_string,
 									cursorOptions,
 									boundParams);
 	}
+	MemoryContextSwitchTo(oldctx);
 
 	elog(DEBUG1, "AQO will be used for query '%s', class "UINT64_FORMAT,
 		 query_string ? query_string : "null string", query_context.query_hash);
 
-	oldCxt = MemoryContextSwitchTo(AQOMemoryContext);
+	oldctx = MemoryContextSwitchTo(AQOCacheMemCtx);
 	cur_classes = lappend_uint64(cur_classes, query_context.query_hash);
-	MemoryContextSwitchTo(oldCxt);
+	MemoryContextSwitchTo(oldctx);
+
+	oldctx = MemoryContextSwitchTo(AQOPredictMemCtx);
 
 	if (aqo_mode == AQO_MODE_DISABLED)
 	{
@@ -246,7 +242,7 @@ aqo_planner(Query *parse,
 		goto ignore_query_settings;
 	}
 
-	query_is_stored = find_query(query_context.query_hash, &query_context);
+	query_is_stored = aqo_queries_find(query_context.query_hash, &query_context);
 
 	if (!query_is_stored)
 	{
@@ -256,7 +252,6 @@ aqo_planner(Query *parse,
 				query_context.adding_query = true;
 				query_context.learn_aqo = true;
 				query_context.use_aqo = false;
-				query_context.fspace_hash = query_context.query_hash;
 				query_context.auto_tuning = true;
 				query_context.collect_stat = true;
 				break;
@@ -265,7 +260,7 @@ aqo_planner(Query *parse,
 				query_context.learn_aqo = true;
 				query_context.use_aqo = true;
 				query_context.auto_tuning = false;
-				query_context.fspace_hash = 0;
+				query_context.fspace_hash = 0; /* Use common feature space */
 				query_context.collect_stat = false;
 				break;
 			case AQO_MODE_CONTROLLED:
@@ -284,7 +279,6 @@ aqo_planner(Query *parse,
 				query_context.adding_query = true;
 				query_context.learn_aqo = true;
 				query_context.use_aqo = true;
-				query_context.fspace_hash = query_context.query_hash;
 				query_context.auto_tuning = false;
 				query_context.collect_stat = true;
 				break;
@@ -332,7 +326,6 @@ aqo_planner(Query *parse,
 			 * suppressed manually) and collect stats.
 			 */
 			query_context.collect_stat = true;
-			query_context.fspace_hash = query_context.query_hash;
 			break;
 
 		case AQO_MODE_INTELLIGENT:
@@ -351,48 +344,60 @@ ignore_query_settings:
 	if (!query_is_stored && (query_context.adding_query || force_collect_stat))
 	{
 		/*
-		 * find-add query and query text must be atomic operation to prevent
-		 * concurrent insertions.
-		 */
-		init_lock_tag(&tag, query_context.query_hash, 0);
-		LockAcquire(&tag, ExclusiveLock, false, false);
-		/*
 		 * Add query into the AQO knowledge base. To process an error with
 		 * concurrent addition from another backend we will try to restart
 		 * preprocessing routine.
 		 */
-		update_query(query_context.query_hash, query_context.fspace_hash,
-					 query_context.learn_aqo, query_context.use_aqo,
-					 query_context.auto_tuning);
+		if (aqo_queries_store(query_context.query_hash, query_context.fspace_hash,
+						  query_context.learn_aqo, query_context.use_aqo,
+						  query_context.auto_tuning))
+		{
+			/*
+			 * Add query text into the ML-knowledge base. Just for further
+			 * analysis. In the case of cached plans we may have NULL query text.
+			 */
+			if (!aqo_qtext_store(query_context.query_hash, query_string))
+			{
+				Assert(0); /* panic only on debug installation */
+				elog(ERROR, "[AQO] Impossible situation was detected. Maybe not enough of shared memory?");
+			}
+		}
+		else
+		{
+			/*
+			 * In the case of problems (shmem overflow, as a typical issue) -
+			 * disable AQO for the query class.
+			 */
+			disable_aqo_for_query();
 
-		/*
-		 * Add query text into the ML-knowledge base. Just for further
-		 * analysis. In the case of cached plans we could have NULL query text.
-		 */
-		if (query_string != NULL)
-			add_query_text(query_context.query_hash, query_string);
-
-		LockRelease(&tag, ExclusiveLock, false);
+			/*
+			 * Switch AQO to controlled mode. In this mode we wouldn't add new
+			 * query classes, just use and learn on existed set.
+			 */
+			aqo_mode = AQO_MODE_CONTROLLED;
+		}
 	}
 
 	if (force_collect_stat)
-	{
 		/*
 		 * If this GUC is set, AQO will analyze query results and collect
 		 * query execution statistics in any mode.
 		 */
 		query_context.collect_stat = true;
-		query_context.fspace_hash = query_context.query_hash;
-	}
 
 	if (!IsQueryDisabled())
 		/* It's good place to set timestamp of start of a planning process. */
 		INSTR_TIME_SET_CURRENT(query_context.start_planning_time);
+	{
+		PlannedStmt *stmt;
+		MemoryContextSwitchTo(oldctx);
+		stmt = call_default_planner(parse, query_string,
+												 cursorOptions, boundParams);
 
-	return call_default_planner(parse,
-								query_string,
-								cursorOptions,
-								boundParams);
+		/* Release the memory, allocated for AQO predictions */
+		MemoryContextReset(AQOPredictMemCtx);
+		return stmt;
+	}
 }
 
 /*
@@ -401,7 +406,6 @@ ignore_query_settings:
 void
 disable_aqo_for_query(void)
 {
-
 	query_context.learn_aqo = false;
 	query_context.use_aqo = false;
 	query_context.auto_tuning = false;
@@ -413,19 +417,28 @@ disable_aqo_for_query(void)
 	query_context.planning_time = -1.;
 }
 
+typedef struct AQOPreWalkerCtx
+{
+	bool	trivQuery;
+	int		njoins;
+} AQOPreWalkerCtx;
+
 /*
  * Examine a fully-parsed query, and return TRUE iff any relation underlying
- * the query is a system relation or no one relation touched by the query.
+ * the query is a system relation or no one permanent (non-temporary) relation
+ * touched by the query.
  */
 static bool
 isQueryUsingSystemRelation(Query *query)
 {
-	bool trivQuery = true;
+	AQOPreWalkerCtx ctx;
 	bool result;
 
-	result = isQueryUsingSystemRelation_walker((Node *) query, &trivQuery);
+	ctx.trivQuery = true;
+	ctx.njoins = 0;
+	result = isQueryUsingSystemRelation_walker((Node *) query, &ctx);
 
-	if (result || trivQuery)
+	if (result || ctx.trivQuery || ctx.njoins < aqo_join_threshold)
 		return true;
 	return false;
 }
@@ -446,16 +459,54 @@ IsAQORelation(Relation rel)
 	return false;
 }
 
+/*
+ * Walk through jointree and calculate number of potential joins
+ */
+static void
+jointree_walker(Node *jtnode, void *context)
+{
+	AQOPreWalkerCtx   *ctx = (AQOPreWalkerCtx *) context;
+
+	if (jtnode == NULL || IsA(jtnode, RangeTblRef))
+		return;
+	else if (IsA(jtnode, FromExpr))
+	{
+		FromExpr   *f = (FromExpr *) jtnode;
+		ListCell   *l;
+
+		/* Count number of potential joins by number of sources in FROM list */
+		ctx->njoins += list_length(f->fromlist) - 1;
+
+		foreach(l, f->fromlist)
+			jointree_walker(lfirst(l), context);
+	}
+	else if (IsA(jtnode, JoinExpr))
+	{
+		JoinExpr   *j = (JoinExpr *) jtnode;
+
+		/* Don't forget about explicit JOIN statement */
+		ctx->njoins++;
+		jointree_walker(j->larg, context);
+		jointree_walker(j->rarg, context);
+	}
+	else
+		elog(ERROR, "unrecognized node type: %d", (int) nodeTag(jtnode));
+	return;
+}
+
 static bool
 isQueryUsingSystemRelation_walker(Node *node, void *context)
 {
+	MemoryContext oldctx = MemoryContextSwitchTo(AQOLearnMemCtx);
+	AQOPreWalkerCtx   *ctx = (AQOPreWalkerCtx *) context;
+
 	if (node == NULL)
 		return false;
 
 	if (IsA(node, Query))
 	{
-		Query	   *query = (Query *) node;
-		ListCell   *rtable;
+		Query			  *query = (Query *) node;
+		ListCell		  *rtable;
 
 		foreach(rtable, query->rtable)
 		{
@@ -466,13 +517,18 @@ isQueryUsingSystemRelation_walker(Node *node, void *context)
 				Relation	rel = table_open(rte->relid, AccessShareLock);
 				bool		is_catalog = IsCatalogRelation(rel);
 				bool		is_aqo_rel = IsAQORelation(rel);
-				bool		*trivQuery = (bool *) context;
+
+				if (is_catalog || is_aqo_rel)
+				{
+					table_close(rel, AccessShareLock);
+					return true;
+				}
+
+				if (rel->rd_rel->relpersistence != RELPERSISTENCE_TEMP)
+					/* Plane non TEMP table */
+					ctx->trivQuery = false;
 
 				table_close(rel, AccessShareLock);
-				if (is_catalog || is_aqo_rel)
-					return true;
-
-				*trivQuery = false;
 			}
 			else if (rte->rtekind == RTE_FUNCTION)
 			{
@@ -482,6 +538,10 @@ isQueryUsingSystemRelation_walker(Node *node, void *context)
 			}
 		}
 
+		jointree_walker((Node *) query->jointree, context);
+		MemoryContextSwitchTo(oldctx);
+
+		/* Recursively plunge into subqueries and CTEs */
 		return query_tree_walker(query,
 								 isQueryUsingSystemRelation_walker,
 								 context,

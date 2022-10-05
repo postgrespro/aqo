@@ -1,6 +1,7 @@
 \set citizens	1000
+SET aqo.join_threshold = 0;
 SET aqo.mode = 'disabled';
-SET aqo.force_collect_stat = 'on';
+SET aqo.force_collect_stat = 'off';
 CREATE TABLE person (
     id serial PRIMARY KEY,
     age integer,
@@ -19,6 +20,7 @@ INSERT INTO person (id,age,gender,passport)
 	 FROM (SELECT *, 14+(id % 60) AS age FROM generate_series(1, :citizens) id) AS q1
 	);
 CREATE EXTENSION aqo;
+SET aqo.force_collect_stat = 'on';
 SELECT count(*) FROM person WHERE age<18;
  count 
 -------
@@ -32,16 +34,25 @@ SELECT count(*) FROM person WHERE age<18 AND passport IS NOT NULL;
 (1 row)
 
 SELECT * FROM aqo_data;
- fspace_hash | fsspace_hash | nfeatures | features | targets | oids | reliability 
--------------+--------------+-----------+----------+---------+------+-------------
+ fs | fss | nfeatures | features | targets | reliability | oids 
+----+-----+-----------+----------+---------+-------------+------
 (0 rows)
 
-SELECT learn_aqo,use_aqo,auto_tuning,cardinality_error_without_aqo ce,executions_without_aqo nex
-FROM aqo_queries JOIN aqo_query_stat USING (query_hash);
- learn_aqo | use_aqo | auto_tuning |          ce          | nex 
------------+---------+-------------+----------------------+-----
- f         | f       | f           | {0.8637762840285226} |   1
- f         | f       | f           | {2.9634630129852053} |   1
+CREATE OR REPLACE FUNCTION round_array (double precision[])
+RETURNS double precision[]
+LANGUAGE SQL
+AS $$
+   SELECT array_agg(round(elem::numeric, 3))
+   FROM unnest($1) as arr(elem);
+$$;
+SELECT learn_aqo,use_aqo,auto_tuning,round_array(cardinality_error_without_aqo) ce,executions_without_aqo nex
+FROM aqo_queries AS aq JOIN aqo_query_stat AS aqs
+ON aq.queryid = aqs.queryid
+ORDER BY (cardinality_error_without_aqo);
+ learn_aqo | use_aqo | auto_tuning |   ce    | nex 
+-----------+---------+-------------+---------+-----
+ f         | f       | f           | {0.864} |   1
+ f         | f       | f           | {2.963} |   1
 (2 rows)
 
 SELECT query_text FROM aqo_query_texts ORDER BY (md5(query_text));
@@ -51,5 +62,12 @@ SELECT query_text FROM aqo_query_texts ORDER BY (md5(query_text));
  COMMON feature space (do not delete!)
  SELECT count(*) FROM person WHERE age<18 AND passport IS NOT NULL;
 (3 rows)
+
+DROP TABLE person;
+SELECT 1 FROM aqo_reset(); -- Full remove of ML data before the end
+ ?column? 
+----------
+        1
+(1 row)
 
 DROP EXTENSION aqo;

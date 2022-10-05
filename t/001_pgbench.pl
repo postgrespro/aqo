@@ -5,7 +5,7 @@ use Config;
 use PostgreSQL::Test::Cluster;
 use PostgreSQL::Test::Utils;
 
-use Test::More tests => 21;
+use Test::More tests => 27;
 
 my $node = PostgreSQL::Test::Cluster->new('aqotest');
 $node->init;
@@ -13,10 +13,11 @@ $node->append_conf('postgresql.conf', qq{
 						shared_preload_libraries = 'aqo'
 						aqo.mode = 'intelligent'
 						log_statement = 'ddl'
+						aqo.join_threshold = 0
 					});
 
 # Test constants. Default values.
-my $TRANSACTIONS = 1;
+my $TRANSACTIONS = 1000;
 my $CLIENTS = 10;
 my $THREADS = 10;
 
@@ -78,6 +79,7 @@ $node->safe_psql('postgres', "CREATE EXTENSION aqo");
 $node->safe_psql('postgres', "
 	ALTER SYSTEM SET aqo.mode = 'disabled';
 	SELECT pg_reload_conf();
+	SELECT * FROM aqo_reset(); -- Remove old data
 ");
 $node->command_ok([ 'pgbench', '-t',
 					"$TRANSACTIONS", '-c', "$CLIENTS", '-j', "$THREADS" ],
@@ -89,6 +91,7 @@ $fss_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_data;");
 $fs_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_queries;");
 $fs_samples_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_query_texts;");
 $stat_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_query_stat;");
+note("counter: $fss_count, $fs_count, $fs_samples_count, $stat_count");
 is( (($fss_count == 0) and ($fs_count == 1) and ($fs_samples_count == 1) and ($stat_count == 0)), 1);
 
 # Check: no problems with stats collection in highly concurrent environment.
@@ -112,7 +115,8 @@ $fs_samples_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_query
 $stat_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_query_texts");
 # This constants looks like magic numbers. But query set of the pgbench test
 # is fixed for a long time.
-is( (($fs_count == 7) and ($fs_samples_count == 6) and ($stat_count == 7)), 1);
+note("fs: $fs_count, $fs_samples_count, $stat_count");
+is( (($fs_count == 6) and ($fs_samples_count == 5) and ($stat_count == 6)), 1);
 
 my $analytics = File::Temp->new();
 append_to_file($analytics, q{
@@ -126,7 +130,7 @@ append_to_file($analytics, q{
 });
 
 # Avoid problems with an error fluctuations during the test above.
-$node->safe_psql('postgres', "TRUNCATE aqo_query_stat");
+$node->safe_psql('postgres', "SELECT aqo_reset()");
 
 # Look for top of problematic queries.
 $node->command_ok([ 'pgbench', '-t', "10", '-c', "$CLIENTS", '-j', "$THREADS",
@@ -134,23 +138,26 @@ $node->command_ok([ 'pgbench', '-t', "10", '-c', "$CLIENTS", '-j', "$THREADS",
 					'analytical queries in pgbench (disabled mode)');
 
 $res = $node->safe_psql('postgres',
-						"SELECT count(*) FROM show_cardinality_errors(false) v
-						JOIN aqo_query_texts t ON (t.query_hash = v.id)
+						"SELECT count(*) FROM aqo_cardinality_error(false) v
+						JOIN aqo_query_texts t ON (t.queryid = v.id)
 						WHERE v.error > 0. AND t.query_text LIKE '%pgbench_accounts%'");
 is($res, 3);
 $res = $node->safe_psql('postgres',
-						"SELECT * FROM show_cardinality_errors(false) v
-						JOIN aqo_query_texts t ON (t.query_hash = v.id)
+						"SELECT * FROM aqo_cardinality_error(false) v
+						JOIN aqo_query_texts t ON (t.queryid = v.id)
 						WHERE v.error > 0. AND t.query_text LIKE '%pgbench_accounts%'");
 note("\n TopN: \n $res \n");
 $res = $node->safe_psql('postgres',
-						"SELECT v.error, t.query_text FROM show_cardinality_errors(false) v
-						JOIN aqo_query_texts t ON (t.query_hash = v.id)
+						"SELECT v.error, t.query_text FROM aqo_cardinality_error(false) v
+						JOIN aqo_query_texts t ON (t.queryid = v.id)
 						WHERE v.error > 0.");
 note("\n Queries: \n $res \n");
+$res = $node->safe_psql('postgres', "SELECT * FROM  public.aqo_execution_time(false) v");
+note("\n TIMES: \n $res \n");
+
 $res = $node->safe_psql('postgres',
-						"SELECT count(*) FROM top_time_queries(10) v
-						WHERE v.execution_time > 0.");
+						"SELECT count(*) FROM public.aqo_execution_time(false) v
+						WHERE v.exec_time > 0.");
 is($res, 3);
 
 # ##############################################################################
@@ -159,6 +166,7 @@ is($res, 3);
 #
 # ##############################################################################
 
+$node->safe_psql('postgres', "SELECT aqo_reset()");
 $node->safe_psql('postgres', "DROP EXTENSION aqo");
 $node->safe_psql('postgres', "CREATE EXTENSION aqo");
 
@@ -204,30 +212,31 @@ $node->safe_psql('postgres', "
 
 # New queries won't add rows into AQO knowledge base.
 $node->safe_psql('postgres', "ALTER SYSTEM SET aqo.mode = 'disabled'");
-$node->restart();
+$node->safe_psql('postgres', "SELECT pg_reload_conf()");
+$node->restart(); # AQO data storage should survive after a restart
 $res = $node->safe_psql('postgres', "SHOW aqo.mode");
 is($res, 'disabled');
 
 # Number of rows in aqo_data: related to pgbench test and total value.
 my $pgb_fss_count = $node->safe_psql('postgres', "
 	SELECT count(*) FROM aqo_data
-	WHERE	$aoid ::regclass::text = ANY(oids) OR
-			$boid ::regclass::text = ANY(oids) OR
-			$toid ::regclass::text = ANY(oids) OR
-			$hoid ::regclass::text = ANY(oids)
+	WHERE	$aoid = ANY(oids) OR
+			$boid = ANY(oids) OR
+			$toid = ANY(oids) OR
+			$hoid = ANY(oids)
 ");
 $fss_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_data;");
 
 # Number of rows in aqo_queries: related to pgbench test and total value.
 my $pgb_fs_count = $node->safe_psql('postgres', "
 	SELECT count(*) FROM aqo_queries
-	WHERE fspace_hash IN (
-		SELECT fspace_hash FROM aqo_data
+	WHERE fs IN (
+		SELECT fs FROM aqo_data
 		WHERE
-			$aoid ::regclass::text = ANY(oids) OR
-			$boid ::regclass::text = ANY(oids) OR
-			$toid ::regclass::text = ANY(oids) OR
-			$hoid ::regclass::text = ANY(oids)
+			$aoid = ANY(oids) OR
+			$boid = ANY(oids) OR
+			$toid = ANY(oids) OR
+			$hoid = ANY(oids)
 	)
 ");
 $fs_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_queries;");
@@ -235,57 +244,113 @@ $fs_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_queries;");
 # Number of rows in aqo_query_texts: related to pgbench test and total value.
 my $pgb_fs_samples_count = $node->safe_psql('postgres', "
 	SELECT count(*) FROM aqo_query_texts
-	WHERE query_hash IN (
-		SELECT fspace_hash FROM aqo_data
+	WHERE queryid IN (
+		SELECT fs FROM aqo_data
 		WHERE
-			$aoid ::regclass::text = ANY(oids) OR
-			$boid ::regclass::text = ANY(oids) OR
-			$toid ::regclass::text = ANY(oids) OR
-			$hoid ::regclass::text = ANY(oids)
+			$aoid = ANY(oids) OR
+			$boid = ANY(oids) OR
+			$toid = ANY(oids) OR
+			$hoid = ANY(oids)
 	)
 ");
 $fs_samples_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_query_texts;");
+is($pgb_fs_samples_count > 0, 1, "AQO query texts exists");
 
 # Number of rows in aqo_query_stat: related to pgbench test and total value.
 my $pgb_stat_count = $node->safe_psql('postgres', "
-	SELECT count(*) FROM aqo_query_texts
-	WHERE query_hash IN (
-		SELECT fspace_hash FROM aqo_data
+	SELECT count(*) FROM aqo_query_stat
+	WHERE queryid IN (
+		SELECT fs FROM aqo_data
 		WHERE
-			$aoid ::regclass::text = ANY(oids) OR
-			$boid ::regclass::text = ANY(oids) OR
-			$toid ::regclass::text = ANY(oids) OR
-			$hoid ::regclass::text = ANY(oids)
+			$aoid = ANY(oids) OR
+			$boid = ANY(oids) OR
+			$toid = ANY(oids) OR
+			$hoid = ANY(oids)
 	)
 ");
 $stat_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_query_stat;");
-
-note("pgbench-related rows: aqo_data - $pgb_fss_count/$fss_count,
-	aqo_queries: $pgb_fs_count/$fs_count, aqo_query_texts: $pgb_fs_samples_count/$fs_samples_count,
-	aqo_query_stat: $pgb_stat_count/$stat_count");
 
 $node->safe_psql('postgres', "
 	DROP TABLE	pgbench_accounts, pgbench_branches, pgbench_tellers,
 				pgbench_history CASCADE;");
 
-# Clean unneeded AQO knowledge
-$node->safe_psql('postgres', "SELECT clean_aqo_data()");
+# Remove unnecessary AQO knowledge
+$node->safe_psql('postgres', "SELECT * FROM aqo_cleanup()");
 
 # Calculate total number of rows in AQO-related tables.
 my $new_fs_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_queries;");
 my $new_fss_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_data;");
 my $new_fs_samples_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_query_texts;");
 my $new_stat_count = $node->safe_psql('postgres', "SELECT count(*) FROM aqo_query_stat;");
-note("Total AQO rows after dropping pgbench-related  tables:
-	aqo_queries: $new_fs_count, aqo_data: $new_fss_count,
-	aqo_query_texts: $new_fs_samples_count, aqo_query_stat: $new_stat_count");
+note("Total AQO rows after dropping pgbench-related tables:
+	aqo_queries: ($new_fs_count, $fs_count, $pgb_fs_count),
+	aqo_data: ($new_fss_count, $fss_count, $pgb_fss_count),
+	aqo_query_texts: ($new_fs_samples_count, $fs_samples_count, $pgb_fs_samples_count),
+	aqo_query_stat: ($new_stat_count, $stat_count, $pgb_stat_count)");
 
 # Check total number of rows in AQO knowledge base after removing of
 # pgbench-related data.
-is($new_fs_count == $fs_count - $pgb_fs_count, 1, 'Total number of feature spaces');
-is($new_fss_count == $fss_count - $pgb_fss_count, 1, 'Total number of feature subspaces');
-is($new_fs_samples_count == $fs_samples_count - $pgb_fs_samples_count, 1, 'Total number of samples in aqo_query_texts');
-is($new_stat_count == $stat_count - $pgb_stat_count, 1, 'Total number of samples in aqo_query_texts');
+is($new_fs_count == $fs_count - $pgb_fs_count, 1,
+	'Total number of feature spaces');
+is($new_fss_count == $fss_count - $pgb_fss_count, 1,
+	'Total number of feature subspaces');
+is($new_fs_samples_count == $fs_samples_count - $pgb_fs_samples_count, 1,
+	'Total number of samples in aqo_query_texts');
+is($new_stat_count == $stat_count - $pgb_stat_count, 1,
+	'Total number of samples in aqo_query_stat');
+
+# ##############################################################################
+#
+# AQO works after moving to another schema
+#
+# ##############################################################################
+
+# Move the extension to not-in-search-path schema
+# use LEARN mode to guarantee that AQO will be triggered on each query.
+$node->safe_psql('postgres', "CREATE SCHEMA test; ALTER EXTENSION aqo SET SCHEMA test");
+$node->safe_psql('postgres', "SELECT * FROM test.aqo_reset()"); # Clear data
+
+$res = $node->safe_psql('postgres', "SELECT count(*) FROM test.aqo_queries");
+is($res, 1, 'The extension data was reset');
+
+$node->command_ok([ 'pgbench', '-i', '-s', '1' ], 'init pgbench tables');
+$node->safe_psql('postgres', "
+	ALTER SYSTEM SET aqo.mode = 'learn';
+	ALTER SYSTEM SET log_statement = 'ddl';
+	SELECT pg_reload_conf();
+");
+$node->restart();
+
+$node->command_ok([ 'pgbench', '-t', "25", '-c', "$CLIENTS", '-j', "$THREADS" ],
+					'pgbench should work with moved AQO.');
+
+# DEBUG
+$res = $node->safe_psql('postgres', "
+	SELECT executions_with_aqo, query_text
+	FROM test.aqo_query_stat a, test.aqo_query_texts b
+	WHERE a.queryid = b.queryid
+");
+note("executions:\n$res\n");
+
+$res = $node->safe_psql('postgres',
+	"SELECT sum(executions_with_aqo) FROM test.aqo_query_stat");
+
+# 25 trans * 10 clients * 4 query classes = 1000 + unique SELECT to pgbench_branches
+is($res, 1001, 'Each query should be logged in LEARN mode');
+$res = $node->safe_psql('postgres',
+	"SELECT sum(executions_without_aqo) FROM test.aqo_query_stat");
+is($res, 0, 'AQO has learned on the queries - 2');
+
+# Try to call UI functions. Break the test on an error
+$res = $node->safe_psql('postgres', "
+	SELECT * FROM test.aqo_cardinality_error(true);
+	SELECT * FROM test.aqo_execution_time(true);
+	SELECT * FROM
+		(SELECT queryid FROM test.aqo_queries WHERE queryid<>0 LIMIT 1) q,
+		LATERAL test.aqo_drop_class(queryid);
+	SELECT * FROM test.aqo_cleanup();
+");
+note("OUTPUT:\n$res\n");
 
 $node->safe_psql('postgres', "DROP EXTENSION aqo");
 
@@ -322,7 +387,7 @@ append_to_file($bank, q{
 $node->safe_psql('postgres', "
 	CREATE EXTENSION aqo;
 	ALTER SYSTEM SET aqo.mode = 'intelligent';
-	ALTER SYSTEM SET log_statement = 'all';
+	ALTER SYSTEM SET log_statement = 'none';
 	SELECT pg_reload_conf();
 ");
 $node->restart();

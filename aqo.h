@@ -135,7 +135,6 @@
 #include "optimizer/cost.h"
 #include "parser/analyze.h"
 #include "parser/parsetree.h"
-#include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/guc.h"
 #include "utils/hsearch.h"
@@ -145,6 +144,7 @@
 #include "utils/snapmgr.h"
 
 #include "machine_learning.h"
+//#include "storage.h"
 
 /* Check PostgreSQL version (9.6.0 contains important changes in planner) */
 #if PG_VERSION_NUM < 90600
@@ -169,36 +169,11 @@ typedef enum
 }	AQO_MODE;
 
 extern int	aqo_mode;
-extern bool	aqo_enabled;
 extern bool	force_collect_stat;
 extern bool aqo_show_hash;
 extern bool aqo_show_details;
-
-/*
- * It is mostly needed for auto tuning of query. with auto tuning mode aqo
- * checks stability of last executions of the query, bad influence of strong
- * cardinality estimation on query execution (planner bug?) and so on.
- * It can induce aqo to suppress machine learning for this query.
- */
-typedef struct
-{
-	double	   *execution_time_with_aqo;
-	double	   *execution_time_without_aqo;
-	double	   *planning_time_with_aqo;
-	double	   *planning_time_without_aqo;
-	double	   *cardinality_error_with_aqo;
-	double	   *cardinality_error_without_aqo;
-
-	int			execution_time_with_aqo_size;
-	int			execution_time_without_aqo_size;
-	int			planning_time_with_aqo_size;
-	int			planning_time_without_aqo_size;
-	int			cardinality_error_with_aqo_size;
-	int			cardinality_error_without_aqo_size;
-
-	int64		executions_with_aqo;
-	int64		executions_without_aqo;
-}	QueryStat;
+extern int aqo_join_threshold;
+extern bool use_wide_search;
 
 /* Parameters for current query */
 typedef struct QueryContextData
@@ -225,6 +200,8 @@ typedef struct QueryContextData
 	double		planning_time;
 } QueryContextData;
 
+struct StatEntry;
+
 extern double predicted_ppi_rows;
 extern double fss_ppi_hash;
 
@@ -245,8 +222,12 @@ extern double log_selectivity_lower_bound;
 extern QueryContextData query_context;
 extern int njoins;
 
-/* Memory context for long-live data */
-extern MemoryContext AQOMemoryContext;
+/* AQO Memory contexts */
+extern MemoryContext AQOTopMemCtx;
+extern MemoryContext AQOCacheMemCtx;
+extern MemoryContext AQOUtilityMemCtx;
+extern MemoryContext AQOPredictMemCtx;
+extern MemoryContext AQOLearnMemCtx;
 
 /* Saved hook values in case of unload */
 extern post_parse_analyze_hook_type prev_post_parse_analyze_hook;
@@ -276,25 +257,10 @@ int get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash);
 
 
 /* Storage interaction */
-extern bool find_query(uint64 qhash, QueryContextData *ctx);
-extern bool update_query(uint64 qhash, uint64 fhash,
-						 bool learn_aqo, bool use_aqo, bool auto_tuning);
-extern bool add_query_text(uint64 query_hash, const char *query_string);
-extern bool load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **relnames,
+extern bool load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 						 bool isSafe);
-extern bool load_fss(uint64 fs, int fss, OkNNrdata *data, List **relnames);
 extern bool update_fss_ext(uint64 fs, int fss, OkNNrdata *data,
-						   List *relnames, bool isTimedOut);
-extern bool update_fss(uint64 fs, int fss, OkNNrdata *data, List *relnames);
-QueryStat *get_aqo_stat(uint64 query_hash);
-void update_aqo_stat(uint64 query_hash, QueryStat * stat);
-extern bool my_index_insert(Relation indexRelation,	Datum *values, bool *isnull,
-							ItemPointer heap_t_ctid, Relation heapRelation,
-							IndexUniqueCheck checkUnique);
-void init_deactivated_queries_storage(void);
-void fini_deactivated_queries_storage(void);
-extern bool query_is_deactivated(uint64 query_hash);
-extern void add_deactivated_query(uint64 query_hash);
+						   List *reloids, bool isTimedOut);
 
 /* Query preprocessing hooks */
 extern void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
@@ -305,8 +271,8 @@ extern void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 extern void print_node_explain(ExplainState *es, PlanState *ps, Plan *plan);
 
 /* Cardinality estimation */
-double predict_for_relation(List *restrict_clauses, List *selectivities,
-							List *relnames, int *fss);
+extern double predict_for_relation(List *restrict_clauses, List *selectivities,
+								   List *relsigns, int *fss);
 
 /* Query execution statistics collecting hooks */
 void aqo_ExecutorStart(QueryDesc *queryDesc, int eflags);
@@ -315,7 +281,7 @@ void aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction,
 void aqo_ExecutorEnd(QueryDesc *queryDesc);
 
 /* Automatic query tuning */
-extern void automatical_query_tuning(uint64 query_hash, QueryStat * stat);
+extern void automatical_query_tuning(uint64 query_hash, struct StatEntry *stat);
 
 /* Utilities */
 extern int int64_compare(const void *a, const void *b);
@@ -324,8 +290,6 @@ extern int double_cmp(const void *a, const void *b);
 extern int *argsort(void *a, int n, size_t es,
 					int (*cmp) (const void *, const void *));
 extern int *inverse_permutation(int *a, int n);
-extern QueryStat *palloc_query_stat(void);
-extern void pfree_query_stat(QueryStat *stat);
 
 /* Selectivity cache for parametrized baserels */
 extern void cache_selectivity(int clause_hash, int relid, int global_relid,
@@ -334,8 +298,6 @@ extern double *selectivity_cache_find_global_relid(int clause_hash,
 												   int global_relid);
 extern void selectivity_cache_clear(void);
 
-extern Oid get_aqo_schema(void);
-extern void init_lock_tag(LOCKTAG *tag, uint64 key1, int32 key2);
 extern bool IsQueryDisabled(void);
 
 extern List *cur_classes;

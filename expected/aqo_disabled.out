@@ -16,6 +16,60 @@ AS (
 ) INSERT INTO aqo_test1 (SELECT * FROM t);
 CREATE INDEX aqo_test1_idx_a ON aqo_test1 (a);
 ANALYZE aqo_test1;
+CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
+SET aqo.mode = 'controlled';
+CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
+WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+     3
+(1 row)
+
+DROP TABLE tmp1;
+CREATE TABLE tmp1 AS SELECT t1.a, t2.b, t3.c
+FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
+WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+     0
+(1 row)
+
+DROP TABLE tmp1;
+EXPLAIN SELECT * FROM aqo_test0
+WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Index Scan using aqo_test0_idx_a on aqo_test0  (cost=0.28..8.35 rows=1 width=16)
+   Index Cond: (a < 3)
+   Filter: ((b < 3) AND (c < 3) AND (d < 3))
+(3 rows)
+
+EXPLAIN SELECT t1.a, t2.b, t3.c
+FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
+WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Nested Loop  (cost=0.28..50.59 rows=1 width=12)
+   Join Filter: (t1.b = t3.b)
+   ->  Nested Loop  (cost=0.28..9.56 rows=1 width=12)
+         ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.25 rows=1 width=8)
+               Filter: (a < 1)
+         ->  Index Scan using aqo_test0_idx_a on aqo_test0 t2  (cost=0.28..8.30 rows=1 width=8)
+               Index Cond: (a = t1.a)
+               Filter: (c < 1)
+   ->  Seq Scan on aqo_test0 t3  (cost=0.00..41.02 rows=1 width=8)
+         Filter: ((b < 1) AND (d < 0))
+(10 rows)
+
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
+ count 
+-------
+     0
+(1 row)
+
 SET aqo.mode = 'disabled';
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -62,7 +116,12 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
          Filter: ((b < 1) AND (d < 0))
 (10 rows)
 
-CREATE EXTENSION aqo;
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
+ count 
+-------
+     0
+(1 row)
+
 SET aqo.mode = 'intelligent';
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -83,8 +142,22 @@ SELECT count(*) FROM tmp1;
 (1 row)
 
 DROP TABLE tmp1;
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
+ count 
+-------
+     0
+(1 row)
+
 SET aqo.mode = 'controlled';
-UPDATE aqo_queries SET learn_aqo = true, use_aqo = true, auto_tuning = false;
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, true, true, false)
+; -- Enable all disabled query classes
+ count 
+-------
+     5
+(1 row)
+
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
                                     QUERY PLAN                                    
@@ -111,6 +184,12 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
          Filter: ((b < 1) AND (d < 0))
 (10 rows)
 
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
+ count 
+-------
+     0
+(1 row)
+
 SET aqo.mode = 'disabled';
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -137,6 +216,19 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
    ->  Seq Scan on aqo_test0 t3  (cost=0.00..41.02 rows=1 width=8)
          Filter: ((b < 1) AND (d < 0))
 (10 rows)
+
+SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
+ count 
+-------
+     0
+(1 row)
+
+-- XXX: extension dropping doesn't clear file storage. Do it manually.
+SELECT 1 FROM aqo_reset();
+ ?column? 
+----------
+        1
+(1 row)
 
 DROP EXTENSION aqo;
 DROP INDEX aqo_test0_idx_a;

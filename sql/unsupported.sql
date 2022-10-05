@@ -1,4 +1,5 @@
 CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
 
@@ -11,11 +12,15 @@ CREATE TABLE t1 AS SELECT mod(gs,10) AS x, mod(gs+1,10) AS y
 ANALYZE t, t1;
 
 --
--- Do not support HAVING clause for now.
+-- Do not support HAVING clauses for now.
 --
 SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
 EXPLAIN (COSTS OFF)
 	SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
+SELECT str FROM expln('
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	SELECT * FROM t GROUP BY (x) HAVING x > 3;
+') AS str WHERE str NOT LIKE '%Memory Usage%';
 
 --
 -- Doesn't estimates GROUP BY clause
@@ -126,13 +131,25 @@ SELECT * FROM
 	(SELECT * FROM t WHERE x > 20) AS t1
 		USING(x);
 
--- AQO need to predict total fetched tuples in a table.
+-- AQO needs to predict total fetched tuples in a table.
 --
 -- At a non-leaf node we have prediction about input tuples - is a number of
 -- predicted output rows in underlying node. But for Scan nodes we don't have
 -- any prediction on number of fetched tuples.
 -- So, if selectivity was wrong we could make bad choice of Scan operation.
 -- For example, we could choose suboptimal index.
+
+--
+-- Returns string-by-string explain of a query. Made for removing some strings
+-- from the explain output.
+--
+CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
+BEGIN
+    RETURN QUERY
+        EXECUTE format('EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF) %s', query_string);
+    RETURN;
+END;
+$$ LANGUAGE PLPGSQL;
 
 -- Turn off statistics gathering for simple demonstration of filtering problem.
 ALTER TABLE t SET (autovacuum_enabled = 'false');
@@ -146,8 +163,9 @@ EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 -- Here we filter more tuples than with the ind1 index.
 CREATE INDEX ind2 ON t(mod(x,3));
 SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
-EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
-	SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
+SELECT str AS result
+FROM expln('SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1') AS str
+WHERE str NOT LIKE '%Heap Blocks%';
 
 -- Best choice is ...
 ANALYZE t;
@@ -156,19 +174,22 @@ EXPLAIN (COSTS OFF)
 
 -- XXX: Do we stuck into an unstable behavior of an error value?
 -- Live with this variant of the test for some time.
-SELECT
-  num,
-  to_char(error, '9.99EEEE')::text AS error
-FROM public.show_cardinality_errors(true)
-WHERE error > 0.;
+SELECT round(error::numeric, 3) AS error, query_text
+FROM aqo_cardinality_error(true) cef, aqo_query_texts aqt
+WHERE aqt.queryid = cef.id
+ORDER BY (md5(query_text),error) DESC;
 
-DROP TABLE t,t1 CASCADE;
+DROP TABLE t,t1 CASCADE; -- delete all tables used in the test
 
-SELECT public.clean_aqo_data();
+SELECT count(*) FROM aqo_data; -- Just to detect some changes in the logic. May some false positives really bother us here?
+SELECT * FROM aqo_cleanup();
+SELECT count(*) FROM aqo_data; -- No one row should be returned
 
--- TODO: figure out with remaining queries in the ML storage.
-SELECT num, to_char(error, '9.99EEEE')::text AS error, query_text
-FROM public.show_cardinality_errors(true) cef, aqo_query_texts aqt
-WHERE aqt.query_hash = cef.id;
+-- Look for any remaining queries in the ML storage.
+SELECT to_char(error, '9.99EEEE')::text AS error, query_text
+FROM aqo_cardinality_error(true) cef, aqo_query_texts aqt
+WHERE aqt.queryid = cef.id
+ORDER BY (md5(query_text),error) DESC;
 
+SELECT 1 FROM aqo_reset();
 DROP EXTENSION aqo;

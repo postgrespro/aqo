@@ -29,6 +29,7 @@ CREATE INDEX aqo_test2_idx_a ON aqo_test2 (a);
 ANALYZE aqo_test2;
 
 CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
 
 SET aqo.mode = 'controlled';
 
@@ -76,10 +77,11 @@ SELECT count(*) FROM tmp1;
 DROP TABLE tmp1;
 
 SET aqo.mode = 'controlled';
-UPDATE aqo_queries SET auto_tuning=false;
 
-UPDATE aqo_queries SET learn_aqo=true;
-UPDATE aqo_queries SET use_aqo=false;
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, true, false, false)
+; -- learn = true, use = false, tuning = false
 
 EXPLAIN (COSTS FALSE)
 SELECT * FROM aqo_test0
@@ -107,7 +109,10 @@ SELECT t1.a AS a, t2.a AS b, t3.a AS c
 FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3
 WHERE t1.a = t2.b AND t2.a = t3.b;
 
-UPDATE aqo_queries SET use_aqo=true;
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, NULL, true, NULL)
+; -- set use = true
 
 EXPLAIN (COSTS FALSE)
 SELECT * FROM aqo_test0
@@ -148,5 +153,8 @@ DROP TABLE aqo_test1;
 
 DROP INDEX aqo_test2_idx_a;
 DROP TABLE aqo_test2;
+
+-- XXX: extension dropping doesn't clear file storage. Do it manually.
+SELECT 1 FROM aqo_reset();
 
 DROP EXTENSION aqo;

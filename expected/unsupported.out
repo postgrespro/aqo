@@ -1,4 +1,5 @@
 CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
 DROP TABLE IF EXISTS t;
@@ -8,7 +9,7 @@ CREATE TABLE t1 AS SELECT mod(gs,10) AS x, mod(gs+1,10) AS y
 	FROM generate_series(1,1000) AS gs;
 ANALYZE t, t1;
 --
--- Do not support HAVING clause for now.
+-- Do not support HAVING clauses for now.
 --
 SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
  count 
@@ -32,6 +33,24 @@ EXPLAIN (COSTS OFF)
  AQO mode: LEARN
  JOINS: 0
 (11 rows)
+
+SELECT str FROM expln('
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	SELECT * FROM t GROUP BY (x) HAVING x > 3;
+') AS str WHERE str NOT LIKE '%Memory Usage%';
+                      str                      
+-----------------------------------------------
+ HashAggregate (actual rows=17 loops=1)
+   AQO not used
+   Group Key: x
+   ->  Seq Scan on t (actual rows=801 loops=1)
+         AQO: rows=801, error=0%
+         Filter: (x > 3)
+         Rows Removed by Filter: 199
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(10 rows)
 
 --
 -- Doesn't estimates GROUP BY clause
@@ -380,7 +399,7 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
            ->  Aggregate (actual rows=1 loops=1000)
                  AQO not used
                  ->  Seq Scan on t t0 (actual rows=50 loops=1000)
-                       AQO not used
+                       AQO: rows=50, error=0%
                        Filter: (x = t.x)
                        Rows Removed by Filter: 950
          SubPlan 2
@@ -459,13 +478,24 @@ SELECT * FROM
  JOINS: 0
 (13 rows)
 
--- AQO need to predict total fetched tuples in a table.
+-- AQO needs to predict total fetched tuples in a table.
 --
 -- At a non-leaf node we have prediction about input tuples - is a number of
 -- predicted output rows in underlying node. But for Scan nodes we don't have
 -- any prediction on number of fetched tuples.
 -- So, if selectivity was wrong we could make bad choice of Scan operation.
 -- For example, we could choose suboptimal index.
+--
+-- Returns string-by-string explain of a query. Made for removing some strings
+-- from the explain output.
+--
+CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
+BEGIN
+    RETURN QUERY
+        EXECUTE format('EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF) %s', query_string);
+    RETURN;
+END;
+$$ LANGUAGE PLPGSQL;
 -- Turn off statistics gathering for simple demonstration of filtering problem.
 ALTER TABLE t SET (autovacuum_enabled = 'false');
 CREATE INDEX ind1 ON t(x);
@@ -501,21 +531,22 @@ SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
     50
 (1 row)
 
-EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
-	SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
-                           QUERY PLAN                            
+SELECT str AS result
+FROM expln('SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1') AS str
+WHERE str NOT LIKE '%Heap Blocks%';
+                             result                              
 -----------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
-   ->  Bitmap Heap Scan on t (actual rows=50 loops=1)
+   Output: count(*)
+   ->  Bitmap Heap Scan on public.t (actual rows=50 loops=1)
          AQO: rows=50, error=0%
-         Recheck Cond: (mod(x, 3) = 1)
-         Filter: (x < 3)
+         Recheck Cond: (mod(t.x, 3) = 1)
+         Filter: (t.x < 3)
          Rows Removed by Filter: 300
-         Heap Blocks: exact=5
          ->  Bitmap Index Scan on ind2 (actual rows=350 loops=1)
                AQO not used
-               Index Cond: (mod(x, 3) = 1)
+               Index Cond: (mod(t.x, 3) = 1)
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -540,34 +571,80 @@ EXPLAIN (COSTS OFF)
 
 -- XXX: Do we stuck into an unstable behavior of an error value?
 -- Live with this variant of the test for some time.
-SELECT
-  num,
-  to_char(error, '9.99EEEE')::text AS error
-FROM public.show_cardinality_errors(true)
-WHERE error > 0.;
- num |   error   
------+-----------
-   1 |  1.42e+00
-   2 |  7.68e-01
-   3 |  7.68e-01
-   4 |  4.54e-01
-   5 |  7.04e-02
-(5 rows)
+SELECT round(error::numeric, 3) AS error, query_text
+FROM aqo_cardinality_error(true) cef, aqo_query_texts aqt
+WHERE aqt.queryid = cef.id
+ORDER BY (md5(query_text),error) DESC;
+ error |                                           query_text                                           
+-------+------------------------------------------------------------------------------------------------
+ 0.768 | SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,y)) AS q1;
+ 0.070 | SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
+ 1.416 | SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
+ 0.000 | SELECT * FROM                                                                                 +
+       |         (SELECT * FROM t WHERE x < 0) AS t0                                                   +
+       |                 JOIN                                                                          +
+       |         (SELECT * FROM t WHERE x > 20) AS t1                                                  +
+       |                 USING(x);
+ 0.000 | SELECT count(*) FROM t WHERE x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x);
+ 0.000 | EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)                                         +
+       |         SELECT count(*) FROM t WHERE                                                          +
+       |                 x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21) OR                        +
+       |                 x IN (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21);
+ 0.454 | SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;
+ 0.000 | SELECT count(*) FROM (                                                                        +
+       |         SELECT count(*) AS x FROM (                                                           +
+       |                 SELECT count(*) FROM t1 GROUP BY (x,y)                                        +
+       |         ) AS q1                                                                               +
+       | ) AS q2                                                                                       +
+       | WHERE q2.x > 1;
+ 0.768 | SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,x*y)) AS q1;
+ 0.000 | SELECT count(*) FROM t WHERE x = (SELECT avg(x) FROM t WHERE x = 1);
+ 0.000 | EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)                                         +
+       |         SELECT count(*) FROM t WHERE (SELECT avg(x) FROM t t0 WHERE t0.x = t.x) =             +
+       |         (SELECT avg(x) FROM t t0 WHERE t0.x = t.x);
+ 0.106 |                                                                                               +
+       | EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)                                         +
+       |         SELECT * FROM t GROUP BY (x) HAVING x > 3;                                            +
+       | 
+ 0.000 | SELECT count(*) FROM                                                                          +
+       |         (SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x = t.x)) AS q1      +
+       |                 JOIN                                                                          +
+       |         (SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x <> t.x)) AS q2     +
+       |                 ON q1.x = q2.x+1;
+(13 rows)
 
-DROP TABLE t,t1 CASCADE;
-SELECT public.clean_aqo_data();
-NOTICE:  Cleaning aqo_data records
- clean_aqo_data 
-----------------
- 
+DROP TABLE t,t1 CASCADE; -- delete all tables used in the test
+SELECT count(*) FROM aqo_data; -- Just to detect some changes in the logic. May some false positives really bother us here?
+ count 
+-------
+    44
 (1 row)
 
--- TODO: figure out with remaining queries in the ML storage.
-SELECT num, to_char(error, '9.99EEEE')::text AS error, query_text
-FROM public.show_cardinality_errors(true) cef, aqo_query_texts aqt
-WHERE aqt.query_hash = cef.id;
- num | error | query_text 
------+-------+------------
+SELECT * FROM aqo_cleanup();
+ nfs | nfss 
+-----+------
+  13 |   44
+(1 row)
+
+SELECT count(*) FROM aqo_data; -- No one row should be returned
+ count 
+-------
+     0
+(1 row)
+
+-- Look for any remaining queries in the ML storage.
+SELECT to_char(error, '9.99EEEE')::text AS error, query_text
+FROM aqo_cardinality_error(true) cef, aqo_query_texts aqt
+WHERE aqt.queryid = cef.id
+ORDER BY (md5(query_text),error) DESC;
+ error | query_text 
+-------+------------
 (0 rows)
+
+SELECT 1 FROM aqo_reset();
+ ?column? 
+----------
+        1
+(1 row)
 
 DROP EXTENSION aqo;

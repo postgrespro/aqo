@@ -1,7 +1,8 @@
 \set citizens	1000
 
+SET aqo.join_threshold = 0;
 SET aqo.mode = 'disabled';
-SET aqo.force_collect_stat = 'on';
+SET aqo.force_collect_stat = 'off';
 
 CREATE TABLE person (
     id serial PRIMARY KEY,
@@ -23,14 +24,27 @@ INSERT INTO person (id,age,gender,passport)
 	);
 
 CREATE EXTENSION aqo;
+SET aqo.force_collect_stat = 'on';
 
 SELECT count(*) FROM person WHERE age<18;
 SELECT count(*) FROM person WHERE age<18 AND passport IS NOT NULL;
 SELECT * FROM aqo_data;
 
-SELECT learn_aqo,use_aqo,auto_tuning,cardinality_error_without_aqo ce,executions_without_aqo nex
-FROM aqo_queries JOIN aqo_query_stat USING (query_hash);
+CREATE OR REPLACE FUNCTION round_array (double precision[])
+RETURNS double precision[]
+LANGUAGE SQL
+AS $$
+   SELECT array_agg(round(elem::numeric, 3))
+   FROM unnest($1) as arr(elem);
+$$;
+
+SELECT learn_aqo,use_aqo,auto_tuning,round_array(cardinality_error_without_aqo) ce,executions_without_aqo nex
+FROM aqo_queries AS aq JOIN aqo_query_stat AS aqs
+ON aq.queryid = aqs.queryid
+ORDER BY (cardinality_error_without_aqo);
 
 SELECT query_text FROM aqo_query_texts ORDER BY (md5(query_text));
 
+DROP TABLE person;
+SELECT 1 FROM aqo_reset(); -- Full remove of ML data before the end
 DROP EXTENSION aqo;

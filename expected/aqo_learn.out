@@ -1,3 +1,23 @@
+-- The function just copied from stats_ext.sql
+create function check_estimated_rows(text) returns table (estimated int, actual int)
+language plpgsql as
+$$
+declare
+    ln text;
+    tmp text[];
+    first_row bool := true;
+begin
+    for ln in
+        execute format('explain analyze %s', $1)
+    loop
+        if first_row then
+            first_row := false;
+            tmp := regexp_match(ln, 'rows=(\d*) .* rows=(\d*)');
+            return query select tmp[1]::int, tmp[2]::int;
+        end if;
+    end loop;
+end;
+$$;
 CREATE TABLE aqo_test0(a int, b int, c int, d int);
 WITH RECURSIVE t(a, b, c, d)
 AS (
@@ -17,6 +37,7 @@ AS (
 CREATE INDEX aqo_test1_idx_a ON aqo_test1 (a);
 ANALYZE aqo_test1;
 CREATE EXTENSION aqo;
+SET aqo.join_threshold = 0;
 SET aqo.mode = 'intelligent';
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -214,9 +235,57 @@ SELECT count(*) FROM tmp1;
     17
 (1 row)
 
+-- Remove data on some unneeded instances of tmp1 table.
+SELECT * FROM aqo_cleanup();
+ nfs | nfss 
+-----+------
+   9 |   18
+(1 row)
+
+-- Result of the query below should be empty
+SELECT * FROM aqo_query_texts aqt1, aqo_query_texts aqt2
+WHERE aqt1.query_text = aqt2.query_text AND aqt1.queryid <> aqt2.queryid;
+ queryid | query_text | queryid | query_text 
+---------+------------+---------+------------
+(0 rows)
+
+-- Fix the state of the AQO data
+SELECT min(reliability),sum(nfeatures),query_text
+FROM aqo_data ad, aqo_query_texts aqt
+WHERE aqt.queryid = ad.fs
+GROUP BY (query_text) ORDER BY (md5(query_text))
+;
+   min   | sum |                                       query_text                                       
+---------+-----+----------------------------------------------------------------------------------------
+ {1}     |  10 | EXPLAIN SELECT t1.a, t2.b FROM aqo_test1 AS t1, aqo_test0 AS t2                       +
+         |     | WHERE t1.a < 1 AND t2.b < 1 AND t2.c < 1 AND t2.d < 1 AND t1.a = t2.a;
+ {1,1,1} |   4 | EXPLAIN SELECT * FROM aqo_test0                                                       +
+         |     | WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
+ {1}     |   0 | SELECT count(*) FROM tmp1;
+ {1}     |  14 | EXPlAIN SELECT t1.a, t2.b, t3.c                                                       +
+         |     | FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3                                +
+         |     | WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
+ {1}     |   8 | EXPLAIN SELECT t1.a, t2.b FROM aqo_test0 AS t1, aqo_test0 AS t2                       +
+         |     | WHERE t1.a < 1 AND t1.b < 1 AND t2.c < 1 AND t2.d < 1;
+ {1}     |   3 | EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c                                        +
+         |     | FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3                                +
+         |     | WHERE t1.a = t2.b AND t2.a = t3.b;
+ {1}     |   6 | EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c, t4.a AS d                             +
+         |     | FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4               +
+         |     | WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
+(7 rows)
+
 DROP TABLE tmp1;
 SET aqo.mode = 'controlled';
-UPDATE aqo_queries SET learn_aqo = false, use_aqo = false, auto_tuning = false;
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, false, false, false)
+; -- Disable all AQO query classes
+ count 
+-------
+     8
+(1 row)
+
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
                                     QUERY PLAN                                    
@@ -268,7 +337,7 @@ WHERE t1.a < 1 AND t2.b < 1 AND t2.c < 1 AND t2.d < 1 AND t1.a = t2.a;
          Filter: ((b < 1) AND (c < 1) AND (d < 1))
 (6 rows)
 
-EXPlAIN SELECT t1.a, t2.b, t3.c
+EXPLAIN SELECT t1.a, t2.b, t3.c
 FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
 WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
                                            QUERY PLAN                                           
@@ -285,21 +354,15 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
          Filter: ((b < 1) AND (d < 0))
 (10 rows)
 
-EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c
-FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3
-WHERE t1.a = t2.b AND t2.a = t3.b;
-                                  QUERY PLAN                                   
--------------------------------------------------------------------------------
- Hash Join  (cost=2.90..4.65 rows=20 width=12)
-   Hash Cond: (t2.a = t3.b)
-   ->  Hash Join  (cost=1.45..2.92 rows=20 width=8)
-         Hash Cond: (t1.a = t2.b)
-         ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.20 rows=20 width=4)
-         ->  Hash  (cost=1.20..1.20 rows=20 width=8)
-               ->  Seq Scan on aqo_test1 t2  (cost=0.00..1.20 rows=20 width=8)
-   ->  Hash  (cost=1.20..1.20 rows=20 width=8)
-         ->  Seq Scan on aqo_test1 t3  (cost=0.00..1.20 rows=20 width=8)
-(9 rows)
+SELECT * FROM check_estimated_rows('
+   SELECT t1.a AS a, t2.a AS b, t3.a AS c
+   FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3
+   WHERE t1.a = t2.b AND t2.a = t3.b;
+');
+ estimated | actual 
+-----------+--------
+        20 |     18
+(1 row)
 
 EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c, t4.a AS d
 FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
@@ -321,7 +384,15 @@ WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
          ->  Seq Scan on aqo_test1 t4  (cost=0.00..1.20 rows=20 width=8)
 (13 rows)
 
-UPDATE aqo_queries SET learn_aqo = false, use_aqo = true, auto_tuning = false;
+SELECT count(*) FROM
+	(SELECT queryid AS id FROM aqo_queries) AS q1,
+	LATERAL aqo_queries_update(q1.id, NULL, false, true, false)
+; -- learn = false, use = true, tuning = false
+ count 
+-------
+     8
+(1 row)
+
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
                                     QUERY PLAN                                    
@@ -373,7 +444,7 @@ WHERE t1.a < 1 AND t2.b < 1 AND t2.c < 1 AND t2.d < 1 AND t1.a = t2.a;
          Filter: ((b < 1) AND (c < 1) AND (d < 1))
 (6 rows)
 
-EXPlAIN SELECT t1.a, t2.b, t3.c
+EXPLAIN SELECT t1.a, t2.b, t3.c
 FROM aqo_test1 AS t1, aqo_test0 AS t2, aqo_test0 AS t3
 WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b = t3.b;
                                            QUERY PLAN                                           
@@ -390,44 +461,266 @@ WHERE t1.a < 1 AND t3.b < 1 AND t2.c < 1 AND t3.d < 0 AND t1.a = t2.a AND t1.b =
          Filter: ((b < 1) AND (d < 0))
 (10 rows)
 
-EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c
-FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3
-WHERE t1.a = t2.b AND t2.a = t3.b;
-                                  QUERY PLAN                                   
--------------------------------------------------------------------------------
- Hash Join  (cost=2.90..4.64 rows=18 width=12)
-   Hash Cond: (t2.a = t3.b)
-   ->  Hash Join  (cost=1.45..2.92 rows=19 width=8)
-         Hash Cond: (t1.a = t2.b)
-         ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.20 rows=20 width=4)
-         ->  Hash  (cost=1.20..1.20 rows=20 width=8)
-               ->  Seq Scan on aqo_test1 t2  (cost=0.00..1.20 rows=20 width=8)
-   ->  Hash  (cost=1.20..1.20 rows=20 width=8)
-         ->  Seq Scan on aqo_test1 t3  (cost=0.00..1.20 rows=20 width=8)
-(9 rows)
+SELECT * FROM check_estimated_rows('
+   SELECT t1.a AS a, t2.a AS b, t3.a AS c
+   FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3
+   WHERE t1.a = t2.b AND t2.a = t3.b;
+');
+ estimated | actual 
+-----------+--------
+        18 |     18
+(1 row)
 
-EXPLAIN SELECT t1.a AS a, t2.a AS b, t3.a AS c, t4.a AS d
-FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
-WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
-                                     QUERY PLAN                                      
--------------------------------------------------------------------------------------
- Hash Join  (cost=4.35..6.33 rows=17 width=16)
-   Hash Cond: (t3.a = t4.b)
-   ->  Hash Join  (cost=2.90..4.64 rows=18 width=12)
-         Hash Cond: (t2.a = t3.b)
-         ->  Hash Join  (cost=1.45..2.92 rows=19 width=8)
-               Hash Cond: (t1.a = t2.b)
-               ->  Seq Scan on aqo_test1 t1  (cost=0.00..1.20 rows=20 width=4)
-               ->  Hash  (cost=1.20..1.20 rows=20 width=8)
-                     ->  Seq Scan on aqo_test1 t2  (cost=0.00..1.20 rows=20 width=8)
-         ->  Hash  (cost=1.20..1.20 rows=20 width=8)
-               ->  Seq Scan on aqo_test1 t3  (cost=0.00..1.20 rows=20 width=8)
-   ->  Hash  (cost=1.20..1.20 rows=20 width=8)
-         ->  Seq Scan on aqo_test1 t4  (cost=0.00..1.20 rows=20 width=8)
-(13 rows)
+SELECT * FROM check_estimated_rows('
+   SELECT t1.a AS a, t2.a AS b, t3.a AS c, t4.a AS d
+   FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
+   WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
+');
+ estimated | actual 
+-----------+--------
+        17 |     17
+(1 row)
 
+-- Test limit on number of joins
+SET aqo.mode = 'learn';
+SELECT * FROM aqo_drop_class(0);
+ERROR:  [AQO] Cannot remove basic class 0.
+SELECT * FROM aqo_drop_class(42);
+ERROR:  [AQO] Nothing to remove for the class 42.
+-- Remove all data from ML knowledge base
+SELECT count(*) FROM (
+SELECT aqo_drop_class(q1.id::bigint) FROM (
+    SELECT queryid AS id
+    FROM aqo_queries WHERE queryid <> 0) AS q1
+) AS q2;
+ count 
+-------
+     7
+(1 row)
+
+SELECT count(*) FROM aqo_data;
+ count 
+-------
+     0
+(1 row)
+
+SET aqo.join_threshold = 3;
+SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1;');
+ estimated | actual 
+-----------+--------
+        20 |     20
+(1 row)
+
+SELECT * FROM check_estimated_rows('
+  SELECT * FROM aqo_test1 AS t1, aqo_test1 AS t2 WHERE t1.a = t2.b');
+ estimated | actual 
+-----------+--------
+        20 |     19
+(1 row)
+
+SELECT count(*) FROM aqo_data; -- Return 0 - do not learn on the queries above
+ count 
+-------
+     0
+(1 row)
+
+SELECT * FROM check_estimated_rows('
+   SELECT *
+   FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4
+   WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
+'); -- Learn on the query
+ estimated | actual 
+-----------+--------
+        20 |     17
+(1 row)
+
+SELECT count(*) FROM
+  (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1
+;
+ count 
+-------
+     1
+(1 row)
+
+SELECT query_text FROM aqo_query_texts WHERE queryid <> 0; -- Check query
+                                 query_text                                 
+----------------------------------------------------------------------------
+ explain analyze                                                           +
+    SELECT *                                                               +
+    FROM aqo_test1 AS t1, aqo_test1 AS t2, aqo_test1 AS t3, aqo_test1 AS t4+
+    WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;                     +
+ 
+(1 row)
+
+SET aqo.join_threshold = 1;
+SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1;');
+ estimated | actual 
+-----------+--------
+        20 |     20
+(1 row)
+
+SELECT * FROM check_estimated_rows(
+  'SELECT * FROM aqo_test1 AS t1, aqo_test1 AS t2 WHERE t1.a = t2.b');
+ estimated | actual 
+-----------+--------
+        19 |     19
+(1 row)
+
+SELECT count(*) FROM
+  (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1
+; -- Learn on a query with one join
+ count 
+-------
+     2
+(1 row)
+
+SET aqo.join_threshold = 0;
+SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1;');
+ estimated | actual 
+-----------+--------
+        20 |     20
+(1 row)
+
+SELECT count(*) FROM
+  (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1
+; -- Learn on the query without any joins now
+ count 
+-------
+     3
+(1 row)
+
+SET aqo.join_threshold = 1;
+SELECT * FROM check_estimated_rows('SELECT * FROM aqo_test1 t1 JOIN aqo_test1 AS t2 USING (a)');
+ estimated | actual 
+-----------+--------
+        20 |     20
+(1 row)
+
+SELECT count(*) FROM
+  (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1
+; -- See one more query in the AQO knowledge base
+ count 
+-------
+     4
+(1 row)
+
+SELECT * FROM check_estimated_rows('WITH selected AS (SELECT * FROM aqo_test1 t1) SELECT count(*) FROM selected');
+ estimated | actual 
+-----------+--------
+         1 |      1
+(1 row)
+
+SELECT * FROM check_estimated_rows('
+  WITH selected AS (
+    SELECT * FROM aqo_test1 t1 JOIN aqo_test1 AS t2 USING (a)
+  ) SELECT count(*) FROM selected')
+;
+ estimated | actual 
+-----------+--------
+         1 |      1
+(1 row)
+
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
+ count 
+-------
+     5
+(1 row)
+
+-- InitPlan
+SELECT * FROM check_estimated_rows('
+  SELECT * FROM aqo_test1 AS t1 WHERE t1.a IN (
+    SELECT t2.a FROM aqo_test1 AS t2 JOIN aqo_test1 AS t3 ON (t2.b = t3.a)
+  )');
+ estimated | actual 
+-----------+--------
+        20 |     19
+(1 row)
+
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
+ count 
+-------
+     6
+(1 row)
+
+-- SubPlan
+SELECT * FROM check_estimated_rows('
+  SELECT (
+    SELECT avg(t2.a) FROM aqo_test1 AS t2 JOIN aqo_test1 AS t3 ON (t2.b = t3.a) AND (t2.a = t1.a)
+  ) FROM aqo_test1 AS t1;
+');
+ estimated | actual 
+-----------+--------
+        20 |     20
+(1 row)
+
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
+ count 
+-------
+     7
+(1 row)
+
+-- Subquery
+SET aqo.join_threshold = 3;
+SELECT * FROM check_estimated_rows('
+  SELECT * FROM aqo_test1 AS t1,
+    (SELECT t2.a FROM aqo_test1 AS t2 JOIN aqo_test1 AS t3 ON (t2.b = t3.a)) q1
+  WHERE q1.a*t1.a = t1.a + 15;
+'); -- Two JOINs, ignore it
+ estimated | actual 
+-----------+--------
+         2 |      4
+(1 row)
+
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
+ count 
+-------
+     7
+(1 row)
+
+SET aqo.join_threshold = 2;
+SELECT * FROM check_estimated_rows('
+  SELECT * FROM aqo_test1 AS t1,
+    (SELECT t2.a FROM aqo_test1 AS t2 JOIN aqo_test1 AS t3 ON (t2.b = t3.a)) q1
+  WHERE q1.a*t1.a = t1.a + 15;
+'); -- One JOIN from subquery, another one from the query
+ estimated | actual 
+-----------+--------
+         2 |      4
+(1 row)
+
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
+ count 
+-------
+     8
+(1 row)
+
+SELECT * FROM check_estimated_rows('
+  WITH selected AS (
+    SELECT t2.a FROM aqo_test1 t1 JOIN aqo_test1 AS t2 USING (a)
+  ) SELECT count(*) FROM aqo_test1 t3, selected WHERE selected.a = t3.a')
+; -- One JOIN extracted from CTE, another - from a FROM part of the query
+ estimated | actual 
+-----------+--------
+         1 |      1
+(1 row)
+
+SELECT count(*) FROM (SELECT fs FROM aqo_data GROUP BY (fs)) AS q1; -- +1
+ count 
+-------
+     9
+(1 row)
+
+DROP FUNCTION check_estimated_rows;
+RESET aqo.join_threshold;
 DROP INDEX aqo_test0_idx_a;
 DROP TABLE aqo_test0;
 DROP INDEX aqo_test1_idx_a;
 DROP TABLE aqo_test1;
+-- XXX: extension dropping doesn't clear file storage. Do it manually.
+SELECT 1 FROM aqo_reset();
+ ?column? 
+----------
+        1
+(1 row)
+
 DROP EXTENSION aqo;
