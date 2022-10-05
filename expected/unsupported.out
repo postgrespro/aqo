@@ -1,4 +1,12 @@
 CREATE EXTENSION aqo;
+-- Utility tool. Allow to filter system-dependent strings from an explain output.
+CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
+BEGIN
+  RETURN QUERY
+    EXECUTE format('%s', query_string);
+  RETURN;
+END;
+$$ LANGUAGE PLPGSQL;
 SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
@@ -33,6 +41,24 @@ EXPLAIN (COSTS OFF)
  AQO mode: LEARN
  JOINS: 0
 (11 rows)
+
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+    SELECT * FROM t GROUP BY (x) HAVING x > 3;
+') AS str WHERE str NOT LIKE '%Memory Usage%';
+                      str                      
+-----------------------------------------------
+ HashAggregate (actual rows=17 loops=1)
+   AQO not used
+   Group Key: x
+   ->  Seq Scan on t (actual rows=801 loops=1)
+         AQO: rows=801, error=0%
+         Filter: (x > 3)
+         Rows Removed by Filter: 199
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(10 rows)
 
 --
 -- Doesn't estimates GROUP BY clause
@@ -467,17 +493,6 @@ SELECT * FROM
 -- any prediction on number of fetched tuples.
 -- So, if selectivity was wrong we could make bad choice of Scan operation.
 -- For example, we could choose suboptimal index.
---
--- Returns string-by-string explain of a query. Made for removing some strings
--- from the explain output.
---
-CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
-BEGIN
-    RETURN QUERY
-        EXECUTE format('EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF) %s', query_string);
-    RETURN;
-END;
-$$ LANGUAGE PLPGSQL;
 -- Turn off statistics gathering for simple demonstration of filtering problem.
 ALTER TABLE t SET (autovacuum_enabled = 'false');
 CREATE INDEX ind1 ON t(x);
@@ -513,10 +528,11 @@ SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
     50
 (1 row)
 
-SELECT str AS result
-FROM expln('SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1') AS str
-WHERE str NOT LIKE '%Heap Blocks%';
-                             result                              
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+    SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1') AS str
+WHERE str NOT LIKE '%Heap Blocks%' AND str NOT LIKE '%Query Identifier%';
+                               str                               
 -----------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
@@ -572,6 +588,10 @@ ORDER BY (md5(query_text),error) DESC;
        |         SELECT count(*) FROM t WHERE                                                          +
        |                 x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21) OR                        +
        |                 x IN (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21);
+ 0.106 |                                                                                               +
+       |   EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)                                       +
+       |     SELECT * FROM t GROUP BY (x) HAVING x > 3;                                                +
+       | 
  0.454 | SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;
  0.000 | SELECT count(*) FROM (                                                                        +
        |         SELECT count(*) AS x FROM (                                                           +
@@ -589,19 +609,19 @@ ORDER BY (md5(query_text),error) DESC;
        |                 JOIN                                                                          +
        |         (SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x <> t.x)) AS q2     +
        |                 ON q1.x = q2.x+1;
-(12 rows)
+(13 rows)
 
 DROP TABLE t,t1 CASCADE; -- delete all tables used in the test
 SELECT count(*) FROM aqo_data; -- Just to detect some changes in the logic. May some false positives really bother us here?
  count 
 -------
-    42
+    44
 (1 row)
 
 SELECT * FROM aqo_cleanup();
  nfs | nfss 
 -----+------
-  12 |   42
+  13 |   44
 (1 row)
 
 SELECT count(*) FROM aqo_data; -- No one row should be returned

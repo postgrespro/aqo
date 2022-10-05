@@ -3,7 +3,6 @@
 
 #include "nodes/pg_list.h"
 
-extern uint64 get_query_hash(Query *parse, const char *query_text);
 extern bool list_member_uint64(const List *list, uint64 datum);
 extern List *list_copy_uint64(List *list);
 extern List *lappend_uint64(List *list, uint64 datum);

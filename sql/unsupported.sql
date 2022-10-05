@@ -1,4 +1,14 @@
 CREATE EXTENSION aqo;
+
+-- Utility tool. Allow to filter system-dependent strings from an explain output.
+CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
+BEGIN
+  RETURN QUERY
+    EXECUTE format('%s', query_string);
+  RETURN;
+END;
+$$ LANGUAGE PLPGSQL;
+
 SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
@@ -17,6 +27,11 @@ ANALYZE t, t1;
 SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
 EXPLAIN (COSTS OFF)
 	SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
+
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+    SELECT * FROM t GROUP BY (x) HAVING x > 3;
+') AS str WHERE str NOT LIKE '%Memory Usage%';
 
 --
 -- Doesn't estimates GROUP BY clause
@@ -135,18 +150,6 @@ SELECT * FROM
 -- So, if selectivity was wrong we could make bad choice of Scan operation.
 -- For example, we could choose suboptimal index.
 
---
--- Returns string-by-string explain of a query. Made for removing some strings
--- from the explain output.
---
-CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
-BEGIN
-    RETURN QUERY
-        EXECUTE format('EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF) %s', query_string);
-    RETURN;
-END;
-$$ LANGUAGE PLPGSQL;
-
 -- Turn off statistics gathering for simple demonstration of filtering problem.
 ALTER TABLE t SET (autovacuum_enabled = 'false');
 CREATE INDEX ind1 ON t(x);
@@ -159,9 +162,10 @@ EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 -- Here we filter more tuples than with the ind1 index.
 CREATE INDEX ind2 ON t(mod(x,3));
 SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
-SELECT str AS result
-FROM expln('SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1') AS str
-WHERE str NOT LIKE '%Heap Blocks%';
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+    SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1') AS str
+WHERE str NOT LIKE '%Heap Blocks%' AND str NOT LIKE '%Query Identifier%';
 
 -- Best choice is ...
 ANALYZE t;
