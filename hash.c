@@ -56,24 +56,6 @@ static bool has_consts(List *lst);
 static List **get_clause_args_ptr(Expr *clause);
 static bool clause_is_eq_clause(Expr *clause);
 
-/*
- * Computes hash for given query.Query Identifier: =
- * Hash is supposed to be constant-insensitive.
- * XXX: Hashing depend on Oids of database objects. It is restrict usability of
- * the AQO knowledge base by current database at current Postgres instance.
- */
-uint64
-get_query_hash(Query *parse, const char *query_text)
-{
-	char	   *str_repr;
-	uint64			hash;
-
-	/* XXX: remove_locations and remove_consts are heavy routines. */
-	str_repr = remove_locations(remove_consts(nodeToString(parse)));
-	hash = DatumGetUInt64(hash_any_extended((void *) str_repr, strlen(str_repr),0));
-
-	return hash;
-}
 
 /*********************************************************************************
  *

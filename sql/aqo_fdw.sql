@@ -6,6 +6,7 @@
 
 CREATE EXTENSION aqo;
 CREATE EXTENSION postgres_fdw;
+
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'true'; -- show AQO info for each node and entire query.
 SET aqo.show_hash = 'false'; -- a hash value is system-depended. Ignore it.
@@ -43,10 +44,14 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT x FROM frgn;
 
 -- Push down base filters. Use verbose mode to see filters.
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE))
-SELECT x FROM frgn WHERE x < 10;
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
-SELECT x FROM frgn WHERE x < 10;
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+    SELECT x FROM frgn WHERE x < 10;
+') AS str WHERE str NOT LIKE '%Query Identifier%';
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+    SELECT x FROM frgn WHERE x < 10;
+') AS str WHERE str NOT LIKE '%Query Identifier%';
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT x FROM frgn WHERE x < -10; -- AQO ignores constants
 
@@ -57,14 +62,18 @@ SELECT str FROM expln('
 ') AS str WHERE str NOT LIKE '%Sort Method%';
 
 -- TODO: Should learn on postgres_fdw nodes
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
-  SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+    SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
+') AS str WHERE str NOT LIKE '%Query Identifier%';
 
 -- TODO: Non-mergejoinable join condition.
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
-SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+    SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
+') AS str WHERE str NOT LIKE '%Query Identifier%';
 
 DROP EXTENSION aqo CASCADE;
 DROP EXTENSION postgres_fdw CASCADE;
