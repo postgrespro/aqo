@@ -96,8 +96,8 @@ PG_FUNCTION_INFO_V1(aqo_query_stat);
 PG_FUNCTION_INFO_V1(aqo_query_texts);
 PG_FUNCTION_INFO_V1(aqo_data);
 PG_FUNCTION_INFO_V1(aqo_queries);
-PG_FUNCTION_INFO_V1(aqo_enable_query);
-PG_FUNCTION_INFO_V1(aqo_disable_query);
+PG_FUNCTION_INFO_V1(aqo_enable_class);
+PG_FUNCTION_INFO_V1(aqo_disable_class);
 PG_FUNCTION_INFO_V1(aqo_queries_update);
 PG_FUNCTION_INFO_V1(aqo_reset);
 PG_FUNCTION_INFO_V1(aqo_cleanup);
@@ -1904,7 +1904,7 @@ aqo_queries_reset(void)
 }
 
 Datum
-aqo_enable_query(PG_FUNCTION_ARGS)
+aqo_enable_class(PG_FUNCTION_ARGS)
 {
 	uint64			queryid = (uint64) PG_GETARG_INT64(0);
 	QueriesEntry   *entry;
@@ -1935,7 +1935,7 @@ aqo_enable_query(PG_FUNCTION_ARGS)
 }
 
 Datum
-aqo_disable_query(PG_FUNCTION_ARGS)
+aqo_disable_class(PG_FUNCTION_ARGS)
 {
 	uint64			queryid = (uint64) PG_GETARG_INT64(0);
 	QueriesEntry   *entry;
