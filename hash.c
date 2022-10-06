@@ -202,12 +202,12 @@ get_fss_for_object(List *relsigns, List *clauselist,
 	Assert(n == list_length(selectivities) ||
 		   (nfeatures == NULL && features == NULL));
 
-	get_eclasses(clauselist, &nargs, &args_hash, &eclass_hash);
 	if (nfeatures != NULL)
 		*features = palloc0(sizeof(**features) * n);
 
 	old_ctx_m = MemoryContextSwitchTo(AQOUtilityMemCtx);
 
+	get_eclasses(clauselist, &nargs, &args_hash, &eclass_hash);
 	clause_hashes = palloc(sizeof(*clause_hashes) * n);
 	clause_has_consts = palloc(sizeof(*clause_has_consts) * n);
 	sorted_clauses = palloc(sizeof(*sorted_clauses) * n);
@@ -664,18 +664,13 @@ get_eclasses(List *clauselist, int *nargs, int **args_hash, int **eclass_hash)
 	int			i,
 				v;
 	int		   *e_hashes;
-	MemoryContext old_ctx_m;
 
 	get_clauselist_args(clauselist, nargs, args_hash);
 	*eclass_hash = palloc((*nargs) * sizeof(**eclass_hash));
 
-	old_ctx_m = MemoryContextSwitchTo(AQOUtilityMemCtx);
-
 	p = perform_eclasses_join(clauselist, *nargs, *args_hash);
 	lsts = palloc((*nargs) * sizeof(*lsts));
 	e_hashes = palloc((*nargs) * sizeof(*e_hashes));
-
-	MemoryContextSwitchTo(old_ctx_m);
 
 	for (i = 0; i < *nargs; ++i)
 		lsts[i] = NIL;
@@ -690,8 +685,6 @@ get_eclasses(List *clauselist, int *nargs, int **args_hash, int **eclass_hash)
 
 	for (i = 0; i < *nargs; ++i)
 		(*eclass_hash)[i] = e_hashes[disjoint_set_get_parent(p, i)];
-
-	MemoryContextReset(AQOUtilityMemCtx);
 }
 
 /*
