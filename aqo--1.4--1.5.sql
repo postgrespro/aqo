@@ -19,6 +19,7 @@ DROP TABLE public.aqo_data CASCADE;
 DROP TABLE public.aqo_queries CASCADE;
 DROP TABLE public.aqo_query_texts CASCADE;
 DROP TABLE public.aqo_query_stat CASCADE;
+DROP FUNCTION invalidate_deactivated_queries_cache;
 
 
 /*
@@ -76,14 +77,14 @@ CREATE VIEW aqo_queries AS SELECT * FROM aqo_queries();
 /* UI functions */
 
 
-CREATE FUNCTION aqo_enable_query(queryid bigint)
+CREATE FUNCTION aqo_enable_class(queryid bigint)
 RETURNS void
-AS 'MODULE_PATHNAME', 'aqo_enable_query'
+AS 'MODULE_PATHNAME', 'aqo_enable_class'
 LANGUAGE C STRICT VOLATILE;
 
-CREATE FUNCTION aqo_disable_query(queryid bigint)
+CREATE FUNCTION aqo_disable_class(queryid bigint)
 RETURNS void
-AS 'MODULE_PATHNAME', 'aqo_enable_query'
+AS 'MODULE_PATHNAME', 'aqo_disable_class'
 LANGUAGE C STRICT VOLATILE;
 
 CREATE FUNCTION aqo_queries_update(
