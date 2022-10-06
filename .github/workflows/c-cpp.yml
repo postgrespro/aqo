@@ -21,7 +21,8 @@ jobs:
         cd pg
         git checkout master
         ./configure --prefix=`pwd`/tmp_install
-        git subtree add --prefix=contrib/aqo https://github.com/postgrespro/aqo.git $GITHUB_REF
+        git clone https://github.com/postgrespro/aqo.git contrib/aqo
+        git -C contrib/aqo checkout $GITHUB_REF
         patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_master.patch
         make -j4 > /dev/null && make -j4 -C contrib > /dev/null
         env CLIENTS=50 THREADS=50 make -C contrib/aqo check
