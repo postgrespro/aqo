@@ -24,6 +24,9 @@
 #include "machine_learning.h"
 #include "storage.h"
 
+
+bool use_wide_search = false;
+
 #ifdef AQO_DEBUG_PRINT
 static void
 predict_debug_output(List *clauses, List *selectivities,
@@ -90,7 +93,7 @@ predict_for_relation(List *clauses, List *selectivities, List *relsigns,
 		 */
 
 		/* Try to search in surrounding feature spaces for the same node */
-		if (!load_aqo_data(query_context.fspace_hash, *fss, data, NULL, true))
+		if (!load_aqo_data(query_context.fspace_hash, *fss, data, NULL, use_wide_search))
 			result = -1;
 		else
 		{
