@@ -105,7 +105,6 @@ PG_FUNCTION_INFO_V1(aqo_drop_class);
 PG_FUNCTION_INFO_V1(aqo_cardinality_error);
 PG_FUNCTION_INFO_V1(aqo_execution_time);
 
-
 bool
 load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids, bool isSafe)
 {
@@ -2187,7 +2186,7 @@ aqo_cleanup(PG_FUNCTION_ARGS)
 	values[1] = Int32GetDatum(fss_num);
 	tuplestore_putvalues(tupstore, tupDesc, values, nulls);
 	tuplestore_donestoring(tupstore);
-	return (Datum) 0;
+	PG_RETURN_VOID();
 }
 
 /*
