@@ -12,7 +12,7 @@ SELECT * FROM a;
 
 SELECT 'a'::regclass::oid AS a_oid \gset
 SELECT true FROM aqo_cleanup();
- bool
+ bool 
 ------
  t
 (1 row)
@@ -55,7 +55,7 @@ SELECT count(*) FROM aqo_query_stat WHERE
 
 DROP TABLE a;
 SELECT true FROM aqo_cleanup();
- bool
+ bool 
 ------
  t
 (1 row)
@@ -176,7 +176,7 @@ SELECT count(*) FROM aqo_query_stat WHERE
 
 DROP TABLE a;
 SELECT true FROM aqo_cleanup();
- bool
+ bool 
 ------
  t
 (1 row)
@@ -254,7 +254,7 @@ SELECT count(*) FROM aqo_query_stat WHERE
 
 DROP TABLE b;
 SELECT true FROM aqo_cleanup();
- bool
+ bool 
 ------
  t
 (1 row)

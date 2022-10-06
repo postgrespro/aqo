@@ -144,6 +144,7 @@ COMMENT ON FUNCTION aqo_drop_class(bigint) IS
 -- Returns number of deleted rows from aqo_queries and aqo_data tables.
 --
 CREATE OR REPLACE FUNCTION aqo_cleanup(OUT nfs integer, OUT nfss integer)
+RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'aqo_cleanup'
 LANGUAGE C STRICT VOLATILE;
 COMMENT ON FUNCTION aqo_cleanup() IS

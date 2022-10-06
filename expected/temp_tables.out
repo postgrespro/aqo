@@ -49,20 +49,20 @@ SELECT count(*) FROM aqo_data; -- Don't bother about false negatives because of 
 
 DROP TABLE tt;
 SELECT * FROM aqo_cleanup();
- nfs | nfss
+ nfs | nfss 
 -----+------
    0 |    0
 (1 row)
 
 SELECT count(*) FROM aqo_data; -- Should return the same as previous call above
- count
+ count 
 -------
     10
 (1 row)
 
 DROP TABLE pt;
 SELECT * FROM aqo_cleanup();
- nfs | nfss
+ nfs | nfss 
 -----+------
    3 |   10
 (1 row)
@@ -134,7 +134,7 @@ SELECT * FROM check_estimated_rows('
 SET aqo.mode = 'forced'; -- Now we use all fss records for each query
 DROP TABLE pt;
 SELECT * FROM aqo_cleanup();
- nfs | nfss
+ nfs | nfss 
 -----+------
    2 |    5
 (1 row)

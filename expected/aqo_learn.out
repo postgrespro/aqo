@@ -237,7 +237,7 @@ SELECT count(*) FROM tmp1;
 
 -- Remove data on some unneeded instances of tmp1 table.
 SELECT * FROM aqo_cleanup();
- nfs | nfss
+ nfs | nfss 
 -----+------
    9 |   18
 (1 row)

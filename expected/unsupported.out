@@ -599,7 +599,7 @@ SELECT count(*) FROM aqo_data; -- Just to detect some changes in the logic. May 
 (1 row)
 
 SELECT * FROM aqo_cleanup();
- nfs | nfss
+ nfs | nfss 
 -----+------
   12 |   42
 (1 row)
