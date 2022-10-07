@@ -23,6 +23,7 @@ REGRESS =	aqo_disabled \
 			forced_stat_collection \
 			unsupported \
 			clean_aqo_data \
+			parallel_workers	\
 			plancache	\
 			statement_timeout \
 			temp_tables \

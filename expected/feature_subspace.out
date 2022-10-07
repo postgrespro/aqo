@@ -29,19 +29,17 @@ WHERE str NOT LIKE '%Memory%';
    AQO not used
    Merge Cond: (a.x = b.x)
    ->  Sort (actual rows=10 loops=1)
-         AQO not used
          Sort Key: a.x
          ->  Seq Scan on a (actual rows=10 loops=1)
                AQO not used
    ->  Sort (actual rows=11 loops=1)
-         AQO not used
          Sort Key: b.x
          ->  Seq Scan on b (actual rows=100 loops=1)
                AQO not used
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(16 rows)
+(14 rows)
 
 -- TODO: Using method of other classes neighbours we get a bad estimation.
 SELECT str AS result
@@ -56,13 +54,12 @@ WHERE str NOT LIKE '%Memory%';
    ->  Seq Scan on b (actual rows=100 loops=1)
          AQO: rows=100, error=0%
    ->  Hash (actual rows=10 loops=1)
-         AQO not used
          ->  Seq Scan on a (actual rows=10 loops=1)
                AQO: rows=10, error=0%
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(12 rows)
+(11 rows)
 
 -- Look into the reason: two JOINs from different classes have the same FSS.
 SELECT to_char(d1.targets[1], 'FM999.00') AS target FROM aqo_data d1
