@@ -375,7 +375,6 @@ SELECT count(*) FROM
                              Filter: (x <> t_1.x)
                              Rows Removed by Filter: 50
          ->  Hash (actual rows=851 loops=1)
-               AQO not used
                ->  Seq Scan on t (actual rows=851 loops=1)
                      AQO: rows=851, error=0%
                      Filter: (((x % 3))::numeric < (SubPlan 1))
@@ -390,7 +389,7 @@ SELECT count(*) FROM
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1
-(31 rows)
+(30 rows)
 
 -- Two identical subplans in a clause
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
@@ -543,12 +542,11 @@ WHERE str NOT LIKE '%Heap Blocks%' AND str NOT LIKE '%Query Identifier%';
          Filter: (t.x < 3)
          Rows Removed by Filter: 300
          ->  Bitmap Index Scan on ind2 (actual rows=350 loops=1)
-               AQO not used
                Index Cond: (mod(t.x, 3) = 1)
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(14 rows)
+(13 rows)
 
 -- Best choice is ...
 ANALYZE t;
@@ -577,7 +575,7 @@ ORDER BY (md5(query_text),error) DESC;
 -------+------------------------------------------------------------------------------------------------
  0.768 | SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,y)) AS q1;
  0.070 | SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
- 1.416 | SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
+ 0.000 | SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
  0.000 | SELECT * FROM                                                                                 +
        |         (SELECT * FROM t WHERE x < 0) AS t0                                                   +
        |                 JOIN                                                                          +

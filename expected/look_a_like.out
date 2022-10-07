@@ -148,7 +148,6 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
    Output: a.x, b.y
    Merge Cond: (a.x = b.y)
    ->  Sort (actual rows=1000 loops=1)
-         AQO not used
          Output: a.x
          Sort Key: a.x
          ->  Seq Scan on public.a (actual rows=1000 loops=1)
@@ -156,7 +155,6 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
                Output: a.x
                Filter: (a.x < 10)
    ->  Sort (actual rows=99901 loops=1)
-         AQO not used
          Output: b.y
          Sort Key: b.y
          ->  Seq Scan on public.b (actual rows=1000 loops=1)
@@ -165,7 +163,7 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(22 rows)
+(20 rows)
 
 -- cardinality 100 in Seq Scan on a and Seq Scan on b
 SELECT str AS result
@@ -215,7 +213,6 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%'
          Output: a.x
          Filter: (a.x < 10)
    ->  Hash (actual rows=0 loops=1)
-         AQO not used
          Output: b.y
          ->  Seq Scan on public.b (actual rows=0 loops=1)
                AQO: rows=1, error=100%
@@ -225,7 +222,7 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%'
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(19 rows)
+(18 rows)
 
 RESET enable_material;
 DROP TABLE a,b CASCADE;

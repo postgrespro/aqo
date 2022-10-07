@@ -62,9 +62,7 @@ create_aqo_plan_node()
 
 /*
  * Extract an AQO node from the plan private field.
- * If no one node was found, return pointer to the default value or allocate new
- * node (with default value) according to 'create' field.
- * Can't return NULL value at all.
+ * If no one node was found, return pointer to the default value or return NULL.
  */
 AQOPlanNode *
 get_aqo_plan_node(Plan *plan, bool create)
@@ -89,7 +87,7 @@ get_aqo_plan_node(Plan *plan, bool create)
 	if (node == NULL)
 	{
 		if (!create)
-			return &DefaultAQOPlanNode;
+			return NULL;
 
 		node = create_aqo_plan_node();
 		plan->ext_nodes = lappend(plan->ext_nodes, node);
@@ -475,9 +473,14 @@ is_appropriate_path(Path *path)
 }
 
 /*
- * Converts path info into plan node for collecting it after query execution.
+ * Add AQO data into the plan node, if necessary.
+ *
+ * The necesssary case is when AQO is learning on this query, used for a
+ * prediction (and we will need the data to show prediction error at the end) or
+ * just to gather a plan statistics.
  * Don't switch here to any AQO-specific memory contexts, because we should
- * store AQO prediction in the same context, as the plan.
+ * store AQO prediction in the same context, as the plan. So, explicitly free
+ * all unneeded data.
  */
 void
 aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
@@ -489,7 +492,8 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 	if (prev_create_plan_hook)
 		prev_create_plan_hook(root, src, dest);
 
-	if (!query_context.use_aqo && !query_context.learn_aqo)
+	if (!query_context.use_aqo && !query_context.learn_aqo &&
+		!query_context.collect_stat)
 		return;
 
 	is_join_path = (src->type == T_NestPath || src->type == T_MergePath ||
@@ -546,6 +550,11 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 	}
 	else
 	{
+		/*
+		 * In the case of forced stat gathering AQO must store fss as well as
+		 * parallel divisor. Negative predicted cardinality field will be a sign
+		 * that it is not a prediction, just statistics.
+		 */
 		node->prediction = src->parent->predicted_cardinality;
 		node->fss = src->parent->fss_hash;
 	}
@@ -618,11 +627,6 @@ AQOnodeOut(struct StringInfoData *str, const struct ExtensibleNode *enode)
 {
 	AQOPlanNode *node = (AQOPlanNode *) enode;
 
-	node->had_path = false;
-	node->jointype = 0;
-	node->parallel_divisor = 1.0;
-	node->was_parametrized = false;
-
 	/* For Adaptive optimization DEBUG purposes */
 	WRITE_INT_FIELD(fss);
 	WRITE_FLOAT_FIELD(prediction, "%.0f");
@@ -670,10 +674,10 @@ AQOnodeRead(struct ExtensibleNode *enode)
 	const char	*token;
 	int			length;
 
-	READ_BOOL_FIELD(had_path);
-	READ_ENUM_FIELD(jointype, JoinType);
-	READ_FLOAT_FIELD(parallel_divisor);
-	READ_BOOL_FIELD(was_parametrized);
+	local_node->had_path = false;
+	local_node->jointype = 0;
+	local_node->parallel_divisor = 1.0;
+	local_node->was_parametrized = false;
 
 	local_node->rels = palloc0(sizeof(RelSortOut));
 	local_node->clauses = NIL;
