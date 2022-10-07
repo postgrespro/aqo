@@ -135,10 +135,10 @@ get_selectivities(PlannerInfo *root,
 /*
  * Based on the hashTupleDesc() routine
  */
-static uint64
+static uint32
 hashTempTupleDesc(TupleDesc desc)
 {
-	uint64		s;
+	uint32		s;
 	int			i;
 
 	s = hash_combine(0, hash_uint32(desc->natts));
@@ -146,11 +146,11 @@ hashTempTupleDesc(TupleDesc desc)
 	for (i = 0; i < desc->natts; ++i)
 	{
 		const char *attname = NameStr(TupleDescAttr(desc, i)->attname);
-		uint64		s1;
+		uint32		s1;
 
-		s = hash_combine64(s, hash_uint32(TupleDescAttr(desc, i)->atttypid));
-		s1 = hash_bytes_extended((const unsigned char *) attname, strlen(attname), 0);
-		s = hash_combine64(s, s1);
+		s = hash_combine(s, hash_uint32(TupleDescAttr(desc, i)->atttypid));
+		s1 = hash_bytes((const unsigned char *) attname, strlen(attname));
+		s = hash_combine(s, s1);
 	}
 	return s;
 }
@@ -186,8 +186,8 @@ get_list_of_relids(PlannerInfo *root, Relids relids, RelSortOut *rels)
 
 		if (!OidIsValid(entry->relid))
 		{
-			/* Invalid oid */
-			hashes = lappend_uint64(hashes, (UINT64_MAX / 7));
+			/* TODO: Explain this logic. */
+			hashes = lappend_int(hashes, INT32_MAX / 3);
 			continue;
 		}
 
@@ -212,7 +212,7 @@ get_list_of_relids(PlannerInfo *root, Relids relids, RelSortOut *rels)
 			trel = relation_open(entry->relid, NoLock);
 			tdesc = RelationGetDescr(trel);
 			Assert(CheckRelationLockedByMe(trel, AccessShareLock, true));
-			hashes = lappend_uint64(hashes, hashTempTupleDesc(tdesc));
+			hashes = lappend_int(hashes, hashTempTupleDesc(tdesc));
 			relation_close(trel, NoLock);
 		}
 		else
@@ -222,9 +222,9 @@ get_list_of_relids(PlannerInfo *root, Relids relids, RelSortOut *rels)
 						get_namespace_name(get_rel_namespace(entry->relid)),
 							relrewrite ? get_rel_name(relrewrite) : relname);
 
-			hashes = lappend_uint64(hashes, DatumGetInt64(hash_any_extended(
+			hashes = lappend_int(hashes, DatumGetInt32(hash_any(
 											(unsigned char *) relname,
-											strlen(relname), 0)));
+											strlen(relname))));
 
 			hrels = lappend_oid(hrels, entry->relid);
 		}
@@ -591,7 +591,7 @@ AQOnodeCopy(struct ExtensibleNode *enew, const struct ExtensibleNode *eold)
 	/* These lists couldn't contain AQO nodes. Use basic machinery */
 	new->rels = palloc(sizeof(RelSortOut));
 	new->rels->hrels = list_copy(old->rels->hrels);
-	new->rels->signatures = list_copy_uint64(old->rels->signatures);
+	new->rels->signatures = list_copy(old->rels->signatures);
 
 	new->clauses = copyObject(old->clauses);
 	new->grouping_exprs = copyObject(old->grouping_exprs);
@@ -626,21 +626,24 @@ AQOnodeEqual(const struct ExtensibleNode *a, const struct ExtensibleNode *b)
 #define WRITE_FLOAT_FIELD(fldname,format) \
 	appendStringInfo(str, " :" CppAsString(fldname) " " format, node->fldname)
 
+/*
+ * Serialize AQO plan node to a string.
+ *
+ * Right now we can't correctly serialize all fields of the node. Taking into
+ * account that this action needed when a plan moves into parallel workers or
+ * just during debugging, we serialize it only partially, just for debug
+ * purposes.
+ * Some extensions may manipulate by parts of serialized plan too.
+ */
 static void
 AQOnodeOut(struct StringInfoData *str, const struct ExtensibleNode *enode)
 {
 	AQOPlanNode *node = (AQOPlanNode *) enode;
 
-	Assert(0);
-	WRITE_BOOL_FIELD(had_path);
-	WRITE_NODE_FIELD(rels);
-	WRITE_NODE_FIELD(clauses);
-	WRITE_NODE_FIELD(selectivities);
-	WRITE_NODE_FIELD(grouping_exprs);
-
-	WRITE_ENUM_FIELD(jointype, JoinType);
-	WRITE_FLOAT_FIELD(parallel_divisor, "%.5f");
-	WRITE_BOOL_FIELD(was_parametrized);
+	node->had_path = false;
+	node->jointype = 0;
+	node->parallel_divisor = 1.0;
+	node->was_parametrized = false;
 
 	/* For Adaptive optimization DEBUG purposes */
 	WRITE_INT_FIELD(fss);
@@ -677,6 +680,11 @@ AQOnodeOut(struct StringInfoData *str, const struct ExtensibleNode *enode)
 	(void) token;				/* in case not used elsewhere */ \
 	local_node->fldname = nodeRead(NULL, 0)
 
+/*
+ * Deserialize AQO plan node from a string to internal representation.
+ *
+ * Should work in coherence with AQOnodeOut().
+ */
 static void
 AQOnodeRead(struct ExtensibleNode *enode)
 {
@@ -684,16 +692,15 @@ AQOnodeRead(struct ExtensibleNode *enode)
 	const char	*token;
 	int			length;
 
-	Assert(0);
 	READ_BOOL_FIELD(had_path);
-	READ_NODE_FIELD(rels);
-	READ_NODE_FIELD(clauses);
-	READ_NODE_FIELD(selectivities);
-	READ_NODE_FIELD(grouping_exprs);
-
 	READ_ENUM_FIELD(jointype, JoinType);
 	READ_FLOAT_FIELD(parallel_divisor);
 	READ_BOOL_FIELD(was_parametrized);
+
+	local_node->rels = palloc0(sizeof(RelSortOut));
+	local_node->clauses = NIL;
+	local_node->selectivities = NIL;
+	local_node->grouping_exprs = NIL;
 
 	/* For Adaptive optimization DEBUG purposes */
 	READ_INT_FIELD(fss);
