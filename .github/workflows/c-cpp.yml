@@ -20,9 +20,16 @@ jobs:
         git clone https://github.com/postgres/postgres.git pg
         cd pg
         git checkout master
-        ./configure --prefix=`pwd`/tmp_install
+        ./configure --prefix=`pwd`/tmp_install CFLAGS="-O3"
         git clone https://github.com/postgrespro/aqo.git contrib/aqo
         git -C contrib/aqo checkout $GITHUB_REF
         patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_master.patch
+        make -j4 > /dev/null && make -j4 -C contrib > /dev/null
+        env CLIENTS=50 THREADS=50 make -C contrib/aqo check
+        
+        echo "Use AQO with debug code included"
+        git clean -fdx
+        git -C contrib/aqo clean -fdx
+        ./configure --prefix=`pwd`/tmp_install CFLAGS="-DAQO_DEBUG_PRINT -O0"
         make -j4 > /dev/null && make -j4 -C contrib > /dev/null
         env CLIENTS=50 THREADS=50 make -C contrib/aqo check
