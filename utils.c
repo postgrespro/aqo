@@ -28,18 +28,6 @@ static int	argsort_cmp(const void *a, const void *b);
  * qsort comparator functions
  */
 
-/* int64 comparator for pg_qsort. */
-int
-int64_compare(const void *va, const void *vb)
-{
-	int64 a = *((const int64 *) va);
-	int64 b = *((const int64 *) vb);
-
-	if (a == b)
-		return 0;
-	return (a > b) ? 1 : -1;
-}
-
 /*
  * Function for qsorting an integer arrays
  */
