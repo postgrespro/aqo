@@ -33,7 +33,7 @@ static int	get_node_hash(Node *node);
 static int	get_unsorted_unsafe_int_array_hash(int *arr, int len);
 static int	get_unordered_int_list_hash(List *lst);
 
-static int64 get_relations_hash(List *relsigns);
+static int get_relations_hash(List *relsigns);
 static int get_fss_hash(int clauses_hash, int eclasses_hash,
 			 int relidslist_hash);
 
@@ -297,7 +297,7 @@ get_fss_for_object(List *relsigns, List *clauselist,
 
 	clauses_hash = get_int_array_hash(sorted_clauses, n - sh);
 	eclasses_hash = get_int_array_hash(eclass_hash, nargs);
-	relations_hash = (int) get_relations_hash(relsigns);
+	relations_hash = get_relations_hash(relsigns);
 	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relations_hash);
 
 	if (nfeatures != NULL)
@@ -465,26 +465,26 @@ get_fss_hash(int clauses_hash, int eclasses_hash, int relidslist_hash)
  * Hash is supposed to be relations-order-insensitive.
  * Each element of a list must have a String type,
  */
-static int64
+static int
 get_relations_hash(List *relsigns)
 {
 	int			nhashes = 0;
-	int64	   *hashes = palloc(list_length(relsigns) * sizeof(uint64));
+	uint32	   *hashes = palloc(list_length(relsigns) * sizeof(uint32));
 	ListCell   *lc;
-	int64		result;
+	int			result;
 
 	foreach(lc, relsigns)
 	{
-		hashes[nhashes++] = *(int64 *) lfirst(lc);
+		hashes[nhashes++] = (uint32) lfirst_int(lc);
 	}
 
 	/* Sort the array to make query insensitive to input order of relations. */
-	qsort(hashes, nhashes, sizeof(int64), int64_compare);
+	qsort(hashes, nhashes, sizeof(uint32), int_cmp);
 
 	/* Make a final hash value */
 
-	result = DatumGetInt64(hash_any_extended((const unsigned char *) hashes,
-										   nhashes * sizeof(int64), 0));
+	result = DatumGetInt32(hash_any((const unsigned char *) hashes,
+									nhashes * sizeof(uint32)));
 
 	return result;
 }
