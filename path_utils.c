@@ -23,6 +23,8 @@
 #include "aqo.h"
 #include "hash.h"
 
+#include "postgres_fdw.h"
+
 /*
  * Hook on creation of a plan node. We need to store AQO-specific data to
  * support learning stage.
@@ -58,6 +60,31 @@ create_aqo_plan_node()
 	node->rels->hrels = NIL;
 	node->rels->signatures = NIL;
 	return node;
+}
+
+
+/* Ensure that it's postgres_fdw's foreign server oid */
+static bool
+is_postgres_fdw_server(Oid serverid)
+{
+	ForeignServer *server;
+	ForeignDataWrapper *fdw;
+
+	if (!OidIsValid(serverid))
+		return false;
+
+	server = GetForeignServerExtended(serverid, FSV_MISSING_OK);
+	if (!server)
+		return false;
+
+	fdw = GetForeignDataWrapperExtended(server->fdwid, FDW_MISSING_OK);
+	if (!fdw || !fdw->fdwname)
+		return false;
+
+	if (strcmp(fdw->fdwname, "postgres_fdw") != 0)
+		return false;
+
+	return true;
 }
 
 /*
@@ -497,7 +524,8 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 		return;
 
 	is_join_path = (src->type == T_NestPath || src->type == T_MergePath ||
-					src->type == T_HashPath);
+					src->type == T_HashPath ||
+					(src->type == T_ForeignPath && IS_JOIN_REL(src->parent)));
 
 	node = get_aqo_plan_node(plan, true);
 
@@ -513,8 +541,32 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 
 	if (is_join_path)
 	{
-		node->clauses = aqo_get_clauses(root, ((JoinPath *) src)->joinrestrictinfo);
-		node->jointype = ((JoinPath *) src)->jointype;
+		if (IsA(src, ForeignPath))
+		{
+			PgFdwRelationInfo *fpinfo = (PgFdwRelationInfo *) src->parent->fdw_private;
+			List	*restrictclauses = NIL;
+
+			if (!fpinfo)
+				return;
+
+			/* We have to ensure that this is postgres_fdw ForeignPath */
+			if (!is_postgres_fdw_server(src->parent->serverid))
+				return;
+
+			restrictclauses = list_concat(restrictclauses, fpinfo->joinclauses);
+			restrictclauses = list_concat(restrictclauses, fpinfo->remote_conds);
+			restrictclauses = list_concat(restrictclauses, fpinfo->local_conds);
+
+			node->clauses = aqo_get_clauses(root, restrictclauses);
+			node->jointype = fpinfo->jointype;
+
+			list_free(restrictclauses);
+		}
+		else
+		{
+			node->clauses = aqo_get_clauses(root, ((JoinPath *) src)->joinrestrictinfo);
+			node->jointype = ((JoinPath *) src)->jointype;
+		}
 	}
 	else if (IsA(src, AggPath))
 	/* Aggregation node must store grouping clauses. */
