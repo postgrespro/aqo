@@ -103,6 +103,7 @@ predict_for_relation(List *clauses, List *selectivities, List *relsigns,
 			result = OkNNr_predict(data, features);
 		}
 	}
+
 #ifdef AQO_DEBUG_PRINT
 	predict_debug_output(clauses, selectivities, relsigns, *fss, result);
 #endif
