@@ -61,11 +61,28 @@ SELECT str FROM expln('
   SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
 ') AS str WHERE str NOT LIKE '%Sort Method%';
 
--- TODO: Should learn on postgres_fdw nodes
+-- Should learn on postgres_fdw nodes
 SELECT str FROM expln('
   EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
     SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
 ') AS str WHERE str NOT LIKE '%Query Identifier%';
+
+CREATE TABLE local_a(aid int primary key, aval text);
+CREATE TABLE local_b(bid int primary key, aid int references local_a(aid), bval text);
+INSERT INTO local_a SELECT i, 'val_' || i FROM generate_series(1,100) i;
+INSERT INTO local_b SELECT i, mod((i+random()*10)::numeric, 10) + 1, 'val_' || i FROM generate_series(1,1000) i;
+ANALYZE local_a, local_b;
+
+CREATE FOREIGN TABLE frgn_a(aid int, aval text) SERVER loopback OPTIONS (table_name 'local_a');
+CREATE FOREIGN TABLE frgn_b(bid int, aid int, bval text) SERVER loopback OPTIONS (table_name 'local_b');
+
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+SELECT * from frgn_a AS a, frgn_b AS b
+WHERE a.aid = b.aid AND b.bval like 'val%';
+
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+SELECT * from frgn_a AS a, frgn_b AS b
+WHERE a.aid = b.aid AND b.bval like 'val%';
 
 -- TODO: Non-mergejoinable join condition.
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
@@ -78,4 +95,6 @@ SELECT str FROM expln('
 DROP EXTENSION aqo CASCADE;
 DROP EXTENSION postgres_fdw CASCADE;
 DROP TABLE local;
+DROP TABLE local_b;
+DROP TABLE local_a;
 
