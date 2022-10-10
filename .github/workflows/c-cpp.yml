@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ master ]
 
+env:
+ BRANCH_NAME: ${{ github.head_ref || github.ref_name }} 
+
 jobs:
   build:
 
@@ -14,7 +17,7 @@ jobs:
     steps:
     - name: pg
       run: |
-        echo "Deploying to production server on branch $GITHUB_REF"
+        echo "Deploying to production server on branch" $BRANCH_NAME
         git config --global user.email "ci@postgrespro.ru"
         git config --global user.name "CI PgPro admin"
         git clone https://github.com/postgres/postgres.git pg
@@ -22,7 +25,7 @@ jobs:
         git checkout master
         ./configure --prefix=`pwd`/tmp_install CFLAGS="-O3"
         git clone https://github.com/postgrespro/aqo.git contrib/aqo
-        git -C contrib/aqo checkout $GITHUB_REF
+        git -C contrib/aqo checkout $BRANCH_NAME
         patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_master.patch
         make -j4 > /dev/null && make -j4 -C contrib > /dev/null
         env CLIENTS=50 THREADS=50 make -C contrib/aqo check
