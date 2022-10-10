@@ -127,6 +127,12 @@ lc_update_fss(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 		}
 	}
 
+	/*
+	 * Kludge code. But we should rewrite this code because now all knowledge
+	 * base lives in non-transactional shared memory.
+	 */
+	ptr = (char *) hdr + sizeof(dsm_block_hdr) + (sizeof(double) * data->cols * aqo_K);
+
 	/* copy targets into DSM storage */
 	memcpy(ptr, data->targets, sizeof(double) * hdr->rows);
 	ptr += sizeof(double) * aqo_K;
