@@ -180,16 +180,13 @@ restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 	double		*cur_sel;
 	int			cur_hash;
 	int			cur_relid;
-	MemoryContext old_ctx_m;
 
 	parametrized_sel = was_parametrized && (list_length(relidslist) == 1);
 	if (parametrized_sel)
 	{
 		cur_relid = linitial_int(relidslist);
 
-		old_ctx_m = MemoryContextSwitchTo(AQOUtilityMemCtx);
 		get_eclasses(clauselist, &nargs, &args_hash, &eclass_hash);
-		MemoryContextSwitchTo(old_ctx_m);
 	}
 
 	foreach(l, clauselist)
@@ -222,11 +219,6 @@ restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 
 		lst = lappend(lst, cur_sel);
 	}
-
-	if (parametrized_sel)
- 	{
-		MemoryContextReset(AQOUtilityMemCtx);
- 	}
 
 	return lst;
 }
