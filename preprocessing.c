@@ -166,7 +166,8 @@ aqo_planner(Query *parse,
 			ParamListInfo boundParams)
 {
 	bool			query_is_stored = false;
-	MemoryContext oldctx;
+	MemoryContext	oldctx;
+
 	oldctx = MemoryContextSwitchTo(AQOPredictMemCtx);
 
 	 /*
@@ -195,15 +196,7 @@ aqo_planner(Query *parse,
 	}
 
 	selectivity_cache_clear();
-	MemoryContextSwitchTo(oldctx);
-
-	oldctx = MemoryContextSwitchTo(AQOUtilityMemCtx);
 	query_context.query_hash = get_query_hash(parse, query_string);
-	MemoryContextSwitchTo(oldctx);
-
-	MemoryContextReset(AQOUtilityMemCtx);
-
-	oldctx = MemoryContextSwitchTo(AQOPredictMemCtx);
 
 	/* By default, they should be equal */
 	query_context.fspace_hash = query_context.query_hash;
