@@ -293,7 +293,7 @@ lc_flush_data(void)
 		aqo_data_store(hdr->key.fs, hdr->key.fss, &data, reloids);
 
 		if (!hash_search(fss_htab, (void *) &hdr->key, HASH_REMOVE, NULL))
-			elog(ERROR, "[AQO] Flush: local ML cache is corrupted.");
+			elog(PANIC, "[AQO] Flush: local ML cache is corrupted.");
 	}
 
 	reset_dsm_cache();
@@ -323,7 +323,7 @@ lc_assign_hook(bool newval, void *extra)
 	while ((entry = (htab_entry *) hash_seq_search(&status)) != NULL)
 	{
 		if (!hash_search(fss_htab, (void *) &entry->key, HASH_REMOVE, NULL))
-			elog(ERROR, "[AQO] The local ML cache is corrupted.");
+			elog(PANIC, "[AQO] The local ML cache is corrupted.");
 	}
 	LWLockRelease(&aqo_state->lock);
 }
