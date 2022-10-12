@@ -194,7 +194,6 @@ get_fss_for_object(List *relsigns, List *clauselist,
 	int			sh = 0,
 				old_sh;
 	int			fss_hash;
-	MemoryContext old_ctx_m;
 
 	n = list_length(clauselist);
 
@@ -202,10 +201,12 @@ get_fss_for_object(List *relsigns, List *clauselist,
 	Assert(n == list_length(selectivities) ||
 		   (nfeatures == NULL && features == NULL));
 
+	/*
+	 * It should be allocated in a caller memory context, because it will be
+	 * returned.
+	 */
 	if (nfeatures != NULL)
 		*features = palloc0(sizeof(**features) * n);
-
-	old_ctx_m = MemoryContextSwitchTo(AQOUtilityMemCtx);
 
 	get_eclasses(clauselist, &nargs, &args_hash, &eclass_hash);
 	clause_hashes = palloc(sizeof(*clause_hashes) * n);
@@ -280,9 +281,6 @@ get_fss_for_object(List *relsigns, List *clauselist,
 	eclasses_hash = get_int_array_hash(eclass_hash, nargs);
 	relations_hash = get_relations_hash(relsigns);
 	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relations_hash);
-
-	MemoryContextSwitchTo(old_ctx_m);
-	MemoryContextReset(AQOUtilityMemCtx);
 
 	if (nfeatures != NULL)
 	{

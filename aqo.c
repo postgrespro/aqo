@@ -87,9 +87,6 @@ MemoryContext		AQOTopMemCtx = NULL;
 /* Is released at the end of transaction */
 MemoryContext		AQOCacheMemCtx = NULL;
 
-/* Should be released in-place, just after a huge calculation */
-MemoryContext		AQOUtilityMemCtx = NULL;
-
 /* Is released at the end of planning */
 MemoryContext 		AQOPredictMemCtx = NULL;
 
@@ -348,15 +345,7 @@ _PG_init(void)
 	AQOCacheMemCtx = AllocSetContextCreate(AQOTopMemCtx,
 											 "AQOCacheMemCtx",
 											 ALLOCSET_DEFAULT_SIZES);
-	/*
-	 * AQOUtilityMemoryContext containe short-lived information which
-	 * is appeared from having got clause, selectivity arrays and relid lists
-	 * while calculating hashes. It clean up inside calculated
-	 * function or immediately after her having completed.
-	 */
-	AQOUtilityMemCtx = AllocSetContextCreate(AQOTopMemCtx,
-											 "AQOUtilityMemoryContext",
-											 ALLOCSET_DEFAULT_SIZES);
+
 	/*
 	 * AQOPredictMemoryContext save necessary information for making predict of plan nodes
 	 * and clean up in the execution stage of query.
