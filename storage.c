@@ -2096,7 +2096,6 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 				for(i = 0; i < dentry->nrels; i++)
 				{
 					Oid reloid = ObjectIdGetDatum(*(Oid *)ptr);
-					MemoryContext oldctx = MemoryContextSwitchTo(AQOUtilityMemCtx);
 
 					if (!SearchSysCacheExists1(RELOID, reloid))
 						/* Remember this value */
@@ -2105,7 +2104,6 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 					else
 						actual_fss = list_append_unique_int(actual_fss,
 															dentry->key.fss);
-					MemoryContextSwitchTo(oldctx);
 
 					ptr += sizeof(Oid);
 				}
@@ -2155,8 +2153,6 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 			/* Query class preferences */
 			(*fs_num) += (int) _aqo_queries_remove(entry->queryid);
 		}
-
-		MemoryContextReset(AQOUtilityMemCtx);
 	}
 
 	/*
