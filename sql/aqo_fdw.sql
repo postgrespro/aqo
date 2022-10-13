@@ -84,6 +84,49 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT * from frgn_a AS a, frgn_b AS b
 WHERE a.aid = b.aid AND b.bval like 'val%';
 
+-- Partitioned join over foreign tables
+set enable_partitionwise_join = on;
+ALTER SERVER loopback OPTIONS (ADD fdw_tuple_cost '1.0');
+
+CREATE TABLE local_main_p0(aid int, aval text);
+CREATE TABLE local_main_p1(aid int, aval text);
+CREATE TABLE main (aid int, aval text) PARTITION BY HASH(aid);
+
+CREATE FOREIGN TABLE main_p0 PARTITION OF main FOR VALUES WITH (MODULUS 3, REMAINDER 0)
+	SERVER loopback OPTIONS (table_name 'local_main_p0');
+CREATE FOREIGN TABLE main_p1 PARTITION OF main FOR VALUES WITH (MODULUS 3, REMAINDER 1)
+	SERVER loopback OPTIONS (table_name 'local_main_p1');
+CREATE TABLE main_p2 PARTITION OF main FOR VALUES WITH (MODULUS 3, REMAINDER 2);
+
+CREATE TABLE local_ref_p0(bid int, aid int, bval text);
+CREATE TABLE local_ref_p1(bid int, aid int, bval text);
+CREATE TABLE ref (bid int, aid int, bval text) PARTITION BY HASH(aid);
+
+CREATE FOREIGN TABLE ref_p0 PARTITION OF ref FOR VALUES WITH (MODULUS 3, REMAINDER 0)
+	SERVER loopback OPTIONS (table_name 'local_ref_p0');
+CREATE FOREIGN TABLE ref_p1 PARTITION OF ref FOR VALUES WITH (MODULUS 3, REMAINDER 1)
+	SERVER loopback OPTIONS (table_name 'local_ref_p1');
+CREATE TABLE ref_p2 PARTITION OF ref FOR VALUES WITH (MODULUS 3, REMAINDER 2);
+
+INSERT INTO main SELECT i, 'val_' || i FROM generate_series(1,100) i;
+INSERT INTO ref SELECT i, mod(i, 10) + 1, 'val_' || i FROM generate_series(1,1000) i;
+
+ANALYZE local_main_p0, local_main_p1, main_p2;
+ANALYZE local_ref_p0, local_ref_p1, ref_p2;
+
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+SELECT * from main AS a, ref AS b
+WHERE a.aid = b.aid AND b.bval like 'val%';
+
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+SELECT * from main AS a, ref AS b
+WHERE a.aid = b.aid AND b.bval like 'val%';
+
+DROP TABLE main, local_main_p0, local_main_p1;
+DROP TABLE ref, local_ref_p0, local_ref_p1;
+ALTER SERVER loopback OPTIONS (DROP fdw_tuple_cost);
+reset enable_partitionwise_join;
+
 -- TODO: Non-mergejoinable join condition.
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
@@ -97,4 +140,3 @@ DROP EXTENSION postgres_fdw CASCADE;
 DROP TABLE local;
 DROP TABLE local_b;
 DROP TABLE local_a;
-
