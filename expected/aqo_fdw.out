@@ -146,6 +146,89 @@ WHERE a.aid = b.aid AND b.bval like 'val%';
  JOINS: 0
 (6 rows)
 
+-- Partitioned join over foreign tables
+set enable_partitionwise_join = on;
+ALTER SERVER loopback OPTIONS (ADD fdw_tuple_cost '1.0');
+CREATE TABLE local_main_p0(aid int, aval text);
+CREATE TABLE local_main_p1(aid int, aval text);
+CREATE TABLE main (aid int, aval text) PARTITION BY HASH(aid);
+CREATE FOREIGN TABLE main_p0 PARTITION OF main FOR VALUES WITH (MODULUS 3, REMAINDER 0)
+	SERVER loopback OPTIONS (table_name 'local_main_p0');
+CREATE FOREIGN TABLE main_p1 PARTITION OF main FOR VALUES WITH (MODULUS 3, REMAINDER 1)
+	SERVER loopback OPTIONS (table_name 'local_main_p1');
+CREATE TABLE main_p2 PARTITION OF main FOR VALUES WITH (MODULUS 3, REMAINDER 2);
+CREATE TABLE local_ref_p0(bid int, aid int, bval text);
+CREATE TABLE local_ref_p1(bid int, aid int, bval text);
+CREATE TABLE ref (bid int, aid int, bval text) PARTITION BY HASH(aid);
+CREATE FOREIGN TABLE ref_p0 PARTITION OF ref FOR VALUES WITH (MODULUS 3, REMAINDER 0)
+	SERVER loopback OPTIONS (table_name 'local_ref_p0');
+CREATE FOREIGN TABLE ref_p1 PARTITION OF ref FOR VALUES WITH (MODULUS 3, REMAINDER 1)
+	SERVER loopback OPTIONS (table_name 'local_ref_p1');
+CREATE TABLE ref_p2 PARTITION OF ref FOR VALUES WITH (MODULUS 3, REMAINDER 2);
+INSERT INTO main SELECT i, 'val_' || i FROM generate_series(1,100) i;
+INSERT INTO ref SELECT i, mod(i, 10) + 1, 'val_' || i FROM generate_series(1,1000) i;
+ANALYZE local_main_p0, local_main_p1, main_p2;
+ANALYZE local_ref_p0, local_ref_p1, ref_p2;
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+SELECT * from main AS a, ref AS b
+WHERE a.aid = b.aid AND b.bval like 'val%';
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Append (actual rows=1000 loops=1)
+   AQO not used
+   ->  Foreign Scan (actual rows=400 loops=1)
+         AQO not used
+         Relations: (main_p0 a_1) INNER JOIN (ref_p0 b_1)
+   ->  Foreign Scan (actual rows=300 loops=1)
+         AQO not used
+         Relations: (main_p1 a_2) INNER JOIN (ref_p1 b_2)
+   ->  Hash Join (actual rows=300 loops=1)
+         AQO not used
+         Hash Cond: (b_3.aid = a_3.aid)
+         ->  Seq Scan on ref_p2 b_3 (actual rows=300 loops=1)
+               AQO not used
+               Filter: (bval ~~ 'val%'::text)
+         ->  Hash (actual rows=38 loops=1)
+               Buckets: 1024  Batches: 1  Memory Usage: 10kB
+               ->  Seq Scan on main_p2 a_3 (actual rows=38 loops=1)
+                     AQO not used
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 1
+(21 rows)
+
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+SELECT * from main AS a, ref AS b
+WHERE a.aid = b.aid AND b.bval like 'val%';
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Append (actual rows=1000 loops=1)
+   AQO not used
+   ->  Foreign Scan (actual rows=400 loops=1)
+         AQO: rows=400, error=0%
+         Relations: (main_p0 a_1) INNER JOIN (ref_p0 b_1)
+   ->  Foreign Scan (actual rows=300 loops=1)
+         AQO: rows=300, error=0%
+         Relations: (main_p1 a_2) INNER JOIN (ref_p1 b_2)
+   ->  Hash Join (actual rows=300 loops=1)
+         AQO: rows=300, error=0%
+         Hash Cond: (b_3.aid = a_3.aid)
+         ->  Seq Scan on ref_p2 b_3 (actual rows=300 loops=1)
+               AQO: rows=300, error=0%
+               Filter: (bval ~~ 'val%'::text)
+         ->  Hash (actual rows=38 loops=1)
+               Buckets: 1024  Batches: 1  Memory Usage: 10kB
+               ->  Seq Scan on main_p2 a_3 (actual rows=38 loops=1)
+                     AQO: rows=38, error=0%
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 1
+(21 rows)
+
+DROP TABLE main, local_main_p0, local_main_p1;
+DROP TABLE ref, local_ref_p0, local_ref_p1;
+ALTER SERVER loopback OPTIONS (DROP fdw_tuple_cost);
+reset enable_partitionwise_join;
 -- TODO: Non-mergejoinable join condition.
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
