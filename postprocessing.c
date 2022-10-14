@@ -638,6 +638,13 @@ set_timeout_if_need(QueryDesc *queryDesc)
 {
 	TimestampTz	fin_time;
 
+	if (IsParallelWorker())
+		/*
+		 * AQO timeout should stop only main worker. Other workers would be
+		* terminated by a regular ERROR machinery.
+		*/
+		return false;
+
 	if (!get_timeout_active(STATEMENT_TIMEOUT) || !aqo_learn_statement_timeout)
 		return false;
 
