@@ -77,11 +77,9 @@ reset_dsm_cache(void)
 
 	Assert(LWLockHeldByMeInMode(&aqo_state->lock, LW_EXCLUSIVE));
 
-	if (aqo_state->dsm_handler == DSM_HANDLE_INVALID)
+	if (aqo_state->dsm_handler == DSM_HANDLE_INVALID || !seg)
 		/* Fast path. No any cached data exists. */
 		return;
-
-	Assert(seg);
 
 	hdr = (dsm_seg_hdr *) dsm_segment_address(seg);
 	start = (char *) hdr + sizeof(dsm_seg_hdr);
