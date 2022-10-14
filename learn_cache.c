@@ -13,6 +13,7 @@
  */
 
 #include "postgres.h"
+#include "access/parallel.h" /* Just for IsParallelWorker() */
 #include "miscadmin.h"
 
 #include "aqo.h"
@@ -227,7 +228,7 @@ init_with_dsm(OkNNrdata *data, dsm_block_hdr *hdr, List **reloids)
 	Assert(LWLockHeldByMeInMode(&aqo_state->lock, LW_EXCLUSIVE) ||
 		   LWLockHeldByMeInMode(&aqo_state->lock, LW_SHARED));
 	Assert(hdr->magic == AQO_SHARED_MAGIC);
-	Assert(hdr && ptr);
+	Assert(hdr && ptr && hdr->rows > 0);
 
 	data->rows = hdr->rows;
 	data->cols = hdr->cols;
@@ -245,6 +246,12 @@ init_with_dsm(OkNNrdata *data, dsm_block_hdr *hdr, List **reloids)
 		}
 	}
 
+	/*
+	 * Kludge code. But we should rewrite this code because now all knowledge
+	 * base lives in non-transactional shared memory.
+	 */
+	ptr = (char *) hdr + sizeof(dsm_block_hdr) + (sizeof(double) * data->cols * aqo_K);
+
 	memcpy(data->targets, ptr, sizeof(double) * hdr->rows);
 	ptr += sizeof(double) * aqo_K;
 	memcpy(data->rfactors, ptr, sizeof(double) * hdr->rows);
@@ -261,7 +268,7 @@ init_with_dsm(OkNNrdata *data, dsm_block_hdr *hdr, List **reloids)
 		return calculate_size(hdr->cols, *reloids);
 	}
 
-	/* It is just read operation. No any interest in size calculation. */
+	/* It is just a read operation. No any interest in size calculation. */
 	return 0;
 }
 
@@ -310,14 +317,15 @@ lc_assign_hook(bool newval, void *extra)
 	HASH_SEQ_STATUS		status;
 	htab_entry		   *entry;
 
-	if (!fss_htab || !IsUnderPostmaster)
+	if (!fss_htab || !IsUnderPostmaster || IsParallelWorker())
+		/* Clean this shared cache only in main backend process. */
 		return;
 
 	/* Remove all entries, reset memory context. */
 
 	elog(DEBUG5, "[AQO] Cleanup local cache of ML data.");
 
-	/* Remove all frozen plans from a plancache. */
+	/* Remove all entries in the shared hash table. */
 	LWLockAcquire(&aqo_state->lock, LW_EXCLUSIVE);
 	hash_seq_init(&status, fss_htab);
 	while ((entry = (htab_entry *) hash_seq_search(&status)) != NULL)
@@ -325,5 +333,9 @@ lc_assign_hook(bool newval, void *extra)
 		if (!hash_search(fss_htab, (void *) &entry->key, HASH_REMOVE, NULL))
 			elog(PANIC, "[AQO] The local ML cache is corrupted.");
 	}
+
+	/* Now, clean additional DSM block */
+	reset_dsm_cache();
+
 	LWLockRelease(&aqo_state->lock);
 }
