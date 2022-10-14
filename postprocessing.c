@@ -178,7 +178,6 @@ restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 	int			nargs;
 	int			*args_hash;
 	int			*eclass_hash;
-	double		*cur_sel;
 	int			cur_hash;
 	int			cur_relid;
 
@@ -193,30 +192,29 @@ restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 	foreach(l, clauselist)
 	{
 		RestrictInfo *rinfo = (RestrictInfo *) lfirst(l);
+		Selectivity  *cur_sel = NULL;
 
-		cur_sel = NULL;
 		if (parametrized_sel)
 		{
 			cur_hash = get_clause_hash(rinfo->clause, nargs,
 									   args_hash, eclass_hash);
 			cur_sel = selectivity_cache_find_global_relid(cur_hash, cur_relid);
-			if (cur_sel == NULL)
-			{
-				if (join_type == JOIN_INNER)
-					cur_sel = &rinfo->norm_selec;
-				else
-					cur_sel = &rinfo->outer_selec;
-			}
 		}
-		else if (join_type == JOIN_INNER)
-			cur_sel = &rinfo->norm_selec;
-		else
-			cur_sel = &rinfo->outer_selec;
 
-		if (*cur_sel < 0)
-			*cur_sel = 0;
+		if (cur_sel == NULL)
+		{
+			cur_sel = palloc(sizeof(double));
 
-		Assert(cur_sel > 0);
+			if (join_type == JOIN_INNER)
+				*cur_sel = rinfo->norm_selec;
+			else
+				*cur_sel = rinfo->outer_selec;
+
+			if (*cur_sel < 0)
+				*cur_sel = 0;
+		}
+
+		Assert(*cur_sel >= 0);
 
 		lst = lappend(lst, cur_sel);
 	}
