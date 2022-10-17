@@ -926,7 +926,6 @@ data_load(const char *filename, deform_record_t callback, void *ctx)
 	}
 
 	FreeFile(file);
-	unlink(filename);
 
 	elog(LOG, "[AQO] %ld records loaded from file %s.", num, filename);
 	return;
