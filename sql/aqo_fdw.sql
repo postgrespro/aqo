@@ -47,11 +47,11 @@ SELECT x FROM frgn;
 SELECT str FROM expln('
   EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
     SELECT x FROM frgn WHERE x < 10;
-') AS str WHERE str NOT LIKE '%Query Identifier%';
+') AS str;
 SELECT str FROM expln('
   EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
     SELECT x FROM frgn WHERE x < 10;
-') AS str WHERE str NOT LIKE '%Query Identifier%';
+') AS str;
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT x FROM frgn WHERE x < -10; -- AQO ignores constants
 
@@ -65,7 +65,7 @@ SELECT str FROM expln('
 SELECT str FROM expln('
   EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
     SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
-') AS str WHERE str NOT LIKE '%Query Identifier%';
+') AS str;
 
 CREATE TABLE local_a(aid int primary key, aval text);
 CREATE TABLE local_b(bid int primary key, aid int references local_a(aid), bval text);
@@ -139,7 +139,7 @@ SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
 SELECT str FROM expln('
   EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
     SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
-') AS str WHERE str NOT LIKE '%Query Identifier%';
+') AS str;
 
 DROP EXTENSION aqo CASCADE;
 DROP EXTENSION postgres_fdw CASCADE;
