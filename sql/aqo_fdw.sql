@@ -44,10 +44,14 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT x FROM frgn;
 
 -- Push down base filters. Use verbose mode to see filters.
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE))
-SELECT x FROM frgn WHERE x < 10;
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
-SELECT x FROM frgn WHERE x < 10;
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+    SELECT x FROM frgn WHERE x < 10;
+') AS str;
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+    SELECT x FROM frgn WHERE x < 10;
+') AS str;
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT x FROM frgn WHERE x < -10; -- AQO ignores constants
 
@@ -57,9 +61,11 @@ SELECT str FROM expln('
   SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
 ') AS str WHERE str NOT LIKE '%Sort Method%';
 
--- TODO: Should learn on postgres_fdw nodes
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
-  SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
+-- Should learn on postgres_fdw nodes
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+    SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
+') AS str;
 
 CREATE TABLE local_a(aid int primary key, aval text);
 CREATE TABLE local_b(bid int primary key, aid int references local_a(aid), bval text);
@@ -130,8 +136,10 @@ reset enable_partitionwise_join;
 -- TODO: Non-mergejoinable join condition.
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
-SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+    SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
+') AS str;
 
 DROP EXTENSION aqo CASCADE;
 DROP EXTENSION postgres_fdw CASCADE;

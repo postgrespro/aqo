@@ -67,7 +67,6 @@
 #include "preprocessing.h"
 #include "storage.h"
 
-
 /* List of feature spaces, that are processing in this backend. */
 List *cur_classes = NIL;
 

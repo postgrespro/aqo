@@ -57,7 +57,7 @@ index bc05c96b4c..b6a3abe0d2 100644
  	if (es->format == EXPLAIN_FORMAT_TEXT)
  		appendStringInfoChar(es->str, '\n');
 diff --git a/src/backend/nodes/copyfuncs.c b/src/backend/nodes/copyfuncs.c
-index 682b28ed72..3a5c615deb 100644
+index 692b6c1559..580d04d784 100644
 --- a/src/backend/nodes/copyfuncs.c
 +++ b/src/backend/nodes/copyfuncs.c
 @@ -132,6 +132,7 @@ CopyPlanFields(const Plan *from, Plan *newnode)
@@ -69,7 +69,7 @@ index 682b28ed72..3a5c615deb 100644
  
  /*
 diff --git a/src/backend/nodes/outfuncs.c b/src/backend/nodes/outfuncs.c
-index 7237b52e96..5e2ee2732a 100644
+index 21ececf0c2..a0e7a7ebca 100644
 --- a/src/backend/nodes/outfuncs.c
 +++ b/src/backend/nodes/outfuncs.c
 @@ -342,6 +342,7 @@ _outPlanInfo(StringInfo str, const Plan *node)
@@ -81,7 +81,7 @@ index 7237b52e96..5e2ee2732a 100644
  
  /*
 diff --git a/src/backend/nodes/readfuncs.c b/src/backend/nodes/readfuncs.c
-index 62c945b6c5..a39046ca56 100644
+index 7976b369ba..604314e0b3 100644
 --- a/src/backend/nodes/readfuncs.c
 +++ b/src/backend/nodes/readfuncs.c
 @@ -1580,6 +1580,11 @@ ReadCommonPlan(Plan *local_node)
@@ -394,7 +394,7 @@ index 917713c163..5b7bf1cec6 100644
  
  /*
 diff --git a/src/backend/optimizer/plan/planner.c b/src/backend/optimizer/plan/planner.c
-index 60e7fda6a9..5732c7a685 100644
+index 27c665ac12..f599fba755 100644
 --- a/src/backend/optimizer/plan/planner.c
 +++ b/src/backend/optimizer/plan/planner.c
 @@ -145,7 +145,8 @@ static List *extract_rollup_sets(List *groupingSets);
@@ -407,7 +407,7 @@ index 60e7fda6a9..5732c7a685 100644
  								   grouping_sets_data *gd,
  								   List *target_list);
  static RelOptInfo *create_grouping_paths(PlannerInfo *root,
-@@ -3682,7 +3683,8 @@ standard_qp_callback(PlannerInfo *root, void *extra)
+@@ -3686,7 +3687,8 @@ standard_qp_callback(PlannerInfo *root, void *extra)
   */
  static double
  get_number_of_groups(PlannerInfo *root,
@@ -417,7 +417,7 @@ index 60e7fda6a9..5732c7a685 100644
  					 grouping_sets_data *gd,
  					 List *target_list)
  {
-@@ -3719,7 +3721,7 @@ get_number_of_groups(PlannerInfo *root,
+@@ -3723,7 +3725,7 @@ get_number_of_groups(PlannerInfo *root,
  					GroupingSetData *gs = lfirst_node(GroupingSetData, lc2);
  					double		numGroups = estimate_num_groups(root,
  																groupExprs,
@@ -426,7 +426,7 @@ index 60e7fda6a9..5732c7a685 100644
  																&gset);
  
  					gs->numGroups = numGroups;
-@@ -3744,7 +3746,7 @@ get_number_of_groups(PlannerInfo *root,
+@@ -3748,7 +3750,7 @@ get_number_of_groups(PlannerInfo *root,
  					GroupingSetData *gs = lfirst_node(GroupingSetData, lc2);
  					double		numGroups = estimate_num_groups(root,
  																groupExprs,
@@ -435,7 +435,7 @@ index 60e7fda6a9..5732c7a685 100644
  																&gset);
  
  					gs->numGroups = numGroups;
-@@ -3760,8 +3762,8 @@ get_number_of_groups(PlannerInfo *root,
+@@ -3764,8 +3766,8 @@ get_number_of_groups(PlannerInfo *root,
  			groupExprs = get_sortgrouplist_exprs(parse->groupClause,
  												 target_list);
  
@@ -446,7 +446,7 @@ index 60e7fda6a9..5732c7a685 100644
  		}
  	}
  	else if (parse->groupingSets)
-@@ -4147,7 +4149,8 @@ create_ordinary_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel,
+@@ -4151,7 +4153,8 @@ create_ordinary_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel,
  	 * Estimate number of groups.
  	 */
  	dNumGroups = get_number_of_groups(root,
@@ -456,7 +456,7 @@ index 60e7fda6a9..5732c7a685 100644
  									  gd,
  									  extra->targetList);
  
-@@ -6931,13 +6934,15 @@ create_partial_grouping_paths(PlannerInfo *root,
+@@ -6935,13 +6938,15 @@ create_partial_grouping_paths(PlannerInfo *root,
  	if (cheapest_total_path != NULL)
  		dNumPartialGroups =
  			get_number_of_groups(root,
@@ -541,7 +541,7 @@ index a203e6f1ff..d31bf5bae6 100644
  
  	return ppi;
 diff --git a/src/backend/utils/adt/selfuncs.c b/src/backend/utils/adt/selfuncs.c
-index 821844ada3..85b2482114 100644
+index 37458da096..248a1875a1 100644
 --- a/src/backend/utils/adt/selfuncs.c
 +++ b/src/backend/utils/adt/selfuncs.c
 @@ -147,6 +147,7 @@
@@ -635,18 +635,15 @@ index 5ebf070979..5b2acd7de2 100644
  
  
 diff --git a/src/include/nodes/plannodes.h b/src/include/nodes/plannodes.h
-index 90f02ce6fd..f3e2138ee2 100644
+index 90f02ce6fd..88c332164d 100644
 --- a/src/include/nodes/plannodes.h
 +++ b/src/include/nodes/plannodes.h
-@@ -159,6 +159,12 @@ typedef struct Plan
+@@ -159,6 +159,9 @@ typedef struct Plan
  	 */
  	Bitmapset  *extParam;
  	Bitmapset  *allParam;
 +
-+	/*
-+	 * Additional fields for an extension purposes.
-+	 * TODO: allow to serialize/deserialize this list.
-+	 */
++	/* Additional field for an extension purposes. */
 +	List		*ext_nodes;
  } Plan;
  

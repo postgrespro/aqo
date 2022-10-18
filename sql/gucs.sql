@@ -1,6 +1,15 @@
 CREATE EXTENSION aqo;
-SET aqo.join_threshold = 0;
 
+-- Utility tool. Allow to filter system-dependent strings from an explain output.
+CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
+BEGIN
+    RETURN QUERY
+        EXECUTE format('%s', query_string);
+    RETURN;
+END;
+$$ LANGUAGE PLPGSQL;
+
+SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = true;
 
@@ -10,10 +19,16 @@ ANALYZE t;
 
 SELECT true FROM aqo_reset(); -- Remember! DROP EXTENSION doesn't remove any AQO data gathered.
 -- Check AQO addons to explain (the only stable data)
-EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
-	SELECT x FROM t;
-EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
-	SELECT x FROM t;
+SELECT regexp_replace(
+        str,'Query Identifier: -?\m\d+\M','Query Identifier: N','g') as str FROM expln('
+  EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+    SELECT x FROM t;
+') AS str;
+SELECT regexp_replace(
+        str,'Query Identifier: -?\m\d+\M','Query Identifier: N','g') as str FROM expln('
+  EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+    SELECT x FROM t;
+') AS str;
 SET aqo.mode = 'disabled';
 
 -- Check existence of the interface functions.

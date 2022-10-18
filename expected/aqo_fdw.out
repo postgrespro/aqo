@@ -54,17 +54,29 @@ SELECT x FROM frgn;
 (5 rows)
 
 -- Push down base filters. Use verbose mode to see filters.
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE))
-SELECT x FROM frgn WHERE x < 10;
-ERROR:  syntax error at or near ")"
-LINE 1: ...LAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE))
-                                                                      ^
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
-SELECT x FROM frgn WHERE x < 10;
-                        QUERY PLAN                         
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+    SELECT x FROM frgn WHERE x < 10;
+') AS str;
+                            str                            
 -----------------------------------------------------------
  Foreign Scan on public.frgn (actual rows=1 loops=1)
    AQO not used
+   Output: x
+   Remote SQL: SELECT x FROM public.local WHERE ((x < 10))
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(7 rows)
+
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+    SELECT x FROM frgn WHERE x < 10;
+') AS str;
+                            str                            
+-----------------------------------------------------------
+ Foreign Scan on public.frgn (actual rows=1 loops=1)
+   AQO: rows=1, error=0%
    Output: x
    Remote SQL: SELECT x FROM public.local WHERE ((x < 10))
  Using aqo: true
@@ -98,10 +110,12 @@ SELECT str FROM expln('
  JOINS: 0
 (6 rows)
 
--- TODO: Should learn on postgres_fdw nodes
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
-  SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
-                                               QUERY PLAN                                               
+-- Should learn on postgres_fdw nodes
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+    SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
+') AS str;
+                                                  str                                                   
 --------------------------------------------------------------------------------------------------------
  Foreign Scan (actual rows=1 loops=1)
    AQO: rows=1, error=0%
@@ -246,9 +260,11 @@ SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
  JOINS: 0
 (6 rows)
 
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
-SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
-                                               QUERY PLAN                                               
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+    SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
+') AS str;
+                                                  str                                                   
 --------------------------------------------------------------------------------------------------------
  Foreign Scan (actual rows=0 loops=1)
    AQO: rows=1, error=100%
