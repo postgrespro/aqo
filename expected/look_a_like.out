@@ -25,8 +25,7 @@ $$ LANGUAGE PLPGSQL;
 -- in the next queries with the same fss_hash
 SELECT str AS result
 FROM expln('
-SELECT x FROM A where x = 5;') AS str
-WHERE str NOT LIKE 'Query Identifier%';
+SELECT x FROM A where x = 5;') AS str;
                      result                     
 ------------------------------------------------
  Seq Scan on public.a (actual rows=100 loops=1)
@@ -42,7 +41,6 @@ WHERE str NOT LIKE 'Query Identifier%';
 SELECT str AS result
 FROM expln('
 SELECT x FROM A,B WHERE x = 5 AND A.x = B.y;') AS str
-WHERE str NOT LIKE 'Query Identifier%'
 ; -- Find cardinality for SCAN A(x=5) from a neighbour class, created by the
                          result                         
 --------------------------------------------------------
@@ -68,7 +66,6 @@ WHERE str NOT LIKE 'Query Identifier%'
 SELECT str AS result
 FROM expln('
 SELECT x, sum(x) FROM A,B WHERE y = 5 AND A.x = B.y group by(x);') AS str
-WHERE str NOT LIKE 'Query Identifier%'
 ; -- Find the JOIN cardinality from a neighbour class.
                             result                            
 --------------------------------------------------------------
@@ -97,8 +94,7 @@ WHERE str NOT LIKE 'Query Identifier%'
 -- cardinality 100 in the first Seq Scan on a
 SELECT str AS result
 FROM expln('
-SELECT x, sum(x) FROM A WHERE x = 5 group by(x);') AS str
-WHERE str NOT LIKE 'Query Identifier%';
+SELECT x, sum(x) FROM A WHERE x = 5 group by(x);') AS str;
                         result                        
 ------------------------------------------------------
  GroupAggregate (actual rows=1 loops=1)
@@ -120,7 +116,7 @@ WHERE str NOT LIKE 'Query Identifier%';
 SELECT str AS result
 FROM expln('
 SELECT x FROM A where x < 10 group by(x);') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE '%Memory%';
                         result                         
 -------------------------------------------------------
  HashAggregate (actual rows=10 loops=1)
@@ -140,7 +136,7 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
 SELECT str AS result
 FROM expln('
 SELECT x,y FROM A,B WHERE x < 10 AND A.x = B.y;') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE '%Memory%';
                            result                            
 -------------------------------------------------------------
  Merge Join (actual rows=100000 loops=1)
@@ -169,7 +165,7 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
 SELECT str AS result
 FROM expln('
 SELECT x FROM A,B where x < 10 and y > 10 group by(x);') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE '%Memory%';
                           result                          
 ----------------------------------------------------------
  HashAggregate (actual rows=0 loops=1)
@@ -200,7 +196,7 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
 SELECT str AS result
 FROM expln('
 SELECT x,y FROM A,B WHERE x < 10 and y > 10 AND A.x = B.y;') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%'
+WHERE str NOT LIKE '%Memory%'
 ;
                           result                          
 ----------------------------------------------------------
