@@ -164,7 +164,7 @@ SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
 SELECT str FROM expln('
   EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, SUMMARY OFF, TIMING OFF)
     SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1') AS str
-WHERE str NOT LIKE '%Heap Blocks%' AND str NOT LIKE '%Query Identifier%';
+WHERE str NOT LIKE '%Heap Blocks%';
 
 -- Best choice is ...
 ANALYZE t;

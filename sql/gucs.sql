@@ -12,6 +12,7 @@ $$ LANGUAGE PLPGSQL;
 SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = true;
+SET compute_query_id = 'auto';
 
 CREATE TABLE t(x int);
 INSERT INTO t (x) (SELECT * FROM generate_series(1, 100) AS gs);
@@ -19,14 +20,16 @@ ANALYZE t;
 
 SELECT true FROM aqo_reset(); -- Remember! DROP EXTENSION doesn't remove any AQO data gathered.
 -- Check AQO addons to explain (the only stable data)
-SELECT str FROM expln('
+SELECT regexp_replace(
+        str,'Query Identifier: -?\m\d+\M','Query Identifier: N','g') as str FROM expln('
   EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
     SELECT x FROM t;
-') AS str WHERE str NOT LIKE '%Query Identifier%';
-SELECT str FROM expln('
+') AS str;
+SELECT regexp_replace(
+        str,'Query Identifier: -?\m\d+\M','Query Identifier: N','g') as str FROM expln('
   EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
     SELECT x FROM t;
-') AS str WHERE str NOT LIKE '%Query Identifier%';
+') AS str;
 SET aqo.mode = 'disabled';
 
 -- Check existence of the interface functions.
