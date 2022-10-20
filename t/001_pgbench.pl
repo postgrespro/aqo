@@ -335,7 +335,7 @@ $res = $node->safe_psql('postgres',
 	"SELECT sum(executions_with_aqo) FROM test.aqo_query_stat");
 
 # 25 trans * 10 clients * 4 query classes = 1000 + unique SELECT to pgbench_branches
-is($res, 1001, 'Each query should be logged in LEARN mode');
+is($res, $ENV{CLIENTS}*100+1, 'Each query should be logged in LEARN mode');
 $res = $node->safe_psql('postgres',
 	"SELECT sum(executions_without_aqo) FROM test.aqo_query_stat");
 is($res, 0, 'AQO has learned on the queries - 2');
