@@ -11,25 +11,10 @@ OBJS = $(WIN32RES) \
 
 TAP_TESTS = 1
 
-REGRESS =	aqo_disabled \
-			aqo_controlled \
-			aqo_intelligent \
-			aqo_forced \
-			aqo_learn \
-			schema \
-			aqo_fdw \
-			aqo_CVE-2020-14350 \
-			gucs \
-			forced_stat_collection \
-			unsupported \
-			clean_aqo_data \
-			plancache	\
-			statement_timeout \
-			temp_tables \
-			top_queries \
-			relocatable\
-			look_a_like \
-			feature_subspace
+# Use an empty dummy test to define the variable REGRESS and therefore run all
+# regression tests. regress_schedule contains the full list of real tests.
+REGRESS = aqo_dummy_test
+REGRESS_OPTS = --schedule=$(srcdir)/regress_schedule
 
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw
 stat_srcdir = $(top_srcdir)/contrib/pg_stat_statements
