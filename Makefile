@@ -11,26 +11,8 @@ OBJS = $(WIN32RES) \
 
 TAP_TESTS = 1
 
-REGRESS =	aqo_disabled \
-			aqo_controlled \
-			aqo_intelligent \
-			aqo_forced \
-			aqo_learn \
-			schema \
-			aqo_fdw \
-			aqo_CVE-2020-14350 \
-			gucs \
-			forced_stat_collection \
-			unsupported \
-			clean_aqo_data \
-			parallel_workers	\
-			plancache	\
-			statement_timeout \
-			temp_tables \
-			top_queries \
-			relocatable\
-			look_a_like \
-			feature_subspace
+REGRESS = feature_subspace
+REGRESS_OPTS = --schedule=$(top_srcdir)/$(subdir)/regress_schedule
 
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw
 stat_srcdir = $(top_srcdir)/contrib/pg_stat_statements
