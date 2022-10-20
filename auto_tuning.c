@@ -33,6 +33,12 @@ static bool is_stable(double *elems, int nelems);
 static bool converged_cq(double *elems, int nelems);
 static bool is_in_infinite_loop_cq(double *elems, int nelems);
 
+static bool
+not_used_function(int parameter)
+{
+	return parameter % 2;
+}
+
 
 /*
  * Returns mean value of the array of doubles.
