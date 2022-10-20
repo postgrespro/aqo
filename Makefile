@@ -12,7 +12,7 @@ OBJS = $(WIN32RES) \
 TAP_TESTS = 1
 
 REGRESS = feature_subspace
-REGRESS_OPTS = --schedule=$(top_srcdir)/$(subdir)/regress_schedule
+REGRESS_OPTS = --schedule=$(srcdir)/regress_schedule
 
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw
 stat_srcdir = $(top_srcdir)/contrib/pg_stat_statements
