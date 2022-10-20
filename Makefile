@@ -11,7 +11,9 @@ OBJS = $(WIN32RES) \
 
 TAP_TESTS = 1
 
-REGRESS = feature_subspace
+# Use an empty dummy test to define the variable REGRESS and therefore run all
+# regression tests. regress_schedule contains the full list of real tests.
+REGRESS = aqo_dummy_test
 REGRESS_OPTS = --schedule=$(srcdir)/regress_schedule
 
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw
