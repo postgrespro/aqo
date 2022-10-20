@@ -21,10 +21,11 @@ jobs:
         echo "Deploying to production server on branch" $BRANCH_NAME
         git config --global user.email "ci@postgrespro.ru"
         git config --global user.name "CI PgPro admin"
+        export COPT=-Werror
         git clone https://github.com/postgres/postgres.git pg
         cd pg
         git checkout master
-        ./configure --prefix=`pwd`/tmp_install CFLAGS="-O3" --enable-tap-tests --enable-cassert COPT=-Werror
+        ./configure --prefix=`pwd`/tmp_install CFLAGS="-O3" --enable-tap-tests --enable-cassert
         git clone https://github.com/postgrespro/aqo.git contrib/aqo
         git -C contrib/aqo checkout $BRANCH_NAME
         patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_master.patch
