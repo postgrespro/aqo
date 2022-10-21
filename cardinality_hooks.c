@@ -167,8 +167,7 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	{
 		/* Predict for a plane table. */
 		Assert(rte->eref && rte->eref->aliasname);
-
-		 get_list_of_relids(root, rel->relids, &rels);
+		get_list_of_relids(root, rel->relids, &rels);
 	}
 
 	clauses = aqo_get_clauses(root, rel->baserestrictinfo);

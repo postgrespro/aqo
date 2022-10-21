@@ -14,9 +14,9 @@ To avoid compatibility issues, the following branches in the git-repository are 
 * `stable11` - for PG v10 and v11.
 * `stable12` - for PG v12.
 * `stable13` - for PG v13.
-* `stable14` - for PG v14.
-* `stable15` - for PG v15.
-* the `master` branch of the AQO repository correctly works with PGv15 and the PostgreSQL `master` branch.
+
+And beyond uses the same principle: digits in the name of a branch correspond to the version of PG core.
+The `master` branch of the AQO repository contains most fresh inventions, can be treated as **unstable** and should be used with PostgreSQL `master` branch.
 
 The module contains a patch and an extension. Patch has to be applied to the
 sources of PostgresSQL. Patch affects header files, that is why PostgreSQL
@@ -52,7 +52,8 @@ and restart PostgreSQL.
 
 It is essential that library is preloaded during server startup, because
 adaptive query optimization must be enabled on per-cluster basis instead
-of per-database.
+of per-database. Also, ML knowledge base is kept in shared memory which
+is initialized during a startup.
 
 ## Usage
 

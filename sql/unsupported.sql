@@ -22,7 +22,7 @@ CREATE TABLE t1 AS SELECT mod(gs,10) AS x, mod(gs+1,10) AS y
 ANALYZE t, t1;
 
 --
--- Do not support HAVING clauses for now.
+-- Do not support HAVING clause for now.
 --
 SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
 EXPLAIN (COSTS OFF)
