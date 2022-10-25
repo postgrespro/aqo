@@ -169,10 +169,13 @@ INSERT INTO main SELECT i, 'val_' || i FROM generate_series(1,100) i;
 INSERT INTO ref SELECT i, mod(i, 10) + 1, 'val_' || i FROM generate_series(1,1000) i;
 ANALYZE local_main_p0, local_main_p1, main_p2;
 ANALYZE local_ref_p0, local_ref_p1, ref_p2;
+SELECT str AS result
+FROM expln('
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT * from main AS a, ref AS b
-WHERE a.aid = b.aid AND b.bval like 'val%';
-                             QUERY PLAN                             
+WHERE a.aid = b.aid AND b.bval like ''val%''') AS str
+WHERE str NOT LIKE '%Memory%';
+                               result                               
 --------------------------------------------------------------------
  Append (actual rows=1000 loops=1)
    AQO not used
@@ -189,18 +192,20 @@ WHERE a.aid = b.aid AND b.bval like 'val%';
                AQO not used
                Filter: (bval ~~ 'val%'::text)
          ->  Hash (actual rows=38 loops=1)
-               Buckets: 1024  Batches: 1  Memory Usage: 10kB
                ->  Seq Scan on main_p2 a_3 (actual rows=38 loops=1)
                      AQO not used
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1
-(21 rows)
+(20 rows)
 
+SELECT str AS result
+FROM expln('
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT * from main AS a, ref AS b
-WHERE a.aid = b.aid AND b.bval like 'val%';
-                             QUERY PLAN                             
+WHERE a.aid = b.aid AND b.bval like ''val%''') AS str
+WHERE str NOT LIKE '%Memory%';
+                               result                               
 --------------------------------------------------------------------
  Append (actual rows=1000 loops=1)
    AQO not used
@@ -217,13 +222,12 @@ WHERE a.aid = b.aid AND b.bval like 'val%';
                AQO: rows=300, error=0%
                Filter: (bval ~~ 'val%'::text)
          ->  Hash (actual rows=38 loops=1)
-               Buckets: 1024  Batches: 1  Memory Usage: 10kB
                ->  Seq Scan on main_p2 a_3 (actual rows=38 loops=1)
                      AQO: rows=38, error=0%
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1
-(21 rows)
+(20 rows)
 
 DROP TABLE main, local_main_p0, local_main_p1;
 DROP TABLE ref, local_ref_p0, local_ref_p1;
