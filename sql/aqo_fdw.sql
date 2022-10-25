@@ -114,13 +114,19 @@ INSERT INTO ref SELECT i, mod(i, 10) + 1, 'val_' || i FROM generate_series(1,100
 ANALYZE local_main_p0, local_main_p1, main_p2;
 ANALYZE local_ref_p0, local_ref_p1, ref_p2;
 
+SELECT str AS result
+FROM expln('
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT * from main AS a, ref AS b
-WHERE a.aid = b.aid AND b.bval like 'val%';
+WHERE a.aid = b.aid AND b.bval like ''val%''') AS str
+WHERE str NOT LIKE '%Memory%';
 
+SELECT str AS result
+FROM expln('
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT * from main AS a, ref AS b
-WHERE a.aid = b.aid AND b.bval like 'val%';
+WHERE a.aid = b.aid AND b.bval like ''val%''') AS str
+WHERE str NOT LIKE '%Memory%';
 
 DROP TABLE main, local_main_p0, local_main_p1;
 DROP TABLE ref, local_ref_p0, local_ref_p1;
