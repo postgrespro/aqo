@@ -52,7 +52,7 @@ typedef enum {
 
 typedef enum {
 	AD_FS = 0, AD_FSS, AD_NFEATURES, AD_FEATURES, AD_TARGETS, AD_RELIABILITY,
-	AD_OIDS, AD_TOTAL_NCOLS
+	AD_OIDS, AD_PREV_FS, AD_NEXT_FS, AD_TOTAL_NCOLS
 } aqo_data_cols;
 
 typedef enum {
@@ -74,6 +74,7 @@ dsa_area *qtext_dsa = NULL;
 HTAB *data_htab = NULL;
 dsa_area *data_dsa = NULL;
 HTAB *deactivated_queries = NULL;
+HTAB *fss_neighbours = NULL;
 
 /* Used to check data file consistency */
 static const uint32 PGAQO_FILE_HEADER = 123467589;
@@ -1293,6 +1294,7 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	DataEntry  *entry;
 	bool		found;
 	data_key	key = {.fs = fs, .fss = fss};
+	fs_list     neighbour_list = {0};
 	int			i;
 	char	   *ptr;
 	ListCell   *lc;
@@ -1300,6 +1302,7 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	bool		tblOverflow;
 	HASHACTION	action;
 	bool		result;
+	DataEntry**  prev;
 
 	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
 
@@ -1384,11 +1387,31 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	Assert(ptr != NULL);
 
 	/*
+	*  Find prev fss
+	*/
+
+	prev = (DataEntry **) hash_search(fss_neighbours, &fss, HASH_ENTER, &found);
+	if (!found)
+	{
+		*prev = entry;
+	}
+	else
+	{
+		(*prev)->list.next_fs = fss;
+	}
+	neighbour_list.prev_fs = (*prev)->key.fs;
+
+	prev = (DataEntry **) hash_search(fss_neighbours, &fss, HASH_FIND, &found);
+	elog(NOTICE, "%d", found);
+
+	/*
 	 * Copy AQO data into allocated DSA segment
 	 */
 
 	memcpy(ptr, &key, sizeof(data_key)); /* Just for debug */
 	ptr += sizeof(data_key);
+	memcpy(ptr,&neighbour_list, sizeof(fs_list));
+	ptr += sizeof(fs_list);
 	if (entry->cols > 0)
 	{
 		for (i = 0; i < entry->rows; i++)
@@ -1652,6 +1675,8 @@ aqo_data(PG_FUNCTION_ARGS)
 		values[AD_FS] = Int64GetDatum(entry->key.fs);
 		values[AD_FSS] = Int32GetDatum((int) entry->key.fss);
 		values[AD_NFEATURES] = Int32GetDatum(entry->cols);
+		values[AD_PREV_FS] = Int64GetDatum(entry->list.prev_fs);
+		values[AD_NEXT_FS] = Int64GetDatum(entry->list.next_fs);
 
 		/* Fill values from the DSA data chunk */
 		Assert(DsaPointerIsValid(entry->data_dp));
@@ -2135,6 +2160,8 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 		foreach(lc, junk_fss)
 		{
 			data_key	key = {.fs = entry->fs, .fss = lfirst_int(lc)};
+			//TODO fix fs list
+			hash_search(fss_neighbours, &lfirst_int(lc), HASH_REMOVE, NULL);
 			(*fss_num) += (int) _aqo_data_remove(&key);
 		}
 
