@@ -20,7 +20,6 @@ DROP TABLE public.aqo_queries CASCADE;
 DROP TABLE public.aqo_query_texts CASCADE;
 DROP TABLE public.aqo_query_stat CASCADE;
 
-
 /*
  * VIEWs to discover AQO data.
  */
@@ -62,7 +61,9 @@ CREATE FUNCTION aqo_data (
   OUT features		double precision[][],
   OUT targets		double precision[],
   OUT reliability	double precision[],
-  OUT oids			Oid[]
+  OUT oids			Oid[],
+  OUT prev_fs bigint,
+  OUT next_fs bigint
 )
 RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'aqo_data'

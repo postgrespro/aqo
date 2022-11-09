@@ -55,9 +55,16 @@ typedef struct data_key
 	int64	fss; /* just for alignment */
 } data_key;
 
+typedef struct fs_list
+{
+	int64	prev_fs;
+	int64	next_fs;
+} fs_list;
+
 typedef struct DataEntry
 {
 	data_key key;
+	fs_list list;
 
 	/* defines a size and data placement in the DSA memory block */
 	int cols; /* aka nfeatures */
@@ -89,6 +96,7 @@ extern HTAB *stat_htab;
 extern HTAB *qtexts_htab;
 extern HTAB *queries_htab; /* TODO */
 extern HTAB *data_htab; /* TODO */
+extern HTAB *fss_neighbours;
 
 extern StatEntry *aqo_stat_store(uint64 queryid, bool use_aqo, double plan_time,
 								 double exec_time, double est_error);
