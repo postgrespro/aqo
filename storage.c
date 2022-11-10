@@ -1393,16 +1393,15 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	prev = (DataEntry **) hash_search(fss_neighbours, &fss, HASH_ENTER, &found);
 	if (!found)
 	{
-		*prev = entry;
+		prev = memcpy(palloc(sizeof(DataEntry **)), entry, sizeof(DataEntry **));
+		//*prev = entry;
 	}
 	else
 	{
 		(*prev)->list.next_fs = fss;
+		neighbour_list.prev_fs = (*prev)->key.fs;
 	}
-	neighbour_list.prev_fs = (*prev)->key.fs;
 
-	prev = (DataEntry **) hash_search(fss_neighbours, &fss, HASH_FIND, &found);
-	elog(NOTICE, "%d", found);
 
 	/*
 	 * Copy AQO data into allocated DSA segment
