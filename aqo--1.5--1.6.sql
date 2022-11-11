@@ -98,3 +98,17 @@ AS 'MODULE_PATHNAME', 'aqo_queries'
 LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
 
 CREATE VIEW aqo_queries AS SELECT * FROM aqo_queries();
+
+-- Show how much shared memory AQO are using at the moment
+CREATE FUNCTION aqo_memory_usage(
+  OUT name text,
+  OUT allocated_size int,
+  OUT used_size int
+)
+RETURNS SETOF record
+AS $$
+  SELECT name, allocated_size, size FROM pg_shmem_allocations
+  WHERE name LIKE 'AQO%';
+$$ LANGUAGE SQL;
+COMMENT ON FUNCTION aqo_memory_usage() IS
+'Show how much shared memory AQO are using at the moment';
