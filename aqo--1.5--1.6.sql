@@ -98,3 +98,19 @@ AS 'MODULE_PATHNAME', 'aqo_queries'
 LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
 
 CREATE VIEW aqo_queries AS SELECT * FROM aqo_queries();
+
+CREATE FUNCTION aqo_memory_usage(
+  OUT name text,
+  OUT allocated_size int,
+  OUT used_size int
+)
+RETURNS SETOF record
+AS $$
+  SELECT name, total_bytes, used_bytes FROM pg_backend_memory_contexts
+  WHERE name LIKE 'AQO%'
+  UNION
+  SELECT name, allocated_size, size FROM pg_shmem_allocations
+  WHERE name LIKE 'AQO%';
+$$ LANGUAGE SQL;
+COMMENT ON FUNCTION aqo_memory_usage() IS
+'Show allocated sizes and used sizes of aqo`s memory contexts and hash tables';

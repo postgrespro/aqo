@@ -160,6 +160,9 @@ $res = $node->safe_psql('postgres',
 						WHERE v.exec_time > 0.");
 is($res, 3);
 
+$res = $node->safe_psql('postgres', "SELECT * FROM aqo_memory_usage() AS t1");
+note("MEMORY:\n$res\n");
+
 # ##############################################################################
 #
 # pgbench on a database with AQO in 'learn' mode.
@@ -183,6 +186,9 @@ $node->safe_psql('postgres', "SELECT pg_reload_conf()");
 $node->command_ok([ 'pgbench', '-t',
 					"$TRANSACTIONS", '-c', "$CLIENTS", '-j', "$THREADS" ],
 					'pgbench in frozen mode');
+
+$res = $node->safe_psql('postgres', "SELECT * FROM aqo_memory_usage() AS t1");
+note("MEMORY:\n$res\n");
 
 # ##############################################################################
 #
@@ -298,6 +304,9 @@ is($new_fs_samples_count == $fs_samples_count - $pgb_fs_samples_count, 1,
 	'Total number of samples in aqo_query_texts');
 is($new_stat_count == $stat_count - $pgb_stat_count, 1,
 	'Total number of samples in aqo_query_stat');
+
+$res = $node->safe_psql('postgres', "SELECT * FROM aqo_memory_usage() AS t1");
+note("MEMORY:\n$res\n");
 
 # ##############################################################################
 #
