@@ -200,12 +200,14 @@ aqo_init_shmem(void)
 		aqo_state->stat_changed = false;
 		aqo_state->data_changed = false;
 		aqo_state->queries_changed = false;
+		aqo_state->neighbours_changed = false;
 
 		LWLockInitialize(&aqo_state->lock, LWLockNewTrancheId());
 		LWLockInitialize(&aqo_state->stat_lock, LWLockNewTrancheId());
 		LWLockInitialize(&aqo_state->qtexts_lock, LWLockNewTrancheId());
 		LWLockInitialize(&aqo_state->data_lock, LWLockNewTrancheId());
 		LWLockInitialize(&aqo_state->queries_lock, LWLockNewTrancheId());
+		LWLockInitialize(&aqo_state->neighbours_lock, LWLockNewTrancheId());
 	}
 
 	/* Init shared memory hash for partial aqo data table*/
@@ -241,7 +243,7 @@ aqo_init_shmem(void)
 
 	/* Shared memory hash table for fss neighbours */
 	info.keysize = sizeof(int);
-	info.entrysize = sizeof(DataEntry*);
+	info.entrysize = sizeof(uint64);
 	fss_neighbours = ShmemInitHash("AQO fss neighbours HTAB", fss_max_items, fss_max_items,
 							  &info, HASH_ELEM | HASH_BLOBS);
 
@@ -252,6 +254,7 @@ aqo_init_shmem(void)
 	LWLockRegisterTranche(aqo_state->qtext_trancheid, "AQO Query Texts Tranche");
 	LWLockRegisterTranche(aqo_state->data_lock.tranche, "AQO Data Lock Tranche");
 	LWLockRegisterTranche(aqo_state->queries_lock.tranche, "AQO Queries Lock Tranche");
+	LWLockRegisterTranche(aqo_state->neighbours_lock.tranche, "AQO Neighbours Lock Tranche");
 
 	if (!IsUnderPostmaster && !found)
 	{
@@ -293,7 +296,7 @@ aqo_memsize(void)
 	size = add_size(size, hash_estimate_size(fs_max_items, sizeof(QueryTextEntry)));
 	size = add_size(size, hash_estimate_size(fss_max_items, sizeof(DataEntry)));
 	size = add_size(size, hash_estimate_size(fs_max_items, sizeof(QueriesEntry)));
-	size = add_size(size, hash_estimate_size(fss_max_items, sizeof(DataEntry*)));
+	size = add_size(size, hash_estimate_size(fss_max_items, sizeof(uint64)));
 
 	return size;
 }

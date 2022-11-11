@@ -57,8 +57,8 @@ typedef struct data_key
 
 typedef struct fs_list
 {
-	int64	prev_fs;
-	int64	next_fs;
+	uint64	prev_fs;
+	uint64	next_fs;
 } fs_list;
 
 typedef struct DataEntry
