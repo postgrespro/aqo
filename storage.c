@@ -1302,7 +1302,7 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	bool		tblOverflow;
 	HASHACTION	action;
 	bool		result;
-	DataEntry**  prev;
+	uint64     *prev_fs;
 
 	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
 
@@ -1387,20 +1387,32 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	Assert(ptr != NULL);
 
 	/*
-	*  Find prev fss
+	*  Find prev fs with the same fss
 	*/
 
-	prev = (DataEntry **) hash_search(fss_neighbours, &fss, HASH_ENTER, &found);
+	LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
+
+	prev_fs = (uint64 *) hash_search(fss_neighbours, &fss, HASH_ENTER, &found);
 	if (!found)
 	{
-		prev = memcpy(palloc(sizeof(DataEntry **)), entry, sizeof(DataEntry **));
-		//*prev = entry;
+		//*prev_fs = fs;
+		memcpy(prev_fs, &entry->key.fs, sizeof(uint64));
 	}
 	else
 	{
-		(*prev)->list.next_fs = fss;
-		neighbour_list.prev_fs = (*prev)->key.fs;
+		data_key	prev_key = {.fs = *prev_fs, .fss = fss};
+		DataEntry  *prev;
+
+		prev = (DataEntry *) hash_search(data_htab, &prev_key, HASH_FIND, NULL);
+		//prev->list.next_fs = fs;
+		memcpy(&prev->list.next_fs, &fs, sizeof(uint64));
+		neighbour_list.prev_fs = prev->key.fs;
 	}
+
+	prev_fs = (uint64 *) hash_search(fss_neighbours, &fss, HASH_FIND, &found);
+	elog(NOTICE, "%d 🗿🔫", found);
+
+	LWLockRelease(&aqo_state->neighbours_lock);
 
 
 	/*
@@ -1409,7 +1421,7 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 
 	memcpy(ptr, &key, sizeof(data_key)); /* Just for debug */
 	ptr += sizeof(data_key);
-	memcpy(ptr,&neighbour_list, sizeof(fs_list));
+	memcpy(ptr, &neighbour_list, sizeof(fs_list));
 	ptr += sizeof(fs_list);
 	if (entry->cols > 0)
 	{
