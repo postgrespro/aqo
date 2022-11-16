@@ -77,14 +77,14 @@ CREATE VIEW aqo_queries AS SELECT * FROM aqo_queries();
 /* UI functions */
 
 
-CREATE FUNCTION aqo_enable_class(queryid bigint)
+CREATE FUNCTION aqo_enable_query(queryid bigint)
 RETURNS void
-AS 'MODULE_PATHNAME', 'aqo_enable_class'
+AS 'MODULE_PATHNAME', 'aqo_enable_query'
 LANGUAGE C STRICT VOLATILE;
 
-CREATE FUNCTION aqo_disable_class(queryid bigint)
+CREATE FUNCTION aqo_disable_query(queryid bigint)
 RETURNS void
-AS 'MODULE_PATHNAME', 'aqo_disable_class'
+AS 'MODULE_PATHNAME', 'aqo_enable_query'
 LANGUAGE C STRICT VOLATILE;
 
 CREATE FUNCTION aqo_queries_update(
