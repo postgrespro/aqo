@@ -49,7 +49,8 @@ SELECT count(*) FROM
   (SELECT max(id) AS id, payload FROM t
     WHERE id % 101 = 0 GROUP BY (payload)) AS q2
 WHERE q1.id = q2.id;') AS str
-WHERE str NOT LIKE '%Workers%' AND str NOT LIKE '%Sort Method%';
+WHERE str NOT LIKE '%Workers%' AND str NOT LIKE '%Sort Method%'
+  AND str NOT LIKE '%Gather Merge%';
 
 
 RESET parallel_tuple_cost;
