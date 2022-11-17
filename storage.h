@@ -89,6 +89,12 @@ typedef struct QueriesEntry
 	bool	auto_tuning;
 } QueriesEntry;
 
+typedef struct NeighboursEntry
+{
+	int64	fss;
+	uint64	fs;
+} NeighboursEntry;
+
 extern int querytext_max_size;
 extern int dsm_size_max;
 

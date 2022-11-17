@@ -1291,18 +1291,17 @@ _compute_data_dsa(const DataEntry *entry)
 bool
 aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 {
-	DataEntry  *entry;
-	bool		found;
-	data_key	key = {.fs = fs, .fss = fss};
-	fs_list     neighbour_list = {0};
-	int			i;
-	char	   *ptr;
-	ListCell   *lc;
-	size_t		size;
-	bool		tblOverflow;
-	HASHACTION	action;
-	bool		result;
-	uint64     *prev_fs;
+	DataEntry          *entry;
+	bool				found;
+	data_key			key = {.fs = fs, .fss = fss};
+	int					i;
+	char	           *ptr;
+	ListCell   		   *lc;
+	size_t				size;
+	bool				tblOverflow;
+	HASHACTION			action;
+	bool				result;
+	NeighboursEntry    *prev_fs;
 
 	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
 
@@ -1392,25 +1391,23 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 
 	LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
 
-	prev_fs = (uint64 *) hash_search(fss_neighbours, &fss, HASH_ENTER, &found);
+	prev_fs = (NeighboursEntry *) hash_search(fss_neighbours, &fss, HASH_ENTER, &found);
 	if (!found)
 	{
-		//*prev_fs = fs;
-		memcpy(prev_fs, &entry->key.fs, sizeof(uint64));
+		entry->list.prev_fs = fs;
+		entry->list.next_fs = fs;
 	}
 	else
 	{
-		data_key	prev_key = {.fs = *prev_fs, .fss = fss};
+		data_key	prev_key = {.fs = prev_fs->fs, .fss = fss};
 		DataEntry  *prev;
 
 		prev = (DataEntry *) hash_search(data_htab, &prev_key, HASH_FIND, NULL);
-		//prev->list.next_fs = fs;
-		memcpy(&prev->list.next_fs, &fs, sizeof(uint64));
-		neighbour_list.prev_fs = prev->key.fs;
+		prev->list.next_fs = fs;
+		entry->list.next_fs = fs;
+		entry->list.prev_fs = prev->key.fs;
 	}
-
-	prev_fs = (uint64 *) hash_search(fss_neighbours, &fss, HASH_FIND, &found);
-	elog(NOTICE, "%d 🗿🔫", found);
+	prev_fs->fs = entry->key.fs;
 
 	LWLockRelease(&aqo_state->neighbours_lock);
 
@@ -1421,8 +1418,6 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 
 	memcpy(ptr, &key, sizeof(data_key)); /* Just for debug */
 	ptr += sizeof(data_key);
-	memcpy(ptr, &neighbour_list, sizeof(fs_list));
-	ptr += sizeof(fs_list);
 	if (entry->cols > 0)
 	{
 		for (i = 0; i < entry->rows; i++)
@@ -2170,9 +2165,52 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 		/* Remove junk records from aqo_data */
 		foreach(lc, junk_fss)
 		{
-			data_key	key = {.fs = entry->fs, .fss = lfirst_int(lc)};
-			//TODO fix fs list
-			hash_search(fss_neighbours, &lfirst_int(lc), HASH_REMOVE, NULL);
+			data_key			key = {.fs = entry->fs, .fss = lfirst_int(lc)};
+			bool            	found;
+			bool        		has_prev_fs = false;
+			bool 				has_next_fs = false;
+			DataEntry		   *current_entry;
+			DataEntry		   *prev_entry;
+			DataEntry		   *next_entry;
+			NeighboursEntry    *fss_htab_entry;
+
+			/* fix fs list */
+			current_entry = (DataEntry *) hash_search(data_htab, &key, HASH_FIND, &found);
+			if (found)
+			{
+				data_key	neighbour_key = {.fs = current_entry->list.prev_fs, .fss = key.fss};
+
+				if (key.fs != current_entry->list.prev_fs)
+				{
+					prev_entry = (DataEntry *) hash_search(data_htab, &neighbour_key, HASH_FIND, &has_prev_fs);
+				}
+
+				neighbour_key.fs = current_entry->list.next_fs;
+				if (key.fs != current_entry->list.next_fs)
+				{
+					next_entry = (DataEntry *) hash_search(data_htab, &neighbour_key, HASH_FIND, &has_next_fs);
+				}
+
+				if (has_prev_fs)
+					prev_entry->list.next_fs = has_next_fs ? current_entry->list.next_fs : prev_entry->key.fs;
+				if (has_next_fs)
+					next_entry->list.prev_fs = has_prev_fs ? current_entry->list.prev_fs : next_entry->key.fs;
+
+			}
+
+			/* Fix or remove neighbours htab entry*/
+			fss_htab_entry = (NeighboursEntry *) hash_search(fss_neighbours, &key.fss, HASH_FIND, &found);
+			if (found && fss_htab_entry->fs == key.fs)
+			{
+				if (has_prev_fs)
+				{
+					fss_htab_entry->fs = prev_entry->key.fs;
+				}
+				else
+				{
+					hash_search(fss_neighbours, &key.fss, HASH_REMOVE, NULL);
+				}
+			}
 			(*fss_num) += (int) _aqo_data_remove(&key);
 		}
 
