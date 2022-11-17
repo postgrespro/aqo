@@ -69,7 +69,8 @@ SELECT count(*) FROM
   (SELECT max(id) AS id, payload FROM t
     WHERE id % 101 = 0 GROUP BY (payload)) AS q2
 WHERE q1.id = q2.id;') AS str
-WHERE str NOT LIKE '%Workers%' AND str NOT LIKE '%Sort Method%';
+WHERE str NOT LIKE '%Workers%' AND str NOT LIKE '%Sort Method%'
+  AND str NOT LIKE '%Gather Merge%';
                                                str                                                
 --------------------------------------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
@@ -84,7 +85,6 @@ WHERE str NOT LIKE '%Workers%' AND str NOT LIKE '%Sort Method%';
                      ->  Finalize GroupAggregate (actual rows=1 loops=1)
                            AQO not used
                            Group Key: t.payload
-                           ->  Gather Merge (actual rows=3 loops=1)
                                  AQO not used
                                  ->  Partial GroupAggregate (actual rows=1 loops=3)
                                        AQO not used
@@ -99,7 +99,6 @@ WHERE str NOT LIKE '%Workers%' AND str NOT LIKE '%Sort Method%';
          ->  Group (actual rows=1000 loops=1)
                AQO not used
                Group Key: t_1.id
-               ->  Gather Merge (actual rows=1000 loops=1)
                      AQO not used
                      ->  Group (actual rows=333 loops=3)
                            AQO not used
@@ -114,7 +113,7 @@ WHERE str NOT LIKE '%Workers%' AND str NOT LIKE '%Sort Method%';
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1
-(42 rows)
+(40 rows)
 
 RESET parallel_tuple_cost;
 RESET parallel_setup_cost;
