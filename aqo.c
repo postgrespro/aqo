@@ -31,6 +31,7 @@
 PG_MODULE_MAGIC;
 
 void _PG_init(void);
+//test gitlab
 
 #define AQO_MODULE_MAGIC	(1234)
 
