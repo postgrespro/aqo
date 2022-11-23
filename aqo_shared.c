@@ -245,7 +245,7 @@ aqo_init_shmem(void)
 
 	/* Shared memory hash table for fss neighbours */
 	info.keysize = sizeof(int);
-	info.entrysize = sizeof(uint64);
+	info.entrysize = sizeof(DataEntry *);
 	fss_neighbours = ShmemInitHash("AQO fss neighbours HTAB", fss_max_items, fss_max_items,
 							  &info, HASH_ELEM | HASH_BLOBS);
 
@@ -298,7 +298,7 @@ aqo_memsize(void)
 	size = add_size(size, hash_estimate_size(fs_max_items, sizeof(QueryTextEntry)));
 	size = add_size(size, hash_estimate_size(fss_max_items, sizeof(DataEntry)));
 	size = add_size(size, hash_estimate_size(fs_max_items, sizeof(QueriesEntry)));
-	size = add_size(size, hash_estimate_size(fss_max_items, sizeof(uint64)));
+	size = add_size(size, hash_estimate_size(fss_max_items, sizeof(DataEntry *)));
 
 	return size;
 }

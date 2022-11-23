@@ -1301,7 +1301,7 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	bool				tblOverflow;
 	HASHACTION			action;
 	bool				result;
-	NeighboursEntry    *prev_fs;
+	NeighboursEntry    *prev;
 
 	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
 
@@ -1389,28 +1389,25 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	*  Find prev fs with the same fss
 	*/
 
-	LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
+	if (!found) {
+		LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
 
-	prev_fs = (NeighboursEntry *) hash_search(fss_neighbours, &fss, HASH_ENTER, &found);
-	if (!found)
-	{
-		entry->list.prev_fs = fs;
-		entry->list.next_fs = fs;
+		prev = (NeighboursEntry *) hash_search(fss_neighbours, &fss, HASH_ENTER, &found);
+		if (!found)
+		{
+			entry->list.prev = NULL;
+			entry->list.next = NULL;
+		}
+		else
+		{
+			prev->data->list.next = entry;
+			entry->list.next = NULL;
+			entry->list.prev = prev->data;
+		}
+		prev->data = entry;
+
+		LWLockRelease(&aqo_state->neighbours_lock);
 	}
-	else
-	{
-		data_key	prev_key = {.fs = prev_fs->fs, .fss = fss};
-		DataEntry  *prev;
-
-		prev = (DataEntry *) hash_search(data_htab, &prev_key, HASH_FIND, NULL);
-		prev->list.next_fs = fs;
-		entry->list.next_fs = fs;
-		entry->list.prev_fs = prev->key.fs;
-	}
-	prev_fs->fs = entry->key.fs;
-
-	LWLockRelease(&aqo_state->neighbours_lock);
-
 
 	/*
 	 * Copy AQO data into allocated DSA segment
@@ -1587,6 +1584,7 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 		int				noids = -1;
 
 		found = false;
+		// TODO replace with hash
 		hash_seq_init(&hash_seq, data_htab);
 		while ((entry = hash_seq_search(&hash_seq)) != NULL)
 		{
@@ -1681,8 +1679,8 @@ aqo_data(PG_FUNCTION_ARGS)
 		values[AD_FS] = Int64GetDatum(entry->key.fs);
 		values[AD_FSS] = Int32GetDatum((int) entry->key.fss);
 		values[AD_NFEATURES] = Int32GetDatum(entry->cols);
-		values[AD_PREV_FS] = Int64GetDatum(entry->list.prev_fs);
-		values[AD_NEXT_FS] = Int64GetDatum(entry->list.next_fs);
+		values[AD_PREV_FS] = Int64GetDatum(entry->list.prev);
+		values[AD_NEXT_FS] = Int64GetDatum(entry->list.next);
 
 		/* Fill values from the DSA data chunk */
 		Assert(DsaPointerIsValid(entry->data_dp));
@@ -2167,44 +2165,33 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 		{
 			data_key			key = {.fs = entry->fs, .fss = lfirst_int(lc)};
 			bool            	found;
-			bool        		has_prev_fs = false;
-			bool 				has_next_fs = false;
-			DataEntry		   *current_entry;
-			DataEntry		   *prev_entry;
-			DataEntry		   *next_entry;
+			bool        		has_prev = false;
+			bool 				has_next = false;
+			DataEntry		   *entry;
 			NeighboursEntry    *fss_htab_entry;
 
 			/* fix fs list */
-			current_entry = (DataEntry *) hash_search(data_htab, &key, HASH_FIND, &found);
+			entry = (DataEntry *) hash_search(data_htab, &key, HASH_FIND, &found);
 			if (found)
 			{
-				data_key	neighbour_key = {.fs = current_entry->list.prev_fs, .fss = key.fss};
+				if (entry->list.next)
+					has_next = true;
+				if (entry->list.prev)
+					has_prev = true;
 
-				if (key.fs != current_entry->list.prev_fs)
-				{
-					prev_entry = (DataEntry *) hash_search(data_htab, &neighbour_key, HASH_FIND, &has_prev_fs);
-				}
-
-				neighbour_key.fs = current_entry->list.next_fs;
-				if (key.fs != current_entry->list.next_fs)
-				{
-					next_entry = (DataEntry *) hash_search(data_htab, &neighbour_key, HASH_FIND, &has_next_fs);
-				}
-
-				if (has_prev_fs)
-					prev_entry->list.next_fs = has_next_fs ? current_entry->list.next_fs : prev_entry->key.fs;
-				if (has_next_fs)
-					next_entry->list.prev_fs = has_prev_fs ? current_entry->list.prev_fs : next_entry->key.fs;
-
+				if (has_prev)
+					entry->list.prev->list.next = has_next ? entry->list.next : NULL;
+				if (has_next)
+					entry->list.next->list.prev = has_prev ? entry->list.prev : NULL;
 			}
 
 			/* Fix or remove neighbours htab entry*/
 			fss_htab_entry = (NeighboursEntry *) hash_search(fss_neighbours, &key.fss, HASH_FIND, &found);
-			if (found && fss_htab_entry->fs == key.fs)
+			if (found && fss_htab_entry->data->key.fs == key.fs)
 			{
-				if (has_prev_fs)
+				if (has_prev)
 				{
-					fss_htab_entry->fs = prev_entry->key.fs;
+					fss_htab_entry->data = entry->list.prev;
 				}
 				else
 				{

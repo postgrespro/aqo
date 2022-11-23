@@ -55,16 +55,19 @@ typedef struct data_key
 	int64	fss; /* just for alignment */
 } data_key;
 
-typedef struct fs_list
-{
-	uint64	prev_fs;
-	uint64	next_fs;
-} fs_list;
+typedef struct DataEntry DataEntry;
+typedef struct neigbour_list neigbour_list;
 
-typedef struct DataEntry
+struct neigbour_list
+{
+	DataEntry	*prev;
+	DataEntry	*next;
+};
+
+struct DataEntry
 {
 	data_key key;
-	fs_list list;
+	neigbour_list list;
 
 	/* defines a size and data placement in the DSA memory block */
 	int cols; /* aka nfeatures */
@@ -77,7 +80,7 @@ typedef struct DataEntry
  	 * matrix[][], targets[], reliability[], oids.
 	 */
 	dsa_pointer data_dp;
-} DataEntry;
+};
 
 typedef struct QueriesEntry
 {
@@ -91,8 +94,8 @@ typedef struct QueriesEntry
 
 typedef struct NeighboursEntry
 {
-	int64	fss;
-	uint64	fs;
+	int64		 fss;
+	DataEntry	*data;
 } NeighboursEntry;
 
 extern int querytext_max_size;
