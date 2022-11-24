@@ -52,7 +52,7 @@ typedef enum {
 
 typedef enum {
 	AD_FS = 0, AD_FSS, AD_NFEATURES, AD_FEATURES, AD_TARGETS, AD_RELIABILITY,
-	AD_OIDS, AD_PREV_FS, AD_NEXT_FS, AD_TOTAL_NCOLS
+	AD_OIDS, AD_TOTAL_NCOLS
 } aqo_data_cols;
 
 typedef enum {
@@ -1580,17 +1580,18 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 	else
 	/* Iterate across all elements of the table. XXX: Maybe slow. */
 	{
-		HASH_SEQ_STATUS	hash_seq;
-		int				noids = -1;
+		int					noids = -1;
+		NeighboursEntry    *neighbour_entry;
 
 		found = false;
-		// TODO replace with hash
-		hash_seq_init(&hash_seq, data_htab);
-		while ((entry = hash_seq_search(&hash_seq)) != NULL)
+		neighbour_entry = (NeighboursEntry *) hash_search(fss_neighbours, &fss, HASH_FIND, &found);
+		entry = found ? neighbour_entry->data : NULL;
+
+		while (entry != NULL)
 		{
 			List *tmp_oids = NIL;
 
-			if (entry->key.fss != fss || entry->cols != data->cols)
+			if (entry->cols != data->cols)
 				continue;
 
 			temp_data = _fill_knn_data(entry, &tmp_oids);
@@ -1615,7 +1616,8 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 				list_free(tmp_oids);
 
 			build_knn_matrix(data, temp_data);
-			found = true;
+
+			entry = entry->list.prev;
 		}
 	}
 
@@ -1679,8 +1681,6 @@ aqo_data(PG_FUNCTION_ARGS)
 		values[AD_FS] = Int64GetDatum(entry->key.fs);
 		values[AD_FSS] = Int32GetDatum((int) entry->key.fss);
 		values[AD_NFEATURES] = Int32GetDatum(entry->cols);
-		values[AD_PREV_FS] = Int64GetDatum(entry->list.prev);
-		values[AD_NEXT_FS] = Int64GetDatum(entry->list.next);
 
 		/* Fill values from the DSA data chunk */
 		Assert(DsaPointerIsValid(entry->data_dp));

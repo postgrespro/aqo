@@ -62,9 +62,7 @@ CREATE FUNCTION aqo_data (
   OUT features		double precision[][],
   OUT targets		double precision[],
   OUT reliability	double precision[],
-  OUT oids			Oid[],
-  OUT prev_fs bigint,
-  OUT next_fs bigint
+  OUT oids			Oid[]
 )
 RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'aqo_data'
