@@ -309,7 +309,7 @@ ignore_query_settings:
 		 */
 		if (aqo_queries_store(query_context.query_hash, query_context.fspace_hash,
 						  query_context.learn_aqo, query_context.use_aqo,
-						  query_context.auto_tuning))
+						  query_context.auto_tuning, &aqo_queries_nulls))
 		{
 			/*
 			 * Add query text into the ML-knowledge base. Just for further

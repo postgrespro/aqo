@@ -767,11 +767,21 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 
 	if (query_context.collect_stat)
 	{
+		/*
+		 * aqo_stat_store() is used in 'append' mode.
+		 * 'AqoStatArgs' fields execs_with_aqo, execs_without_aqo,
+		 * cur_stat_slot, cur_stat_slot_aqo are not used in this
+		 * mode and dummy values(0) are set in this case.
+		 */
+		AqoStatArgs stat_arg = { 0, 0, 0,
+			&execution_time, &query_context.planning_time, &cardinality_error,
+			0,
+			&execution_time, &query_context.planning_time, &cardinality_error};
+
 		/* Write AQO statistics to the aqo_query_stat table */
 		stat = aqo_stat_store(query_context.query_hash,
 							  query_context.use_aqo,
-							  query_context.planning_time, execution_time,
-							  cardinality_error);
+							  &stat_arg, true);
 
 		if (stat != NULL)
 		{

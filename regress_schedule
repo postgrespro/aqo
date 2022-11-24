@@ -12,6 +12,7 @@ test: unsupported
 test: clean_aqo_data
 test: parallel_workers
 test: plancache
+test: update_functions
 test: statement_timeout
 test: temp_tables
 test: top_queries
