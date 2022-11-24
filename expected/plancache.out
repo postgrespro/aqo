@@ -44,4 +44,10 @@ SELECT * FROM f1();
 
 DROP FUNCTION f1;
 DROP TABLE test CASCADE;
+SELECT true FROM aqo_reset();
+ bool 
+------
+ t
+(1 row)
+
 DROP EXTENSION aqo;
