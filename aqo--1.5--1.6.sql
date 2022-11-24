@@ -30,3 +30,50 @@ AS 'MODULE_PATHNAME', 'aqo_cleanup'
 LANGUAGE C STRICT VOLATILE;
 COMMENT ON FUNCTION aqo_cleanup() IS
 'Remove unneeded rows from the AQO ML storage';
+
+--
+-- Update or insert an aqo_query_texts
+-- table record for given 'queryid'.
+--
+
+CREATE FUNCTION aqo_query_texts_update(
+  queryid bigint, query_text text)
+RETURNS bool
+AS 'MODULE_PATHNAME', 'aqo_query_texts_update'
+LANGUAGE C VOLATILE;
+
+--
+-- Update or insert an aqo_query_stat
+-- table record for given 'queryid'.
+--
+
+CREATE FUNCTION aqo_query_stat_update(
+  queryid			bigint,
+  execution_time_with_aqo	double precision[],
+  execution_time_without_aqo	double precision[],
+  planning_time_with_aqo	double precision[],
+  planning_time_without_aqo	double precision[],
+  cardinality_error_with_aqo	double precision[],
+  cardinality_error_without_aqo	double precision[],
+  executions_with_aqo		bigint,
+  executions_without_aqo	bigint)
+RETURNS bool
+AS 'MODULE_PATHNAME', 'aqo_query_stat_update'
+LANGUAGE C VOLATILE;
+
+--
+-- Update or insert an aqo_data
+-- table record for given 'fs' & 'fss'.
+--
+
+CREATE FUNCTION aqo_data_update(
+  fs		bigint,
+  fss		integer,
+  nfeatures	integer,
+  features	double precision[][],
+  targets	double precision[],
+  reliability	double precision[],
+  oids		Oid[])
+RETURNS bool
+AS 'MODULE_PATHNAME', 'aqo_data_update'
+LANGUAGE C VOLATILE;
