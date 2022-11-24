@@ -21,6 +21,22 @@ typedef struct OkNNrdata
 	double	rfactors[aqo_K];
 } OkNNrdata;
 
+/*
+ * Auxiliary struct, used for passing arguments
+ * to aqo_data_store() function.
+ */
+typedef struct AqoDataArgs
+{
+	int		rows;	/* Number of filled rows in the matrix */
+	int		cols;	/* Number of columns in the matrix */
+	int		nrels;	/* Number of oids */
+
+	double	**matrix;	/* Pointer ot matrix array */
+	double	*targets;	/* Pointer to array of 'targets' */
+	double	*rfactors;	/* Pointer to array of 'rfactors' */
+	Oid		*oids;		/* Array of relation OIDs */
+} AqoDataArgs;
+
 extern OkNNrdata* OkNNr_allocate(int ncols);
 extern void OkNNr_free(OkNNrdata *data);
 

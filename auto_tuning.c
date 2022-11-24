@@ -202,8 +202,10 @@ automatical_query_tuning(uint64 queryid, StatEntry *stat)
 
 	if (num_iterations <= auto_tuning_max_iterations || p_use > 0.5)
 		aqo_queries_store(queryid, query_context.fspace_hash,
-						  query_context.learn_aqo, query_context.use_aqo, true);
+						  query_context.learn_aqo, query_context.use_aqo, true,
+						  &aqo_queries_nulls);
 	else
 		aqo_queries_store(queryid,
-						  query_context.fspace_hash, false, false, false);
+						  query_context.fspace_hash, false, false, false,
+						  &aqo_queries_nulls);
 }
