@@ -78,6 +78,12 @@ HTAB *deactivated_queries = NULL;
 static const uint32 PGAQO_FILE_HEADER = 123467589;
 static const uint32 PGAQO_PG_MAJOR_VERSION = PG_VERSION_NUM / 100;
 
+/*
+ * Used for internal aqo_queries_store() calls.
+ * No NULL arguments expected in this case.
+ */
+AqoQueriesNullArgs aqo_queries_nulls = { false, false, false, false };
+
 
 static ArrayType *form_matrix(double *matrix, int nrows, int ncols);
 static void dsa_init(void);
@@ -105,6 +111,9 @@ PG_FUNCTION_INFO_V1(aqo_cleanup);
 PG_FUNCTION_INFO_V1(aqo_drop_class);
 PG_FUNCTION_INFO_V1(aqo_cardinality_error);
 PG_FUNCTION_INFO_V1(aqo_execution_time);
+PG_FUNCTION_INFO_V1(aqo_query_texts_update);
+PG_FUNCTION_INFO_V1(aqo_query_stat_update);
+PG_FUNCTION_INFO_V1(aqo_data_update);
 
 
 bool
@@ -116,7 +125,15 @@ load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids)
 bool
 update_fss_ext(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 {
-	return aqo_data_store(fs, fss, data, reloids);
+	/*
+	 * 'reloids' explictly passed to aqo_data_store().
+	 * So AqoDataArgs fields 'nrels' & 'oids' are
+	 * set to 0 and NULL repectively.
+	 */
+	AqoDataArgs data_arg =
+			{data->rows, data->cols, 0, data->matrix,
+			 data->targets, data->rfactors, NULL};
+	return aqo_data_store(fs, fss, &data_arg, reloids);
 }
 
 /*
@@ -210,8 +227,8 @@ add_deactivated_query(uint64 queryid)
  * If stat hash table is full, return NULL and log this fact.
  */
 StatEntry *
-aqo_stat_store(uint64 queryid, bool use_aqo,
-			   double plan_time, double exec_time, double est_error)
+aqo_stat_store(uint64 queryid, bool use_aqo, AqoStatArgs *stat_arg,
+			   bool append_mode)
 {
 	StatEntry  *entry;
 	bool		found;
@@ -250,6 +267,34 @@ aqo_stat_store(uint64 queryid, bool use_aqo,
 		entry->queryid = qid;
 	}
 
+	if (!append_mode)
+	{
+		size_t sz;
+		if (found)
+		{
+			memset(entry, 0, sizeof(StatEntry));
+			entry->queryid = queryid;
+		}
+
+		sz = stat_arg->cur_stat_slot_aqo * sizeof(entry->est_error_aqo[0]);
+		memcpy(entry->plan_time_aqo, stat_arg->plan_time_aqo, sz);
+		memcpy(entry->exec_time_aqo, stat_arg->exec_time_aqo, sz);
+		memcpy(entry->est_error_aqo, stat_arg->est_error_aqo, sz);
+		entry->execs_with_aqo = stat_arg->execs_with_aqo;
+		entry->cur_stat_slot_aqo = stat_arg->cur_stat_slot_aqo;
+
+		sz = stat_arg->cur_stat_slot * sizeof(entry->est_error[0]);
+		memcpy(entry->plan_time, stat_arg->plan_time, sz);
+		memcpy(entry->exec_time, stat_arg->exec_time, sz);
+		memcpy(entry->est_error, stat_arg->est_error, sz);
+		entry->execs_without_aqo = stat_arg->execs_without_aqo;
+		entry->cur_stat_slot = stat_arg->cur_stat_slot;
+
+		aqo_state->stat_changed = true;
+		LWLockRelease(&aqo_state->stat_lock);
+		return entry;
+	}
+
 	/* Update the entry data */
 
 	if (use_aqo)
@@ -269,9 +314,9 @@ aqo_stat_store(uint64 queryid, bool use_aqo,
 		}
 
 		entry->execs_with_aqo++;
-		entry->plan_time_aqo[pos] = plan_time;
-		entry->exec_time_aqo[pos] = exec_time;
-		entry->est_error_aqo[pos] = est_error;
+		entry->plan_time_aqo[pos] = *stat_arg->plan_time_aqo;
+		entry->exec_time_aqo[pos] = *stat_arg->exec_time_aqo;
+		entry->est_error_aqo[pos] = *stat_arg->est_error_aqo;
 	}
 	else
 	{
@@ -290,9 +335,9 @@ aqo_stat_store(uint64 queryid, bool use_aqo,
 		}
 
 		entry->execs_without_aqo++;
-		entry->plan_time[pos] = plan_time;
-		entry->exec_time[pos] = exec_time;
-		entry->est_error[pos] = est_error;
+		entry->plan_time[pos] = *stat_arg->plan_time;
+		entry->exec_time[pos] = *stat_arg->exec_time;
+		entry->est_error[pos] = *stat_arg->est_error;
 	}
 
 	entry = memcpy(palloc(sizeof(StatEntry)), entry, sizeof(StatEntry));
@@ -865,7 +910,7 @@ aqo_queries_load(void)
 	LWLockRelease(&aqo_state->queries_lock);
 	if (!found)
 	{
-		if (!aqo_queries_store(0, 0, 0, 0, 0))
+		if (!aqo_queries_store(0, 0, 0, 0, 0, &aqo_queries_nulls))
 			elog(PANIC, "[AQO] aqo_queries initialization was unsuccessful");
 	}
 }
@@ -1279,7 +1324,7 @@ _compute_data_dsa(const DataEntry *entry)
  * Return true if data was changed.
  */
 bool
-aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
+aqo_data_store(uint64 fs, int fss, AqoDataArgs *data, List *reloids)
 {
 	DataEntry  *entry;
 	bool		found;
@@ -1291,6 +1336,13 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	bool		tblOverflow;
 	HASHACTION	action;
 	bool		result;
+	/*
+	 * We should distinguish incoming data between internally
+	 * passed structured data(reloids) and externaly
+	 * passed data(plain arrays) from aqo_data_update() function.
+	 */
+	bool		is_raw_data = (reloids == NULL);
+	int			nrels = is_raw_data ? data->nrels : list_length(reloids);
 
 	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
 
@@ -1323,7 +1375,7 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 
 		entry->cols = data->cols;
 		entry->rows = data->rows;
-		entry->nrels = list_length(reloids);
+		entry->nrels = nrels;
 
 		size = _compute_data_dsa(entry);
 		entry->data_dp = dsa_allocate0(data_dsa, size);
@@ -1342,7 +1394,7 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 
 	Assert(DsaPointerIsValid(entry->data_dp));
 
-	if (entry->cols != data->cols || entry->nrels != list_length(reloids))
+	if (entry->cols != data->cols || entry->nrels != nrels)
 	{
 		/* Collision happened? */
 		elog(LOG, "[AQO] Does a collision happened? Check it if possible (fs: "
@@ -1396,14 +1448,21 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	memcpy(ptr, data->rfactors, sizeof(double) * entry->rows);
 	ptr += sizeof(double) * entry->rows;
 	/* store list of relations. XXX: optimize ? */
-	foreach(lc, reloids)
+	if (is_raw_data)
 	{
-		Oid reloid = lfirst_oid(lc);
-
-		memcpy(ptr, &reloid, sizeof(Oid));
-		ptr += sizeof(Oid);
+		memcpy(ptr, data->oids, nrels * sizeof(Oid));
+		ptr += nrels * sizeof(Oid);
 	}
+	else
+	{
+		foreach(lc, reloids)
+		{
+			Oid reloid = lfirst_oid(lc);
 
+			memcpy(ptr, &reloid, sizeof(Oid));
+			ptr += sizeof(Oid);
+		}
+	}
 	aqo_state->data_changed = true;
 end:
 	result = aqo_state->data_changed;
@@ -1860,12 +1919,18 @@ aqo_queries(PG_FUNCTION_ARGS)
 
 bool
 aqo_queries_store(uint64 queryid,
-				  uint64 fs, bool learn_aqo, bool use_aqo, bool auto_tuning)
+				  uint64 fs, bool learn_aqo, bool use_aqo, bool auto_tuning,
+				  AqoQueriesNullArgs *null_args)
 {
 	QueriesEntry   *entry;
 	bool			found;
 	bool		tblOverflow;
 	HASHACTION	action;
+
+	/* Insert is allowed if no args are NULL. */
+	bool safe_insert =
+		(!null_args->fs_is_null && !null_args->learn_aqo_is_null &&
+		 !null_args->use_aqo_is_null && !null_args->auto_tuning_is_null);
 
 	Assert(queries_htab);
 
@@ -1877,7 +1942,7 @@ aqo_queries_store(uint64 queryid,
 
 	/* Check hash table overflow */
 	tblOverflow = hash_get_num_entries(queries_htab) < fs_max_items ? false : true;
-	action = tblOverflow ? HASH_FIND : HASH_ENTER;
+	action = (tblOverflow || !safe_insert) ? HASH_FIND : HASH_ENTER;
 
 	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, action,
 										 &found);
@@ -1897,11 +1962,20 @@ aqo_queries_store(uint64 queryid,
 		return false;
 	}
 
-	entry->fs = fs;
-	entry->learn_aqo = learn_aqo;
-	entry->use_aqo = use_aqo;
-	entry->auto_tuning = auto_tuning;
+	if (!null_args->fs_is_null)
+		entry->fs = fs;
+	if (!null_args->learn_aqo_is_null)
+		entry->learn_aqo = learn_aqo;
+	if (!null_args->use_aqo_is_null)
+		entry->use_aqo = use_aqo;
+	if (!null_args->auto_tuning_is_null)
+		entry->auto_tuning = auto_tuning;
 
+	if (entry->learn_aqo || entry->use_aqo || entry->auto_tuning)
+		/* Remove the class from cache of deactivated queries */
+		hash_search(deactivated_queries, &queryid, HASH_REMOVE, NULL);
+
+	aqo_state->queries_changed = true;
 	aqo_state->queries_changed = true;
 	LWLockRelease(&aqo_state->queries_lock);
 	return true;
@@ -2030,32 +2104,37 @@ aqo_queries_find(uint64 queryid, QueryContextData *ctx)
 Datum
 aqo_queries_update(PG_FUNCTION_ARGS)
 {
-	QueriesEntry   *entry;
-	uint64			queryid = PG_GETARG_INT64(AQ_QUERYID);
-	bool			found;
+	uint64			queryid;
+	uint64			fs = 0;
+	bool			learn_aqo = false;
+	bool			use_aqo = false;
+	bool			auto_tuning = false;
 
+	AqoQueriesNullArgs	null_args =
+		{ PG_ARGISNULL(AQ_FS), PG_ARGISNULL(AQ_LEARN_AQO),
+		  PG_ARGISNULL(AQ_USE_AQO), PG_ARGISNULL(AQ_AUTO_TUNING) };
+
+
+	if (PG_ARGISNULL(AQ_QUERYID))
+		PG_RETURN_BOOL(false);
+
+	queryid = PG_GETARG_INT64(AQ_QUERYID);
 	if (queryid == 0)
 		/* Do nothing for default feature space */
 		PG_RETURN_BOOL(false);
 
-	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
-	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, HASH_FIND,
-										 &found);
+	if (!null_args.fs_is_null)
+		fs = PG_GETARG_INT64(AQ_FS);
+	if (!null_args.learn_aqo_is_null)
+		learn_aqo = PG_GETARG_BOOL(AQ_LEARN_AQO);
+	if (!null_args.use_aqo_is_null)
+		use_aqo = PG_GETARG_BOOL(AQ_USE_AQO);
+	if (!null_args.auto_tuning_is_null)
+		auto_tuning = PG_GETARG_BOOL(AQ_AUTO_TUNING);
 
-	if (!PG_ARGISNULL(AQ_FS))
-		entry->fs = PG_GETARG_INT64(AQ_FS);
-	if (!PG_ARGISNULL(AQ_LEARN_AQO))
-		entry->learn_aqo = PG_GETARG_BOOL(AQ_LEARN_AQO);
-	if (!PG_ARGISNULL(AQ_USE_AQO))
-		entry->use_aqo = PG_GETARG_BOOL(AQ_USE_AQO);
-	if (!PG_ARGISNULL(AQ_AUTO_TUNING))
-		entry->auto_tuning = PG_GETARG_BOOL(AQ_AUTO_TUNING);
-
-	/* Remove the class from cache of deactivated queries */
-	hash_search(deactivated_queries, &queryid, HASH_REMOVE, NULL);
-
-	LWLockRelease(&aqo_state->queries_lock);
-	PG_RETURN_BOOL(true);
+	PG_RETURN_BOOL(aqo_queries_store(queryid,
+									 fs, learn_aqo, use_aqo, auto_tuning,
+									 &null_args));
 }
 
 Datum
@@ -2482,4 +2561,193 @@ aqo_execution_time(PG_FUNCTION_ARGS)
 
 	tuplestore_donestoring(tupstore);
 	return (Datum) 0;
+}
+
+/*
+ * Update AQO query text for a given queryid value.
+ * Return true if operation have done some changes,
+ * false otherwize.
+ */
+Datum
+aqo_query_texts_update(PG_FUNCTION_ARGS)
+{
+	uint64	queryid;
+	int		str_len;
+	text	*str;
+	char 	*str_buff;
+	bool	res = false;
+
+	/* Do nothing if any arguments are NULLs */
+	if ((PG_ARGISNULL(QT_QUERYID) || PG_ARGISNULL(QT_QUERY_STRING)))
+		PG_RETURN_BOOL(false);
+
+	if (!(queryid = PG_GETARG_INT64(QT_QUERYID)))
+		/* Do nothing for default feature space */
+		PG_RETURN_BOOL(false);
+
+	str = PG_GETARG_TEXT_PP(QT_QUERY_STRING);
+	str_len = VARSIZE_ANY_EXHDR(str) + 1;
+	if (str_len > querytext_max_size)
+		str_len = querytext_max_size;
+
+	str_buff = (char*) palloc(str_len);
+	text_to_cstring_buffer(str, str_buff, str_len);
+	res = aqo_qtext_store(queryid, str_buff);
+	pfree(str_buff);
+
+	PG_RETURN_BOOL(res);
+}
+
+/*
+ * Check if incoming array is one dimensional array
+ * and array elements are not null. Init array field
+ * and return number of elements if check passed,
+ * otherwize return -1.
+ */
+static int init_dbl_array(double **dest, ArrayType *arr)
+{
+	if (ARR_NDIM(arr) > 1 || ARR_HASNULL(arr))
+		return -1;
+	*dest = (double *) ARR_DATA_PTR(arr);
+	return ArrayGetNItems(ARR_NDIM(arr), ARR_DIMS(arr));
+}
+
+/*
+ * Update AQO query stat table for a given queryid value.
+ * Return true if operation have done some changes,
+ * false otherwize.
+ */
+Datum
+aqo_query_stat_update(PG_FUNCTION_ARGS)
+{
+	uint64		queryid;
+	AqoStatArgs	stat_arg;
+
+	/*
+	 * Arguments cannot be NULL.
+	 */
+	if (PG_ARGISNULL(QUERYID) || PG_ARGISNULL(NEXECS_AQO) ||
+		PG_ARGISNULL(NEXECS) || PG_ARGISNULL(EXEC_TIME_AQO) ||
+		PG_ARGISNULL(PLAN_TIME_AQO) || PG_ARGISNULL(EST_ERROR_AQO) ||
+		PG_ARGISNULL(EXEC_TIME) || PG_ARGISNULL(PLAN_TIME) ||
+		PG_ARGISNULL(EST_ERROR))
+		PG_RETURN_BOOL(false);
+
+	queryid = PG_GETARG_INT64(AQ_QUERYID);
+	stat_arg.execs_with_aqo = PG_GETARG_INT64(NEXECS_AQO);
+	stat_arg.execs_without_aqo = PG_GETARG_INT64(NEXECS);
+	if (queryid == 0 || stat_arg.execs_with_aqo < 0 ||
+		stat_arg.execs_without_aqo < 0)
+		PG_RETURN_BOOL(false);
+
+	/*
+	 * Init 'with aqo' array fields for further update procedure and
+	 * check that arrays have the same size.
+	 */
+	stat_arg.cur_stat_slot_aqo =
+		init_dbl_array(&stat_arg.exec_time_aqo,
+					   PG_GETARG_ARRAYTYPE_P(EXEC_TIME_AQO));
+	if (stat_arg.cur_stat_slot_aqo == -1 ||
+		stat_arg.cur_stat_slot_aqo > STAT_SAMPLE_SIZE ||
+		stat_arg.cur_stat_slot_aqo !=
+		init_dbl_array(&stat_arg.plan_time_aqo,
+					   PG_GETARG_ARRAYTYPE_P(PLAN_TIME_AQO)) ||
+		stat_arg.cur_stat_slot_aqo !=
+		init_dbl_array(&stat_arg.est_error_aqo,
+					   PG_GETARG_ARRAYTYPE_P(EST_ERROR_AQO)))
+		PG_RETURN_BOOL(false);
+
+	/*
+	 * Init 'without aqo' array fields for further update procedure and
+	 * check that arrays have the same size.
+	 */
+	stat_arg.cur_stat_slot = init_dbl_array(&stat_arg.exec_time,
+											PG_GETARG_ARRAYTYPE_P(EXEC_TIME));
+	if (stat_arg.cur_stat_slot == -1 ||
+		stat_arg.cur_stat_slot > STAT_SAMPLE_SIZE ||
+		stat_arg.cur_stat_slot !=
+		init_dbl_array(&stat_arg.plan_time,
+					   PG_GETARG_ARRAYTYPE_P(PLAN_TIME)) ||
+		stat_arg.cur_stat_slot !=
+		init_dbl_array(&stat_arg.est_error,
+					   PG_GETARG_ARRAYTYPE_P(EST_ERROR)))
+		PG_RETURN_BOOL(false);
+
+	PG_RETURN_BOOL(aqo_stat_store(queryid, false,
+								  &stat_arg, false) != NULL);
+}
+
+/*
+ * Update AQO data for a given {fs, fss} values.
+ * Return true if operation have done some changes,
+ * false otherwize.
+ */
+Datum
+aqo_data_update(PG_FUNCTION_ARGS)
+{
+	uint64		fs;
+	int			fss;
+	double		*features_arr[aqo_K];
+	AqoDataArgs	data_arg;
+
+	ArrayType	*arr;
+
+	if (PG_ARGISNULL(AD_FS) || PG_ARGISNULL(AD_FSS) ||
+		PG_ARGISNULL(AD_NFEATURES) || PG_ARGISNULL(AD_TARGETS) ||
+		PG_ARGISNULL(AD_RELIABILITY) || PG_ARGISNULL(AD_OIDS))
+		PG_RETURN_BOOL(false);
+
+	fs = PG_GETARG_INT64(AD_FS);
+	fss = PG_GETARG_INT32(AD_FSS);
+	data_arg.cols = PG_GETARG_INT32(AD_NFEATURES);
+
+	/* Init traget & reliability arrays. */
+	data_arg.rows =
+		init_dbl_array(&data_arg.targets,
+					   PG_GETARG_ARRAYTYPE_P(AD_TARGETS));
+	if (data_arg.rows ==  -1 || data_arg.rows > aqo_K ||
+		data_arg.rows != init_dbl_array(&data_arg.rfactors,
+										PG_GETARG_ARRAYTYPE_P(AD_RELIABILITY)))
+		PG_RETURN_BOOL(false);
+
+	/* Init matrix array. */
+	if (data_arg.cols == 0 && !PG_ARGISNULL(AD_FEATURES))
+		PG_RETURN_BOOL(false);
+	if (PG_ARGISNULL(AD_FEATURES))
+	{
+		if (data_arg.cols != 0)
+			PG_RETURN_BOOL(false);
+		data_arg.matrix = NULL;
+	}
+	else
+	{
+		int		i;
+
+		arr = PG_GETARG_ARRAYTYPE_P(AD_FEATURES);
+		/*
+		 * Features is two dimensional array.
+		 * Number of rows should be the same as for
+		 * traget & reliability arrays.
+		 */
+		if (ARR_HASNULL(arr) || ARR_NDIM(arr) != 2 ||
+			data_arg.rows != ARR_DIMS(arr)[0] ||
+			data_arg.cols != ARR_DIMS(arr)[1])
+			PG_RETURN_BOOL(false);
+
+		for (i = 0; i < ARR_DIMS(arr)[0]; i++)
+		{
+			features_arr[i] = (double *) ARR_DATA_PTR(arr) +
+				i * ARR_DIMS(arr)[1];
+		}
+		data_arg.matrix = features_arr;
+	}
+
+	/* Init oids array. */
+	arr = PG_GETARG_ARRAYTYPE_P(AD_OIDS);
+	if (ARR_HASNULL(arr))
+		PG_RETURN_BOOL(false);
+	data_arg.oids = (Oid *) ARR_DATA_PTR(arr);
+	data_arg.nrels = ArrayGetNItems(ARR_NDIM(arr), ARR_DIMS(arr));
+
+	PG_RETURN_BOOL(aqo_data_store(fs, fss, &data_arg, NULL));
 }

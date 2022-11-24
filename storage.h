@@ -37,6 +37,26 @@ typedef struct StatEntry
 } StatEntry;
 
 /*
+ * Auxiliary struct, used for passing arguments
+ * to aqo_stat_store() function.
+ */
+typedef struct AqoStatArgs
+{
+	int64	execs_with_aqo;
+	int64	execs_without_aqo;
+
+	int		cur_stat_slot;
+	double	*exec_time;
+	double	*plan_time;
+	double	*est_error;
+
+	int		cur_stat_slot_aqo;
+	double	*exec_time_aqo;
+	double	*plan_time_aqo;
+	double	*est_error_aqo;
+} AqoStatArgs;
+
+/*
  * Storage entry for query texts.
  * Query strings may have very different sizes. So, in hash table we store only
  * link to DSA-allocated memory.
@@ -82,6 +102,24 @@ typedef struct QueriesEntry
 	bool	auto_tuning;
 } QueriesEntry;
 
+/*
+ * Auxiliary struct, used for passing arg NULL signs
+ * to aqo_queries_store() function.
+ */
+typedef struct AqoQueriesNullArgs
+{
+	bool	fs_is_null;
+	bool	learn_aqo_is_null;
+	bool	use_aqo_is_null;
+	bool	auto_tuning_is_null;
+} AqoQueriesNullArgs;
+
+/*
+ * Used for internal aqo_queries_store() calls.
+ * No NULL arguments expected in this case.
+ */
+extern AqoQueriesNullArgs aqo_queries_nulls;
+
 extern int querytext_max_size;
 extern int dsm_size_max;
 
@@ -90,8 +128,8 @@ extern HTAB *qtexts_htab;
 extern HTAB *queries_htab; /* TODO */
 extern HTAB *data_htab; /* TODO */
 
-extern StatEntry *aqo_stat_store(uint64 queryid, bool use_aqo, double plan_time,
-								 double exec_time, double est_error);
+extern StatEntry *aqo_stat_store(uint64 queryid, bool use_aqo,
+								 AqoStatArgs *stat_arg, bool append_mode);
 extern void aqo_stat_flush(void);
 extern void aqo_stat_load(void);
 
@@ -99,7 +137,8 @@ extern bool aqo_qtext_store(uint64 queryid, const char *query_string);
 extern void aqo_qtexts_flush(void);
 extern void aqo_qtexts_load(void);
 
-extern bool aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids);
+extern bool aqo_data_store(uint64 fs, int fss, AqoDataArgs *data,
+						   List *reloids);
 extern bool load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 						  bool wideSearch, double *features);
 extern void aqo_data_flush(void);
@@ -107,7 +146,8 @@ extern void aqo_data_load(void);
 
 extern bool aqo_queries_find(uint64 queryid, QueryContextData *ctx);
 extern bool aqo_queries_store(uint64 queryid, uint64 fs, bool learn_aqo,
-							  bool use_aqo, bool auto_tuning);
+							  bool use_aqo, bool auto_tuning,
+							  AqoQueriesNullArgs *null_args);
 extern void aqo_queries_flush(void);
 extern void aqo_queries_load(void);
 
