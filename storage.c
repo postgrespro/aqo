@@ -1393,7 +1393,7 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	if (!found) {
 		LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
 
-		prev = (NeighboursEntry *) hash_search(fss_neighbours, &fss, HASH_ENTER, &found);
+		prev = (NeighboursEntry *) hash_search(fss_neighbours, &key.fss, HASH_ENTER, &found);
 		if (!found)
 		{
 			entry->list.prev = NULL;
@@ -1754,7 +1754,7 @@ _aqo_data_clean(uint64 fs)
 		dsa_free(data_dsa, entry->data_dp);
 		entry->data_dp = InvalidDsaPointer;
 
-		/* fix fs list */
+		/* fix neighbour list */
 		if (entry->list.next)
 			has_next = true;
 		if (entry->list.prev)
@@ -2099,11 +2099,14 @@ aqo_neighbours_reset(void)
 			elog(ERROR, "[AQO] hash table corrupted");
 		num_remove++;
 	}
-	aqo_state->neighbours_changed = true;
+
+	if (num_remove > 0)
+		aqo_state->neighbours_changed = true;
+
 	LWLockRelease(&aqo_state->neighbours_lock);
 
 	if (num_remove != num_entries)
-		elog(ERROR, "[AQO] Neighbour memory storage is corrupted or parallel access without a lock was detected.");
+		elog(ERROR, "[AQO] Neighbours memory storage is corrupted or parallel access without a lock has detected.");
 
 	return num_remove;
 }
@@ -2231,7 +2234,7 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 			DataEntry		   *entry;
 			NeighboursEntry    *fss_htab_entry;
 
-			/* fix fs list */
+			/* fix neighbours list */
 			entry = (DataEntry *) hash_search(data_htab, &key, HASH_FIND, &found);
 			if (found)
 			{
