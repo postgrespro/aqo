@@ -44,7 +44,7 @@ typedef struct AQOSharedState
 	LWLock		queries_lock;  /* lock for access to queries storage */
 	bool		queries_changed;
 
-	LWLock		neighbours_lock;  /* lock for access to queries storage */
+	LWLock		neighbours_lock;  /* lock for access to neighbour storage */
 	bool		neighbours_changed;
 } AQOSharedState;
 
