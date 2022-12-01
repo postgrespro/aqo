@@ -609,6 +609,7 @@ end:
 	LWLockRelease(&aqo_state->queries_lock);
 }
 
+
 static int
 data_store(const char *filename, form_record_t callback,
 		   long nrecs, void *ctx)
@@ -1578,7 +1579,7 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 		build_knn_matrix(data, temp_data);
 	}
 	else
-	/* Iterate across all elements of the table. XXX: Maybe slow. */
+	/* Iterate across fss neighbours. */
 	{
 		int					noids = -1;
 		NeighboursEntry    *neighbour_entry;
@@ -1741,14 +1742,47 @@ _aqo_data_clean(uint64 fs)
 	hash_seq_init(&hash_seq, data_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
+		bool            	found;
+		bool        		has_prev = false;
+		bool 				has_next = false;
+		NeighboursEntry    *fss_htab_entry;
+
 		if (entry->key.fs != fs)
 			continue;
 
 		Assert(DsaPointerIsValid(entry->data_dp));
 		dsa_free(data_dsa, entry->data_dp);
 		entry->data_dp = InvalidDsaPointer;
+
+		/* fix fs list */
+		if (entry->list.next)
+			has_next = true;
+		if (entry->list.prev)
+			has_prev = true;
+
+		if (has_prev)
+			entry->list.prev->list.next = has_next ? entry->list.next : NULL;
+		if (has_next)
+			entry->list.next->list.prev = has_prev ? entry->list.prev : NULL;
+
+		/* Fix or remove neighbours htab entry*/
+		LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
+		fss_htab_entry = (NeighboursEntry *) hash_search(fss_neighbours, &entry->key.fss, HASH_FIND, &found);
+		if (found && fss_htab_entry->data->key.fs == fs)
+		{
+			if (has_prev)
+			{
+				fss_htab_entry->data = entry->list.prev;
+			}
+			else
+			{
+				hash_search(fss_neighbours, &entry->key.fss, HASH_REMOVE, NULL);
+			}
+		}
+		LWLockRelease(&aqo_state->neighbours_lock);
+
 		if (!hash_search(data_htab, &entry->key, HASH_REMOVE, NULL))
-			elog(PANIC, "[AQO] hash table corrupted");
+			elog(ERROR, "[AQO] hash table corrupted");
 		removed++;
 	}
 
@@ -2048,6 +2082,32 @@ aqo_queries_update(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(true);
 }
 
+static long
+aqo_neighbours_reset(void)
+{
+	HASH_SEQ_STATUS		hash_seq;
+	NeighboursEntry	   *entry;
+	long				num_remove = 0;
+	long				num_entries;
+
+	LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
+	num_entries = hash_get_num_entries(fss_neighbours);
+	hash_seq_init(&hash_seq, fss_neighbours);
+	while ((entry = hash_seq_search(&hash_seq)) != NULL)
+	{
+		if (hash_search(fss_neighbours, &entry->fss, HASH_REMOVE, NULL) == NULL)
+			elog(ERROR, "[AQO] hash table corrupted");
+		num_remove++;
+	}
+	aqo_state->neighbours_changed = true;
+	LWLockRelease(&aqo_state->neighbours_lock);
+
+	if (num_remove != num_entries)
+		elog(ERROR, "[AQO] Neighbour memory storage is corrupted or parallel access without a lock was detected.");
+
+	return num_remove;
+}
+
 Datum
 aqo_reset(PG_FUNCTION_ARGS)
 {
@@ -2057,6 +2117,7 @@ aqo_reset(PG_FUNCTION_ARGS)
 	counter += aqo_qtexts_reset();
 	counter += aqo_data_reset();
 	counter += aqo_queries_reset();
+	counter += aqo_neighbours_reset();
 	PG_RETURN_INT64(counter);
 }
 
@@ -2183,21 +2244,25 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 					entry->list.prev->list.next = has_next ? entry->list.next : NULL;
 				if (has_next)
 					entry->list.next->list.prev = has_prev ? entry->list.prev : NULL;
+
+				/* Fix or remove neighbours htab entry*/
+				LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
+				fss_htab_entry = (NeighboursEntry *) hash_search(fss_neighbours, &key.fss, HASH_FIND, &found);
+				if (found && fss_htab_entry->data->key.fs == key.fs)
+				{
+					if (has_prev)
+					{
+						fss_htab_entry->data = entry->list.prev;
+					}
+					else
+					{
+						hash_search(fss_neighbours, &key.fss, HASH_REMOVE, NULL);
+					}
+				}
+				LWLockRelease(&aqo_state->neighbours_lock);
 			}
 
-			/* Fix or remove neighbours htab entry*/
-			fss_htab_entry = (NeighboursEntry *) hash_search(fss_neighbours, &key.fss, HASH_FIND, &found);
-			if (found && fss_htab_entry->data->key.fs == key.fs)
-			{
-				if (has_prev)
-				{
-					fss_htab_entry->data = entry->list.prev;
-				}
-				else
-				{
-					hash_search(fss_neighbours, &key.fss, HASH_REMOVE, NULL);
-				}
-			}
+
 			(*fss_num) += (int) _aqo_data_remove(&key);
 		}
 
