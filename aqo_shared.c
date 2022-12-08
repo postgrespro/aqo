@@ -265,6 +265,7 @@ aqo_init_shmem(void)
 		 /* Doesn't use DSA, so can be loaded in postmaster */
 		aqo_stat_load();
 		aqo_queries_load();
+		aqo_neighbours_load();
 	}
 }
 
@@ -283,6 +284,7 @@ on_shmem_shutdown(int code, Datum arg)
 	 */
 	aqo_stat_flush();
 	aqo_queries_flush();
+	aqo_neighbours_flush();
 	return;
 }
 
