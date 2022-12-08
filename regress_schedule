@@ -10,6 +10,7 @@ test: gucs
 test: forced_stat_collection
 test: unsupported
 test: clean_aqo_data
+test: parallel_workers
 test: plancache
 # Performance-dependent test. Can be ignored if executes in containers or on slow machines
 ignore: statement_timeout

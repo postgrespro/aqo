@@ -353,7 +353,7 @@ _PG_init(void)
 	 */
 	AQOLearnMemCtx = AllocSetContextCreate(AQOTopMemCtx,
 											 "AQOLearnMemoryContext",
- 											 ALLOCSET_DEFAULT_SIZES);
+											 ALLOCSET_DEFAULT_SIZES);
 	RegisterResourceReleaseCallback(aqo_free_callback, NULL);
 	RegisterAQOPlanNodeMethods();
 

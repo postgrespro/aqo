@@ -389,8 +389,8 @@ aqo_stat_reset(void)
 	hash_seq_init(&hash_seq, stat_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
-		if (hash_search(stat_htab, &entry->queryid, HASH_REMOVE, NULL) == NULL)
-			elog(ERROR, "[AQO] hash table corrupted");
+		if (!hash_search(stat_htab, &entry->queryid, HASH_REMOVE, NULL))
+			elog(PANIC, "[AQO] hash table corrupted");
 		num_remove++;
 	}
 	aqo_state->stat_changed = true;
@@ -1225,7 +1225,7 @@ _aqo_data_remove(data_key *key)
 		dsa_free(data_dsa, entry->data_dp);
 		entry->data_dp = InvalidDsaPointer;
 
-		if (hash_search(data_htab, key, HASH_REMOVE, NULL) == NULL)
+		if (!hash_search(data_htab, key, HASH_REMOVE, NULL))
 			elog(PANIC, "[AQO] Inconsistent data hash table");
 
 		aqo_state->data_changed = true;
@@ -1256,8 +1256,8 @@ aqo_qtexts_reset(void)
 
 		Assert(DsaPointerIsValid(entry->qtext_dp));
 		dsa_free(qtext_dsa, entry->qtext_dp);
-		if (hash_search(qtexts_htab, &entry->queryid, HASH_REMOVE, NULL) == NULL)
-			elog(ERROR, "[AQO] hash table corrupted");
+		if (!hash_search(qtexts_htab, &entry->queryid, HASH_REMOVE, NULL))
+			elog(PANIC, "[AQO] hash table corrupted");
 		num_remove++;
 	}
 	aqo_state->qtexts_changed = true;
@@ -1718,8 +1718,8 @@ _aqo_data_clean(uint64 fs)
 		Assert(DsaPointerIsValid(entry->data_dp));
 		dsa_free(data_dsa, entry->data_dp);
 		entry->data_dp = InvalidDsaPointer;
-		if (hash_search(data_htab, &entry->key, HASH_REMOVE, NULL) == NULL)
-			elog(ERROR, "[AQO] hash table corrupted");
+		if (!hash_search(data_htab, &entry->key, HASH_REMOVE, NULL))
+			elog(PANIC, "[AQO] hash table corrupted");
 		removed++;
 	}
 
@@ -1745,8 +1745,8 @@ aqo_data_reset(void)
 	{
 		Assert(DsaPointerIsValid(entry->data_dp));
 		dsa_free(data_dsa, entry->data_dp);
-		if (hash_search(data_htab, &entry->key, HASH_REMOVE, NULL) == NULL)
-			elog(ERROR, "[AQO] hash table corrupted");
+		if (!hash_search(data_htab, &entry->key, HASH_REMOVE, NULL))
+			elog(PANIC, "[AQO] hash table corrupted");
 		num_remove++;
 	}
 
@@ -1885,8 +1885,8 @@ aqo_queries_reset(void)
 			/* Don't remove default feature space */
 			continue;
 
-		if (hash_search(queries_htab, &entry->queryid, HASH_REMOVE, NULL) == NULL)
-			elog(ERROR, "[AQO] hash table corrupted");
+		if (!hash_search(queries_htab, &entry->queryid, HASH_REMOVE, NULL))
+			elog(PANIC, "[AQO] hash table corrupted");
 		num_remove++;
 	}
 
@@ -2218,7 +2218,7 @@ aqo_cleanup(PG_FUNCTION_ARGS)
 	values[1] = Int32GetDatum(fss_num);
 	tuplestore_putvalues(tupstore, tupDesc, values, nulls);
 	tuplestore_donestoring(tupstore);
-	return (Datum) 0;
+	PG_RETURN_VOID();
 }
 
 /*

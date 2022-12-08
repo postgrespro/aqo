@@ -19,7 +19,7 @@ REGRESS_OPTS = --schedule=$(srcdir)/regress_schedule
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw
 stat_srcdir = $(top_srcdir)/contrib/pg_stat_statements
 PG_CPPFLAGS += -I$(libpq_srcdir) -I$(fdw_srcdir) -I$(stat_srcdir)
-EXTRA_REGRESS_OPTS=--temp-config=$(top_srcdir)/$(subdir)/conf.add
+EXTRA_REGRESS_OPTS=--temp-config=$(top_srcdir)/$(subdir)/aqo.conf
 EXTRA_INSTALL = contrib/postgres_fdw contrib/pg_stat_statements
 
 DATA = aqo--1.0.sql aqo--1.0--1.1.sql aqo--1.1--1.2.sql aqo--1.2.sql \
