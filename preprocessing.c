@@ -196,6 +196,7 @@ aqo_planner(Query *parse,
 	}
 
 	selectivity_cache_clear();
+
 	/* Check unlucky case (get a hash of zero) */
 	if (parse->queryId == UINT64CONST(0))
 		JumbleQuery(parse, query_string);
@@ -223,15 +224,14 @@ aqo_planner(Query *parse,
 									cursorOptions,
 									boundParams);
 	}
-	MemoryContextSwitchTo(oldctx);
 
 	elog(DEBUG1, "AQO will be used for query '%s', class "UINT64_FORMAT,
 		 query_string ? query_string : "null string", query_context.query_hash);
 
+	MemoryContextSwitchTo(oldctx);
 	oldctx = MemoryContextSwitchTo(AQOCacheMemCtx);
 	cur_classes = lappend_uint64(cur_classes, query_context.query_hash);
 	MemoryContextSwitchTo(oldctx);
-
 	oldctx = MemoryContextSwitchTo(AQOPredictMemCtx);
 
 	if (aqo_mode == AQO_MODE_DISABLED)

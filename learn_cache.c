@@ -227,7 +227,7 @@ init_with_dsm(OkNNrdata *data, dsm_block_hdr *hdr, List **reloids)
 	Assert(LWLockHeldByMeInMode(&aqo_state->lock, LW_EXCLUSIVE) ||
 		   LWLockHeldByMeInMode(&aqo_state->lock, LW_SHARED));
 	Assert(hdr->magic == AQO_SHARED_MAGIC);
-	Assert(hdr && ptr);
+	Assert(hdr && ptr && hdr->rows > 0);
 
 	data->rows = hdr->rows;
 	data->cols = hdr->cols;
@@ -245,6 +245,12 @@ init_with_dsm(OkNNrdata *data, dsm_block_hdr *hdr, List **reloids)
 		}
 	}
 
+	/*
+	 * Kludge code. But we should rewrite this code because now all knowledge
+	 * base lives in non-transactional shared memory.
+	 */
+	ptr = (char *) hdr + sizeof(dsm_block_hdr) + (sizeof(double) * data->cols * aqo_K);
+
 	memcpy(data->targets, ptr, sizeof(double) * hdr->rows);
 	ptr += sizeof(double) * aqo_K;
 	memcpy(data->rfactors, ptr, sizeof(double) * hdr->rows);
@@ -261,7 +267,7 @@ init_with_dsm(OkNNrdata *data, dsm_block_hdr *hdr, List **reloids)
 		return calculate_size(hdr->cols, *reloids);
 	}
 
-	/* It is just read operation. No any interest in size calculation. */
+	/* It is just a read operation. No any interest in size calculation. */
 	return 0;
 }
 
@@ -293,7 +299,7 @@ lc_flush_data(void)
 		aqo_data_store(hdr->key.fs, hdr->key.fss, &data, reloids);
 
 		if (!hash_search(fss_htab, (void *) &hdr->key, HASH_REMOVE, NULL))
-			elog(ERROR, "[AQO] Flush: local ML cache is corrupted.");
+			elog(PANIC, "[AQO] Flush: local ML cache is corrupted.");
 	}
 
 	reset_dsm_cache();
@@ -323,7 +329,7 @@ lc_assign_hook(bool newval, void *extra)
 	while ((entry = (htab_entry *) hash_seq_search(&status)) != NULL)
 	{
 		if (!hash_search(fss_htab, (void *) &entry->key, HASH_REMOVE, NULL))
-			elog(ERROR, "[AQO] The local ML cache is corrupted.");
+			elog(PANIC, "[AQO] The local ML cache is corrupted.");
 	}
 	LWLockRelease(&aqo_state->lock);
 }

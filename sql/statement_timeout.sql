@@ -60,7 +60,7 @@ SET statement_timeout = 5500;
 SELECT *, pg_sleep(1) FROM t; -- Get reliable data
 SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
 
-DROP TABLE t;
 SELECT 1 FROM aqo_reset();
+DROP TABLE t;
 DROP EXTENSION aqo;
 DROP FUNCTION check_estimated_rows;
