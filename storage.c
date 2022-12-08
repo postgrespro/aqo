@@ -1394,7 +1394,6 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 	if (!found) {
 		LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
 
-		elog(NOTICE, "Entering neighbours %d", fss);
 		prev = (NeighboursEntry *) hash_search(fss_neighbours, &key.fss, HASH_ENTER, &found);
 		if (!found)
 		{
@@ -1408,9 +1407,6 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 			entry->list.prev = prev->data;
 		}
 		prev->data = entry;
-		elog(NOTICE, "Entered neighbours %ld, found %s", prev->fss, found ? "true" : "false");
-		prev = (NeighboursEntry *) hash_search(fss_neighbours, &key.fss, HASH_FIND, &found);
-		elog(NOTICE, "Entered neighbours check 2 key %ld found %s number of entries %ld", prev->fss, found ? "true" : "false", hash_get_num_entries(fss_neighbours));
 
 		LWLockRelease(&aqo_state->neighbours_lock);
 	}
@@ -1593,7 +1589,6 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 		LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
 		neighbour_entry = (NeighboursEntry *) hash_search(fss_neighbours, &fss, HASH_FIND, &found);
 		entry = found ? neighbour_entry->data : NULL;
-		elog(NOTICE, "load_aqo_data, find %d, found %d", fss, found ? 1 : 0);
 
 		while (entry != NULL)
 		{
@@ -1776,18 +1771,15 @@ _aqo_data_clean(uint64 fs)
 		/* Fix or remove neighbours htab entry*/
 		LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
 		fss_htab_entry = (NeighboursEntry *) hash_search(fss_neighbours, &entry->key.fss, HASH_FIND, &found);
-		elog(NOTICE,"_aqo_data_clean %ld", fss_htab_entry->fss);
 		if (found && fss_htab_entry->data->key.fs == fs)
 		{
 			if (has_prev)
 			{
 				fss_htab_entry->data = entry->list.prev;
-				elog(NOTICE, "_aqo_data_clean, change  %ld", entry->key.fss);
 			}
 			else
 			{
 				hash_search(fss_neighbours, &entry->key.fss, HASH_REMOVE, NULL);
-				elog(NOTICE, "_aqo_data_clean, find  %ld", entry->key.fss);
 			}
 		}
 		LWLockRelease(&aqo_state->neighbours_lock);
@@ -2114,7 +2106,6 @@ _deform_neighbours_record_cb(void *data, size_t size)
 void
 aqo_neighbours_load(void)
 {
-	elog(NOTICE, "Loading aqo_neighbours");
 	Assert(!LWLockHeldByMe(&aqo_state->neighbours_lock));
 
 	LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
@@ -2155,8 +2146,6 @@ aqo_neighbours_flush(void)
 	int				ret;
 	long			entries;
 
-	elog(NOTICE, "Flushing aqo_neighbours");
-
 	LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
 
 	if (!aqo_state->neighbours_changed)
@@ -2188,11 +2177,8 @@ aqo_neighbours_reset(void)
 	LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
 	num_entries = hash_get_num_entries(fss_neighbours);
 	hash_seq_init(&hash_seq, fss_neighbours);
-	elog(NOTICE, "fss_neighbours num entries: %ld", num_entries);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
-		elog(NOTICE, "delete %ld", entry->fss);
-
 		if (hash_search(fss_neighbours, &entry->fss, HASH_REMOVE, NULL) == NULL)
 			elog(ERROR, "[AQO] hash table corrupted");
 		num_remove++;
@@ -2351,18 +2337,15 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 				/* Fix or remove neighbours htab entry*/
 				LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
 				fss_htab_entry = (NeighboursEntry *) hash_search(fss_neighbours, &key.fss, HASH_FIND, &found);
-				elog(NOTICE, "aqo_cleanup, find  %ld", key.fss);
 				if (found && fss_htab_entry->data->key.fs == key.fs)
 				{
 					if (has_prev)
 					{
 						fss_htab_entry->data = entry->list.prev;
-						elog(NOTICE, "aqo_cleanup, change  %ld", key.fss);
 					}
 					else
 					{
 						hash_search(fss_neighbours, &key.fss, HASH_REMOVE, NULL);
-						elog(NOTICE, "aqo_cleanup, remove  %ld", key.fss);
 					}
 				}
 				LWLockRelease(&aqo_state->neighbours_lock);
