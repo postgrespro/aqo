@@ -225,7 +225,6 @@ extern int njoins;
 /* AQO Memory contexts */
 extern MemoryContext AQOTopMemCtx;
 extern MemoryContext AQOCacheMemCtx;
-extern MemoryContext AQOUtilityMemCtx;
 extern MemoryContext AQOPredictMemCtx;
 extern MemoryContext AQOLearnMemCtx;
 

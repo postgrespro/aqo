@@ -8,15 +8,13 @@ print "start";
 my $node = PostgreSQL::Test::Cluster->new('profiling');
 
 $node->init;
-print "create conf";
 
 $node->append_conf('postgresql.conf', qq{
 						aqo.mode = 'disabled'
-						aqo.profile_classes = -1
-						aqo.profile_enable = 'true'
 						aqo.force_collect_stat = 'false'
 						log_statement = 'ddl' # reduce size of logs.
 						aqo.join_threshold = 0
+						pg_stat_statements.track = 'none'
 					});
 # Test constants.
 my $TRANSACTIONS = 100;
