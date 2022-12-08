@@ -128,6 +128,9 @@ extern bool aqo_queries_store(uint64 queryid, uint64 fs, bool learn_aqo,
 extern void aqo_queries_flush(void);
 extern void aqo_queries_load(void);
 
+extern void aqo_neighbours_flush(void);
+extern void aqo_neighbours_load(void);
+
 /*
  * Machinery for deactivated queries cache.
  * TODO: Should live in a custom memory context
