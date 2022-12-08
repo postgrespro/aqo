@@ -2203,8 +2203,8 @@ aqo_neighbours_reset(void)
 
 	LWLockRelease(&aqo_state->neighbours_lock);
 
-	// if (num_remove != num_entries)
-	// 	elog(ERROR, "[AQO] Neighbours memory storage is corrupted or parallel access without a lock has detected.");
+	if (num_remove != num_entries)
+		elog(ERROR, "[AQO] Neighbours memory storage is corrupted or parallel access without a lock has detected.");
 
 	aqo_neighbours_flush();
 
