@@ -12,11 +12,16 @@ CREATE TABLE t1 AS SELECT mod(gs,10) AS x, mod(gs+1,10) AS y
 ANALYZE t, t1;
 
 --
--- Do not support HAVING clause for now.
+-- Do not support HAVING clauses for now.
 --
 SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
 EXPLAIN (COSTS OFF)
 	SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
+
+SELECT str FROM expln('
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	SELECT * FROM t GROUP BY (x) HAVING x > 3;
+') AS str WHERE str NOT LIKE '%Memory Usage%';
 
 --
 -- Doesn't estimates GROUP BY clause

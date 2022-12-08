@@ -28,45 +28,41 @@ $$ LANGUAGE PLPGSQL;
 -- in the next queries with the same fss_hash
 SELECT str AS result
 FROM expln('
-SELECT x FROM A where x = 5;') AS str
-WHERE str NOT LIKE 'Query Identifier%';
+SELECT x FROM A where x = 5;') AS str;
 
 SELECT str AS result
 FROM expln('
 SELECT x FROM A,B WHERE x = 5 AND A.x = B.y;') AS str
-WHERE str NOT LIKE 'Query Identifier%'
 ; -- Find cardinality for SCAN A(x=5) from a neighbour class, created by the
 -- query, executed above.
 
 SELECT str AS result
 FROM expln('
 SELECT x, sum(x) FROM A,B WHERE y = 5 AND A.x = B.y group by(x);') AS str
-WHERE str NOT LIKE 'Query Identifier%'
 ; -- Find the JOIN cardinality from a neighbour class.
 
 -- cardinality 100 in the first Seq Scan on a
 SELECT str AS result
 FROM expln('
-SELECT x, sum(x) FROM A WHERE x = 5 group by(x);') AS str
-WHERE str NOT LIKE 'Query Identifier%';
+SELECT x, sum(x) FROM A WHERE x = 5 group by(x);') AS str;
 
 -- no one predicted rows. we use knowledge cardinalities of the query
 -- in the next queries with the same fss_hash
 SELECT str AS result
 FROM expln('
 SELECT x FROM A where x < 10 group by(x);') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE '%Memory%';
 -- cardinality 1000 in Seq Scan on a
 SELECT str AS result
 FROM expln('
 SELECT x,y FROM A,B WHERE x < 10 AND A.x = B.y;') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE '%Memory%';
 
 -- cardinality 100 in Seq Scan on a and Seq Scan on b
 SELECT str AS result
 FROM expln('
 SELECT x FROM A,B where x < 10 and y > 10 group by(x);') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE '%Memory%';
 
 --
 -- TODO:
@@ -75,7 +71,7 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
 SELECT str AS result
 FROM expln('
 SELECT x,y FROM A,B WHERE x < 10 and y > 10 AND A.x = B.y;') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%'
+WHERE str NOT LIKE '%Memory%'
 ;
 
 RESET enable_material;
