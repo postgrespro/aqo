@@ -105,6 +105,7 @@ PG_FUNCTION_INFO_V1(aqo_drop_class);
 PG_FUNCTION_INFO_V1(aqo_cardinality_error);
 PG_FUNCTION_INFO_V1(aqo_execution_time);
 
+
 bool
 load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids, bool isSafe)
 {

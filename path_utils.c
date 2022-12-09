@@ -366,6 +366,10 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 			return get_path_clauses(((MaterialPath *) path)->subpath, root,
 									selectivities);
 			break;
+		case T_MemoizePath:
+			return get_path_clauses(((MemoizePath *) path)->subpath, root,
+									selectivities);
+			break;
 		case T_ProjectionPath:
 			return get_path_clauses(((ProjectionPath *) path)->subpath, root,
 									selectivities);
@@ -488,6 +492,7 @@ is_appropriate_path(Path *path)
 	{
 		case T_SortPath:
 		case T_IncrementalSortPath:
+		case T_MemoizePath:
 		case T_GatherPath:
 		case T_GatherMergePath:
 			appropriate = false;
