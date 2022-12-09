@@ -7,7 +7,7 @@ on:
     branches: [ stable14 ]
 
 env:
- BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
 
 jobs:
   build:
@@ -28,10 +28,10 @@ jobs:
         cd pg
 
         git checkout REL_14_STABLE
-        ./configure $CONFIGURE_OPTS CFLAGS="-O3"
         git clone https://github.com/postgrespro/aqo.git contrib/aqo
         git -C contrib/aqo checkout $BRANCH_NAME
         patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg14.patch
+        ./configure $CONFIGURE_OPTS CFLAGS="-O2"
         make -j4 > /dev/null && make -j4 -C contrib > /dev/null
         env CLIENTS=50 THREADS=50 make -C contrib/aqo check
 

@@ -117,7 +117,7 @@ default_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 static double
 default_estimate_num_groups(PlannerInfo *root, List *groupExprs,
 							Path *subpath, RelOptInfo *grouped_rel,
-							List **pgset)
+							List **pgset, EstimationInfo *estinfo)
 {
 	double input_rows = subpath->rows;
 
@@ -125,9 +125,9 @@ default_estimate_num_groups(PlannerInfo *root, List *groupExprs,
 			return (*prev_estimate_num_groups_hook)(root, groupExprs,
 													subpath,
 													grouped_rel,
-													pgset);
+													pgset, estinfo);
 	else
-		return estimate_num_groups(root, groupExprs, input_rows, pgset, NULL);
+		return estimate_num_groups(root, groupExprs, input_rows, pgset, estinfo);
 }
 
 /*
@@ -463,7 +463,7 @@ predict_num_groups(PlannerInfo *root, Path *subpath, List *group_exprs,
 double
 aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 							 Path *subpath, RelOptInfo *grouped_rel,
-							 List **pgset)
+							 List **pgset, EstimationInfo *estinfo)
 {
 	int fss;
 	double predicted;
@@ -478,6 +478,10 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 
 	if (prev_estimate_num_groups_hook != NULL)
 		elog(WARNING, "AQO replaced another estimator of a groups number");
+
+	/* Zero the estinfo output parameter, if non-NULL */
+	if (estinfo != NULL)
+		memset(estinfo, 0, sizeof(EstimationInfo));
 
 	if (groupExprs == NIL)
 		return 1.0;
@@ -504,5 +508,5 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 
 default_estimator:
 	return default_estimate_num_groups(root, groupExprs, subpath, grouped_rel,
-									   pgset);
+									   pgset, estinfo);
 }

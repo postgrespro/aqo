@@ -17,7 +17,7 @@ CREATE TABLE t1 AS SELECT mod(gs,10) AS x, mod(gs+1,10) AS y
 	FROM generate_series(1,1000) AS gs;
 ANALYZE t, t1;
 --
--- Do not support HAVING clause for now.
+-- Do not support HAVING clauses for now.
 --
 SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
  count 
@@ -43,8 +43,8 @@ EXPLAIN (COSTS OFF)
 (11 rows)
 
 SELECT str FROM expln('
-  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
-    SELECT * FROM t GROUP BY (x) HAVING x > 3;
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+	SELECT * FROM t GROUP BY (x) HAVING x > 3;
 ') AS str WHERE str NOT LIKE '%Memory Usage%';
                       str                      
 -----------------------------------------------
@@ -586,10 +586,6 @@ ORDER BY (md5(query_text),error) DESC;
        |         SELECT count(*) FROM t WHERE                                                          +
        |                 x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21) OR                        +
        |                 x IN (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21);
- 0.106 |                                                                                               +
-       |   EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)                                       +
-       |     SELECT * FROM t GROUP BY (x) HAVING x > 3;                                                +
-       | 
  0.454 | SELECT count(*) FROM (SELECT x, y FROM t1 GROUP BY GROUPING SETS ((x,y), (x), (y), ())) AS q1;
  0.000 | SELECT count(*) FROM (                                                                        +
        |         SELECT count(*) AS x FROM (                                                           +
@@ -602,6 +598,10 @@ ORDER BY (md5(query_text),error) DESC;
  0.000 | EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)                                         +
        |         SELECT count(*) FROM t WHERE (SELECT avg(x) FROM t t0 WHERE t0.x = t.x) =             +
        |         (SELECT avg(x) FROM t t0 WHERE t0.x = t.x);
+ 0.106 |                                                                                               +
+       | EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)                                         +
+       |         SELECT * FROM t GROUP BY (x) HAVING x > 3;                                            +
+       | 
  0.000 | SELECT count(*) FROM                                                                          +
        |         (SELECT * FROM t WHERE x % 3 < (SELECT avg(x) FROM t t0 WHERE t0.x = t.x)) AS q1      +
        |                 JOIN                                                                          +

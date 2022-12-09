@@ -1,5 +1,5 @@
 diff --git a/contrib/Makefile b/contrib/Makefile
-index f27e458482e..0c621919045 100644
+index f27e458482..0c62191904 100644
 --- a/contrib/Makefile
 +++ b/contrib/Makefile
 @@ -7,6 +7,7 @@ include $(top_builddir)/src/Makefile.global
@@ -11,17 +11,17 @@ index f27e458482e..0c621919045 100644
  		auto_explain	\
  		bloom		\
 diff --git a/src/backend/commands/explain.c b/src/backend/commands/explain.c
-index 70551522dac..d9cca82fe84 100644
+index 70551522da..958529fbab 100644
 --- a/src/backend/commands/explain.c
 +++ b/src/backend/commands/explain.c
-@@ -25,6 +25,7 @@
+@@ -24,6 +24,7 @@
+ #include "nodes/extensible.h"
  #include "nodes/makefuncs.h"
  #include "nodes/nodeFuncs.h"
- #include "parser/analyze.h"
 +#include "optimizer/cost.h"
+ #include "parser/analyze.h"
  #include "parser/parsetree.h"
  #include "rewrite/rewriteHandler.h"
- #include "storage/bufmgr.h"
 @@ -47,6 +48,12 @@ ExplainOneQuery_hook_type ExplainOneQuery_hook = NULL;
  /* Hook for plugins to get control in explain_get_index_name() */
  explain_get_index_name_hook_type explain_get_index_name_hook = NULL;
@@ -57,7 +57,7 @@ index 70551522dac..d9cca82fe84 100644
  	if (es->format == EXPLAIN_FORMAT_TEXT)
  		appendStringInfoChar(es->str, '\n');
 diff --git a/src/backend/nodes/copyfuncs.c b/src/backend/nodes/copyfuncs.c
-index 4d9746d54a0..6fa85d1c71f 100644
+index 4d9746d54a..6fa85d1c71 100644
 --- a/src/backend/nodes/copyfuncs.c
 +++ b/src/backend/nodes/copyfuncs.c
 @@ -132,6 +132,7 @@ CopyPlanFields(const Plan *from, Plan *newnode)
@@ -69,7 +69,7 @@ index 4d9746d54a0..6fa85d1c71f 100644
  
  /*
 diff --git a/src/backend/nodes/outfuncs.c b/src/backend/nodes/outfuncs.c
-index 58c2590698c..1e06738a137 100644
+index 58c2590698..1e06738a13 100644
 --- a/src/backend/nodes/outfuncs.c
 +++ b/src/backend/nodes/outfuncs.c
 @@ -342,6 +342,7 @@ _outPlanInfo(StringInfo str, const Plan *node)
@@ -81,7 +81,7 @@ index 58c2590698c..1e06738a137 100644
  
  /*
 diff --git a/src/backend/nodes/readfuncs.c b/src/backend/nodes/readfuncs.c
-index eaa51c5c062..6ad8b78c7d5 100644
+index eaa51c5c06..6ad8b78c7d 100644
 --- a/src/backend/nodes/readfuncs.c
 +++ b/src/backend/nodes/readfuncs.c
 @@ -1628,6 +1628,11 @@ ReadCommonPlan(Plan *local_node)
@@ -97,7 +97,7 @@ index eaa51c5c062..6ad8b78c7d5 100644
  
  /*
 diff --git a/src/backend/optimizer/path/costsize.c b/src/backend/optimizer/path/costsize.c
-index 006f91f0a87..ef9c8ec5817 100644
+index 006f91f0a8..ef9c8ec581 100644
 --- a/src/backend/optimizer/path/costsize.c
 +++ b/src/backend/optimizer/path/costsize.c
 @@ -98,6 +98,11 @@
@@ -362,7 +362,7 @@ index 006f91f0a87..ef9c8ec5817 100644
  {
  	double		parallel_divisor = path->parallel_workers;
 diff --git a/src/backend/optimizer/plan/createplan.c b/src/backend/optimizer/plan/createplan.c
-index 0ed858f305a..9d4a6c59030 100644
+index 0ed858f305..9d4a6c5903 100644
 --- a/src/backend/optimizer/plan/createplan.c
 +++ b/src/backend/optimizer/plan/createplan.c
 @@ -71,6 +71,7 @@
@@ -393,7 +393,7 @@ index 0ed858f305a..9d4a6c59030 100644
  
  /*
 diff --git a/src/backend/optimizer/plan/planner.c b/src/backend/optimizer/plan/planner.c
-index 70899e5430e..dac6132af54 100644
+index 70899e5430..34075cc87b 100644
 --- a/src/backend/optimizer/plan/planner.c
 +++ b/src/backend/optimizer/plan/planner.c
 @@ -143,7 +143,8 @@ static List *extract_rollup_sets(List *groupingSets);
@@ -441,7 +441,7 @@ index 70899e5430e..dac6132af54 100644
 -			dNumGroups = estimate_num_groups(root, groupExprs, path_rows,
 -											 NULL, NULL);
 +			dNumGroups = estimate_num_groups_ext(root, groupExprs, subpath,
-+												 grouped_rel, NULL);
++												 grouped_rel, NULL, NULL);
  		}
  	}
  	else if (parse->groupingSets)
@@ -474,7 +474,7 @@ index 70899e5430e..dac6132af54 100644
  								 extra->targetList);
  
 diff --git a/src/backend/optimizer/util/relnode.c b/src/backend/optimizer/util/relnode.c
-index e105a4d5f1d..c5bcc9d1d15 100644
+index e105a4d5f1..c5bcc9d1d1 100644
 --- a/src/backend/optimizer/util/relnode.c
 +++ b/src/backend/optimizer/util/relnode.c
 @@ -258,6 +258,7 @@ build_simple_rel(PlannerInfo *root, int relid, RelOptInfo *parent)
@@ -540,15 +540,9 @@ index e105a4d5f1d..c5bcc9d1d15 100644
  
  	return ppi;
 diff --git a/src/backend/utils/adt/selfuncs.c b/src/backend/utils/adt/selfuncs.c
-index 962dec6d504..899ee2bf4c5 100644
+index 87879c9ddc..1aad8c43d9 100644
 --- a/src/backend/utils/adt/selfuncs.c
 +++ b/src/backend/utils/adt/selfuncs.c
-@@ -1,4 +1,4 @@
--/*-------------------------------------------------------------------------
-+ /*-------------------------------------------------------------------------
-  *
-  * selfuncs.c
-  *	  Selectivity functions and index cost estimation functions for
 @@ -143,6 +143,7 @@
  /* Hooks for plugins to get control when we ask for stats */
  get_relation_stats_hook_type get_relation_stats_hook = NULL;
@@ -557,28 +551,29 @@ index 962dec6d504..899ee2bf4c5 100644
  
  static double eqsel_internal(PG_FUNCTION_ARGS, bool negate);
  static double eqjoinsel_inner(Oid opfuncoid, Oid collation,
-@@ -3293,6 +3294,19 @@ add_unique_group_var(PlannerInfo *root, List *varinfos,
+@@ -3293,6 +3294,20 @@ add_unique_group_var(PlannerInfo *root, List *varinfos,
  	return varinfos;
  }
  
 +double
 +estimate_num_groups_ext(PlannerInfo *root, List *groupExprs, Path *subpath,
-+						RelOptInfo *grouped_rel, List **pgset)
++						RelOptInfo *grouped_rel, List **pgset,
++						EstimationInfo *estinfo)
 +{
 +	double input_rows = subpath->rows;
 +
 +	if (estimate_num_groups_hook != NULL)
-+		return (*estimate_num_groups_hook)(root, groupExprs, subpath,
-+										   grouped_rel, pgset);
++		return (*estimate_num_groups_hook)(root, groupExprs, subpath, grouped_rel,
++										   pgset, estinfo);
 +
-+	return estimate_num_groups(root, groupExprs, input_rows, pgset, NULL);
++	return estimate_num_groups(root, groupExprs, input_rows, pgset, estinfo);
 +}
 +
  /*
   * estimate_num_groups		- Estimate number of groups in a grouped query
   *
 diff --git a/src/include/commands/explain.h b/src/include/commands/explain.h
-index e94d9e49cf6..49236ced77c 100644
+index e94d9e49cf..49236ced77 100644
 --- a/src/include/commands/explain.h
 +++ b/src/include/commands/explain.h
 @@ -75,6 +75,18 @@ extern PGDLLIMPORT ExplainOneQuery_hook_type ExplainOneQuery_hook;
@@ -601,7 +596,7 @@ index e94d9e49cf6..49236ced77c 100644
  extern void ExplainQuery(ParseState *pstate, ExplainStmt *stmt,
  						 ParamListInfo params, DestReceiver *dest);
 diff --git a/src/include/nodes/pathnodes.h b/src/include/nodes/pathnodes.h
-index f16466a0df1..8f0ed706817 100644
+index e370a01141..9f2f1628f5 100644
 --- a/src/include/nodes/pathnodes.h
 +++ b/src/include/nodes/pathnodes.h
 @@ -756,6 +756,10 @@ typedef struct RelOptInfo
@@ -640,24 +635,21 @@ index f16466a0df1..8f0ed706817 100644
  
  
 diff --git a/src/include/nodes/plannodes.h b/src/include/nodes/plannodes.h
-index 2308c80ddee..dc74cf85bd2 100644
+index 2308c80dde..a933afa483 100644
 --- a/src/include/nodes/plannodes.h
 +++ b/src/include/nodes/plannodes.h
-@@ -158,6 +158,12 @@ typedef struct Plan
+@@ -158,6 +158,9 @@ typedef struct Plan
  	 */
  	Bitmapset  *extParam;
  	Bitmapset  *allParam;
 +
-+	/*
-+	 * Additional fields for an extension purposes.
-+	 * TODO: allow to serialize/deserialize this list.
-+	 */
++	/* Additional field for an extension purposes. */
 +	List		*ext_nodes;
  } Plan;
  
  /* ----------------
 diff --git a/src/include/optimizer/cost.h b/src/include/optimizer/cost.h
-index 2113bc82de0..bcc2520cec5 100644
+index 2113bc82de..bcc2520cec 100644
 --- a/src/include/optimizer/cost.h
 +++ b/src/include/optimizer/cost.h
 @@ -39,6 +39,37 @@ typedef enum
@@ -741,7 +733,7 @@ index 2113bc82de0..bcc2520cec5 100644
  
  #endif							/* COST_H */
 diff --git a/src/include/optimizer/pathnode.h b/src/include/optimizer/pathnode.h
-index 2922c0cdc14..c59dce6989e 100644
+index 2922c0cdc1..c59dce6989 100644
 --- a/src/include/optimizer/pathnode.h
 +++ b/src/include/optimizer/pathnode.h
 @@ -18,6 +18,10 @@
@@ -756,7 +748,7 @@ index 2922c0cdc14..c59dce6989e 100644
   * prototypes for pathnode.c
   */
 diff --git a/src/include/optimizer/planmain.h b/src/include/optimizer/planmain.h
-index bf1adfc52ac..9c78e0f4e02 100644
+index bf1adfc52a..9c78e0f4e0 100644
 --- a/src/include/optimizer/planmain.h
 +++ b/src/include/optimizer/planmain.h
 @@ -24,6 +24,12 @@ extern double cursor_tuple_fraction;
@@ -773,10 +765,10 @@ index bf1adfc52ac..9c78e0f4e02 100644
   * prototypes for plan/planmain.c
   */
 diff --git a/src/include/utils/selfuncs.h b/src/include/utils/selfuncs.h
-index 9dd444e1ff5..37133340d84 100644
+index 9dd444e1ff..cfaae98aa2 100644
 --- a/src/include/utils/selfuncs.h
 +++ b/src/include/utils/selfuncs.h
-@@ -144,6 +144,12 @@ typedef bool (*get_index_stats_hook_type) (PlannerInfo *root,
+@@ -144,6 +144,13 @@ typedef bool (*get_index_stats_hook_type) (PlannerInfo *root,
  										   AttrNumber indexattnum,
  										   VariableStatData *vardata);
  extern PGDLLIMPORT get_index_stats_hook_type get_index_stats_hook;
@@ -784,18 +776,19 @@ index 9dd444e1ff5..37133340d84 100644
 +												 List *groupExprs,
 +												 Path *subpath,
 +												 RelOptInfo *grouped_rel,
-+												 List **pgset);
++												 List **pgset,
++												 EstimationInfo *estinfo);
 +extern PGDLLIMPORT estimate_num_groups_hook_type estimate_num_groups_hook;
  
  /* Functions in selfuncs.c */
  
-@@ -213,6 +219,9 @@ extern void mergejoinscansel(PlannerInfo *root, Node *clause,
+@@ -213,6 +220,9 @@ extern void mergejoinscansel(PlannerInfo *root, Node *clause,
  extern double estimate_num_groups(PlannerInfo *root, List *groupExprs,
  								  double input_rows, List **pgset,
  								  EstimationInfo *estinfo);
 +extern double estimate_num_groups_ext(PlannerInfo *root, List *groupExprs,
 +									  Path *subpath, RelOptInfo *grouped_rel,
-+									  List **pgset);
++									  List **pgset, EstimationInfo *estinfo);
  
  extern void estimate_hash_bucket_stats(PlannerInfo *root,
  									   Node *hashkey, double nbuckets,
