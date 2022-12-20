@@ -18,7 +18,7 @@ BEGIN
     END LOOP;
 END; $$;
 
-CREATE TABLE t AS SELECT * FROM generate_series(1,100) AS x;
+CREATE TABLE t AS SELECT * FROM generate_series(1,50) AS x;
 ANALYZE t;
 DELETE FROM t WHERE x > 5; -- Force optimizer to make overestimated prediction.
 
@@ -28,18 +28,18 @@ SET aqo.mode = 'learn';
 SET aqo.show_details = 'off';
 SET aqo.learn_statement_timeout = 'on';
 
-SET statement_timeout = 800; -- [0.8s]
-SELECT *, pg_sleep(1) FROM t;
+SET statement_timeout = 100; -- [0.1s]
+SELECT *, pg_sleep(0.1) FROM t;
 SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;'); -- haven't any partial data
 
 -- Don't learn because running node has smaller cardinality than an optimizer prediction
-SET statement_timeout = 3500;
-SELECT *, pg_sleep(1) FROM t;
+SET statement_timeout = 400;
+SELECT *, pg_sleep(0.1) FROM t;
 SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
 
 -- We have a real learning data.
-SET statement_timeout = 10000;
-SELECT *, pg_sleep(1) FROM t;
+SET statement_timeout = 8000;
+SELECT *, pg_sleep(0.1) FROM t;
 SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
 
 -- Force to make an underestimated prediction
@@ -48,16 +48,16 @@ ANALYZE t;
 INSERT INTO t (x) (SELECT * FROM generate_series(3,5) AS x);
 SELECT 1 FROM aqo_reset();
 
+SET statement_timeout = 100;
+SELECT *, pg_sleep(0.1) FROM t; -- Not learned
+SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
+
+SET statement_timeout = 500;
+SELECT *, pg_sleep(0.1) FROM t; -- Learn!
+SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
+
 SET statement_timeout = 800;
-SELECT *, pg_sleep(1) FROM t; -- Not learned
-SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
-
-SET statement_timeout = 3500;
-SELECT *, pg_sleep(1) FROM t; -- Learn!
-SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
-
-SET statement_timeout = 5500;
-SELECT *, pg_sleep(1) FROM t; -- Get reliable data
+SELECT *, pg_sleep(0.1) FROM t; -- Get reliable data
 SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
 
 DROP TABLE t;
