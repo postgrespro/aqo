@@ -4,11 +4,10 @@ on:
   push:
     branches: [ stable13 ]
   pull_request:
-
     branches: [ stable13 ]
 
 env:
- BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
 
 jobs:
   build:
@@ -19,6 +18,7 @@ jobs:
     - name: pg
       run: |
         sudo apt install libipc-run-perl
+
         echo "Deploying to production server on branch" $BRANCH_NAME
         git config --global user.email "ci@postgrespro.ru"
         git config --global user.name "CI PgPro admin"
@@ -28,10 +28,10 @@ jobs:
         cd pg
 
         git checkout REL_13_STABLE
-        ./configure $CONFIGURE_OPTS CFLAGS="-O3"
         git clone https://github.com/postgrespro/aqo.git contrib/aqo
         git -C contrib/aqo checkout $BRANCH_NAME
         patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg13.patch
+        ./configure $CONFIGURE_OPTS CFLAGS="-O2"
         make -j4 > /dev/null && make -j4 -C contrib > /dev/null
         env CLIENTS=50 THREADS=50 make -C contrib/aqo check
 
