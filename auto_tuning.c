@@ -42,7 +42,7 @@ get_mean(double *elems, int nelems)
 	double	sum = 0;
 	int		i;
 
-	AssertArg(nelems > 0);
+	Assert(nelems > 0);
 
 	for (i = 0; i < nelems; ++i)
 		sum += elems[i];
@@ -58,7 +58,7 @@ get_estimation(double *elems, int nelems)
 {
 	int start;
 
-	AssertArg(nelems > 0);
+	Assert(nelems > 0);
 
 	if (nelems > auto_tuning_window_size)
 		start = nelems - auto_tuning_window_size;
@@ -77,7 +77,7 @@ is_stable(double *elems, int nelems)
 	double	est,
 			last;
 
-	AssertArg(nelems > 1);
+	Assert(nelems > 1);
 
 	est = get_mean(elems, nelems - 1);
 	last = elems[nelems - 1];
