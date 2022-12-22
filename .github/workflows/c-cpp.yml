@@ -1,4 +1,4 @@
-name: C/C++ CI for the master
+name: 'C/C++ CI for the master'
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ master ]
 
 env:
- BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
 
 jobs:
   build:
@@ -18,6 +18,7 @@ jobs:
     - name: pg
       run: |
         sudo apt install libipc-run-perl
+
         echo "Deploying to production server on branch" $BRANCH_NAME
         git config --global user.email "ci@postgrespro.ru"
         git config --global user.name "CI PgPro admin"
@@ -25,11 +26,12 @@ jobs:
         export CONFIGURE_OPTS="--prefix=`pwd`/tmp_install --enable-tap-tests --enable-cassert"
         git clone https://github.com/postgres/postgres.git pg
         cd pg
+
         git checkout master
-        ./configure $CONFIGURE_OPTS CFLAGS="-O3"
         git clone https://github.com/postgrespro/aqo.git contrib/aqo
         git -C contrib/aqo checkout $BRANCH_NAME
         patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_master.patch
+        ./configure $CONFIGURE_OPTS CFLAGS="-O3"
         make -j4 > /dev/null && make -j4 -C contrib > /dev/null
         env CLIENTS=50 THREADS=50 make -C contrib/aqo check
 

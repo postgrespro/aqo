@@ -80,9 +80,9 @@ ORDER BY (md5(query_text))
 /*
  * Below, we should check each UI function
  */
-SELECT aqo_disable_class(id) FROM (
+SELECT aqo_disable_query(id) FROM (
   SELECT queryid AS id FROM aqo_queries WHERE queryid <> 0) AS q1;
- aqo_disable_class 
+ aqo_disable_query 
 -------------------
  
  
@@ -93,13 +93,13 @@ ORDER BY (learn_aqo, use_aqo, auto_tuning);
  learn_aqo | use_aqo | auto_tuning 
 -----------+---------+-------------
  f         | f       | f
- f         | f       | f
- f         | f       | f
+ t         | t       | f
+ t         | t       | f
 (3 rows)
 
-SELECT aqo_enable_class(id) FROM (
+SELECT aqo_enable_query(id) FROM (
   SELECT queryid AS id FROM aqo_queries WHERE queryid <> 0) AS q1;
- aqo_enable_class 
+ aqo_enable_query 
 ------------------
  
  

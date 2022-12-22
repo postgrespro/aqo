@@ -14,6 +14,7 @@
 
 #include "access/relation.h"
 #include "access/table.h"
+#include "catalog/objectaccess.h"
 #include "catalog/pg_extension.h"
 #include "commands/extension.h"
 #include "miscadmin.h"
@@ -23,11 +24,10 @@
 #include "aqo_shared.h"
 #include "cardinality_hooks.h"
 #include "path_utils.h"
+#include "postmaster/bgworker.h"
 #include "preprocessing.h"
 #include "learn_cache.h"
 #include "storage.h"
-#include "postmaster/bgworker.h"
-#include "catalog/objectaccess.h"
 
 
 PG_MODULE_MAGIC;
@@ -118,6 +118,9 @@ ExplainOneNode_hook_type					prev_ExplainOneNode_hook;
 static shmem_request_hook_type				prev_shmem_request_hook = NULL;
 object_access_hook_type						prev_object_access_hook;
 
+PGDLLEXPORT void aqo_bgworker_cleanup(Datum main_arg);
+static void aqo_bgworker_startup(void);
+
 /*****************************************************************************
  *
  *	CREATE/DROP EXTENSION FUNCTIONS
@@ -156,7 +159,7 @@ aqo_shmem_request(void)
  * Entry point for CleanupWorker's process.
  */
 void
-aqo_bgworker_cleanup(void)
+aqo_bgworker_cleanup(Datum main_arg)
 {
 	int	fs_num;
 	int	fss_num;
@@ -164,10 +167,10 @@ aqo_bgworker_cleanup(void)
 	cleanup_aqo_database(true, &fs_num, &fss_num);
 }
 
-/* 
+/*
  * Object access hook
  */
-void
+static void
 aqo_drop_access_hook(ObjectAccessType access,
 					 Oid classId,
 					 Oid objectId,
@@ -198,7 +201,7 @@ aqo_drop_access_hook(ObjectAccessType access,
 	}
 }
 
-void
+static void
 aqo_bgworker_startup(void)
 {
 	BackgroundWorker		worker;
@@ -355,7 +358,7 @@ _PG_init(void)
 							&fs_max_items,
 							10000,
 							1, INT_MAX,
-							PGC_SUSET,
+							PGC_POSTMASTER,
 							0,
 							NULL,
 							NULL,
@@ -368,7 +371,7 @@ _PG_init(void)
 							&fss_max_items,
 							100000,
 							0, INT_MAX,
-							PGC_SUSET,
+							PGC_POSTMASTER,
 							0,
 							NULL,
 							NULL,
@@ -406,7 +409,7 @@ _PG_init(void)
 							 NULL,
 							 &cleanup_bgworker,
 							 false,
-							 PGC_USERSET,
+							 PGC_SUSET,
 							 0,
 							 NULL,
 							 NULL,
@@ -484,7 +487,7 @@ _PG_init(void)
 	 */
 	AQOLearnMemCtx = AllocSetContextCreate(AQOTopMemCtx,
 											 "AQOLearnMemoryContext",
- 											 ALLOCSET_DEFAULT_SIZES);
+											 ALLOCSET_DEFAULT_SIZES);
 	RegisterResourceReleaseCallback(aqo_free_callback, NULL);
 	RegisterAQOPlanNodeMethods();
 
