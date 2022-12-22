@@ -4,8 +4,8 @@ use warnings;
 use PostgreSQL::Test::Cluster;
 use PostgreSQL::Test::Utils;
 use Test::More tests => 12;
-print "start";
-my $node = PostgreSQL::Test::Cluster->new('profiling');
+
+my $node = PostgreSQL::Test::Cluster->new('test');
 
 $node->init;
 
