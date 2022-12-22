@@ -37,7 +37,7 @@ void _PG_init(void);
 #define AQO_MODULE_MAGIC	(1234)
 
 /* Strategy of determining feature space for new queries. */
-int		aqo_mode;
+int		aqo_mode = AQO_MODE_CONTROLLED;
 bool	force_collect_stat;
 
 /*

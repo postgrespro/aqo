@@ -18,8 +18,6 @@
 
 #include "postgres.h"
 
-#include "aqo.h"
-
 #include "access/parallel.h"
 #include "optimizer/optimizer.h"
 #include "postgres_fdw.h"
