@@ -2170,39 +2170,16 @@ aqo_cleanup(PG_FUNCTION_ARGS)
 {
 	int					fs_num;
 	int					fss_num;
-	ReturnSetInfo	   *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	TupleDesc			tupDesc;
-	MemoryContext		per_query_ctx;
-	MemoryContext		oldcontext;
-	Tuplestorestate	   *tupstore;
+	HeapTuple			tuple;
+	Datum				result;
 	Datum				values[2];
 	bool				nulls[2] = {0, 0};
 
-	/* check to see if caller supports us returning a tuplestore */
-	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("set-valued function called in context that cannot accept a set")));
-	if (!(rsinfo->allowedModes & SFRM_Materialize))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("materialize mode required, but it is not allowed in this context")));
-
-	/* Switch into long-lived context to construct returned data structures */
-	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
-	oldcontext = MemoryContextSwitchTo(per_query_ctx);
-
-	/* Build a tuple descriptor for our result type */
 	if (get_call_result_type(fcinfo, NULL, &tupDesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
+
 	Assert(tupDesc->natts == 2);
-
-	tupstore = tuplestore_begin_heap(true, false, work_mem);
-	rsinfo->returnMode = SFRM_Materialize;
-	rsinfo->setResult = tupstore;
-	rsinfo->setDesc = tupDesc;
-
-	MemoryContextSwitchTo(oldcontext);
 
 	/*
 	 * Make forced cleanup: if at least one fss isn't actual, remove parent FS
@@ -2216,9 +2193,11 @@ aqo_cleanup(PG_FUNCTION_ARGS)
 
 	values[0] = Int32GetDatum(fs_num);
 	values[1] = Int32GetDatum(fss_num);
-	tuplestore_putvalues(tupstore, tupDesc, values, nulls);
-	tuplestore_donestoring(tupstore);
-	return (Datum) 0;
+
+	tuple = heap_form_tuple(tupDesc, values, nulls);
+	result = HeapTupleGetDatum(tuple);
+
+	PG_RETURN_DATUM(result);
 }
 
 /*
