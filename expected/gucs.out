@@ -107,7 +107,7 @@ SELECT obj_description('aqo_reset'::regproc::oid);
                                  List of functions
  Schema |    Name     | Result data type |        Argument data types        | Type 
 --------+-------------+------------------+-----------------------------------+------
- public | aqo_cleanup | SETOF record     | OUT nfs integer, OUT nfss integer | func
+ public | aqo_cleanup | record           | OUT nfs integer, OUT nfss integer | func
 (1 row)
 
 \df aqo_reset
