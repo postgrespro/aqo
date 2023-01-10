@@ -60,6 +60,13 @@ SET statement_timeout = 5500;
 SELECT *, pg_sleep(1) FROM t; -- Get reliable data
 SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
 
+-- Interrupted query should immediately appear in aqo_data
+SELECT 1 FROM aqo_reset();
+SET statement_timeout = 500;
+SELECT count(*) FROM aqo_data; -- Must be zero
+SELECT x, pg_sleep(0.1) FROM t WHERE x > 0;
+SELECT count(*) FROM aqo_data; -- Must be one
+
 SELECT 1 FROM aqo_reset();
 DROP TABLE t;
 DROP EXTENSION aqo;
