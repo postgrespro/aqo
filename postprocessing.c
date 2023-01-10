@@ -28,9 +28,10 @@
 #include "path_utils.h"
 #include "machine_learning.h"
 #include "preprocessing.h"
-#include "learn_cache.h"
 #include "storage.h"
 
+
+bool aqo_learn_statement_timeout = false;
 
 typedef struct
 {
@@ -58,9 +59,8 @@ static char *PlanStateInfo = "PlanStateInfo";
 
 /* Query execution statistics collecting utilities */
 static void atomic_fss_learn_step(uint64 fhash, int fss, OkNNrdata *data,
-								  double *features,
-								  double target, double rfactor,
-								  List *reloids, bool isTimedOut);
+								  double *features, double target,
+								  double rfactor, List *reloids);
 static bool learnOnPlanState(PlanState *p, void *context);
 static void learn_agg_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 							 double learned, double rfactor, Plan *plan,
@@ -85,13 +85,13 @@ static bool ExtractFromQueryEnv(QueryDesc *queryDesc);
 static void
 atomic_fss_learn_step(uint64 fs, int fss, OkNNrdata *data,
 					  double *features, double target, double rfactor,
-					  List *reloids, bool isTimedOut)
+					  List *reloids)
 {
-	if (!load_fss_ext(fs, fss, data, NULL, !isTimedOut))
+	if (!load_fss_ext(fs, fss, data, NULL))
 		data->rows = 0;
 
 	data->rows = OkNNr_learn(data, features, target, rfactor);
-	update_fss_ext(fs, fss, data, reloids, isTimedOut);
+	update_fss_ext(fs, fss, data, reloids);
 }
 
 static void
@@ -120,7 +120,7 @@ learn_agg_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 
 	/* Critical section */
 	atomic_fss_learn_step(fs, fss, data, NULL,
-						  target, rfactor, rels->hrels, ctx->isTimedOut);
+						  target, rfactor, rels->hrels);
 	/* End of critical section */
 }
 
@@ -157,8 +157,7 @@ learn_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 	data = OkNNr_allocate(ncols);
 
 	/* Critical section */
-	atomic_fss_learn_step(fs, fss, data, features, target, rfactor,
-						  rels->hrels, ctx->isTimedOut);
+	atomic_fss_learn_step(fs, fss, data, features, target, rfactor, rels->hrels);
 	/* End of critical section */
 }
 
@@ -749,11 +748,6 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		(!query_context.learn_aqo && query_context.collect_stat))
 	{
 		aqo_obj_stat ctx = {NIL, NIL, NIL, query_context.learn_aqo, false};
-
-		/*
-		 * Before learn phase, flush all cached data down to ML base.
-		 */
-		lc_flush_data();
 
 		/*
 		 * Analyze plan if AQO need to learn or need to collect statistics only.
