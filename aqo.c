@@ -22,7 +22,6 @@
 #include "cardinality_hooks.h"
 #include "path_utils.h"
 #include "preprocessing.h"
-#include "learn_cache.h"
 #include "storage.h"
 
 
@@ -206,7 +205,7 @@ _PG_init(void)
 							 PGC_USERSET,
 							 0,
 							 NULL,
-							 lc_assign_hook,
+							 NULL,
 							 NULL
 	);
 
