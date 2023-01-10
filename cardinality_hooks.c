@@ -452,7 +452,7 @@ predict_num_groups(PlannerInfo *root, Path *subpath, List *group_exprs,
 	*fss = get_grouped_exprs_hash(child_fss, group_exprs);
 	memset(&data, 0, sizeof(OkNNrdata));
 
-	if (!load_fss_ext(query_context.fspace_hash, *fss, &data, NULL, true))
+	if (!load_fss_ext(query_context.fspace_hash, *fss, &data, NULL))
 		return -1;
 
 	Assert(data.rows == 1);

@@ -111,6 +111,29 @@ SELECT check_estimated_rows('SELECT *, pg_sleep(1) FROM t;');
                     5
 (1 row)
 
+-- Interrupted query should immediately appear in aqo_data
+SELECT 1 FROM aqo_reset();
+ ?column? 
+----------
+        1
+(1 row)
+
+SET statement_timeout = 500;
+SELECT count(*) FROM aqo_data; -- Must be zero
+ count 
+-------
+     0
+(1 row)
+
+SELECT x, pg_sleep(0.1) FROM t WHERE x > 0;
+NOTICE:  [AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data.
+ERROR:  canceling statement due to statement timeout
+SELECT count(*) FROM aqo_data; -- Must be one
+ count 
+-------
+     1
+(1 row)
+
 SELECT 1 FROM aqo_reset();
  ?column? 
 ----------
