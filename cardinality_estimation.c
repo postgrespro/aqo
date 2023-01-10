@@ -81,7 +81,7 @@ predict_for_relation(List *clauses, List *selectivities, List *relsigns,
 							  &ncols, &features);
 	data = OkNNr_allocate(ncols);
 
-	if (load_fss_ext(query_context.fspace_hash, *fss, data, NULL, true))
+	if (load_fss_ext(query_context.fspace_hash, *fss, data, NULL))
 		result = OkNNr_predict(data, features);
 	else
 	{
