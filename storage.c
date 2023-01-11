@@ -1586,7 +1586,8 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 
 		found = false;
 		LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
-		neighbour_entry = (NeighboursEntry *) hash_search(fss_neighbours, &fss, HASH_FIND, &found);
+		neighbour_entry = (NeighboursEntry *) hash_search(fss_neighbours, &key.fss, HASH_FIND, &found);
+		//   elog(NOTICE, "neighbours num %ld", hash_get_num_entries(fss_neighbours));
 		entry = found ? neighbour_entry->data : NULL;
 
 		/*
@@ -1595,10 +1596,10 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 		while (entry != NULL)
 		{
 			List *tmp_oids = NIL;
-
+			elog(NOTICE, "ЗАШЛИ К СОСЕДЯМ entry %d data %d", entry->cols, data->cols);
 			if (entry->cols != data->cols)
 				continue;
-
+			elog(NOTICE, "Я нашел соседа fss %d", fss);
 			temp_data = _fill_knn_data(entry, &tmp_oids);
 
 			if (data->rows > 0 && list_length(tmp_oids) != noids)
@@ -2109,7 +2110,7 @@ _deform_neighbours_record_cb(void *data, size_t size)
 
 	fss = ((NeighboursEntry *) data)->fss;
 	entry = (NeighboursEntry *) hash_search(fss_neighbours, &fss, HASH_ENTER, &found);
-	Assert(!found);
+	Assert(!found && entry);
 	memcpy(entry, data, sizeof(NeighboursEntry));
 	return true;
 }
@@ -2121,13 +2122,8 @@ aqo_neighbours_load(void)
 
 	LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
 
-	if (hash_get_num_entries(fss_neighbours) != 0)
-	{
-		/* Someone have done it concurrently. */
-		elog(LOG, "[AQO] Another backend have loaded neighbours data concurrently.");
-		LWLockRelease(&aqo_state->neighbours_lock);
-		return;
-	}
+	/* Load on postmaster sturtup. So no any concurrent actions possible here. */
+	Assert(hash_get_num_entries(fss_neighbours) == 0);
 
 	data_load(PGAQO_NEIGHBOURS_FILE, _deform_neighbours_record_cb, NULL);
 
