@@ -56,9 +56,9 @@ typedef struct data_key
 } data_key;
 
 typedef struct DataEntry DataEntry;
-typedef struct neigbour_list neigbour_list;
+typedef struct neighbour_references neighbour_references;
 
-struct neigbour_list
+struct neighbour_references
 {
 	DataEntry	*prev;
 	DataEntry	*next;
@@ -67,7 +67,7 @@ struct neigbour_list
 struct DataEntry
 {
 	data_key key;
-	neigbour_list list;
+	neighbour_references neighbour_refs;
 
 	/* defines a size and data placement in the DSA memory block */
 	int cols; /* aka nfeatures */
