@@ -10,8 +10,6 @@
 
 #include "postgres.h"
 
-#include "aqo.h"
-
 #include "access/relation.h"
 #include "access/table.h"
 #include "catalog/pg_extension.h"
@@ -35,7 +33,7 @@ void _PG_init(void);
 #define AQO_MODULE_MAGIC	(1234)
 
 /* Strategy of determining feature space for new queries. */
-int		aqo_mode;
+int		aqo_mode = AQO_MODE_CONTROLLED;
 bool	force_collect_stat;
 
 /*
@@ -160,6 +158,12 @@ _PG_init(void)
 				 errmsg("AQO module could be loaded only on startup."),
 				 errdetail("Add 'aqo' into the shared_preload_libraries list.")));
 
+	/*
+	 * Inform the postmaster that we want to enable query_id calculation if
+	 * compute_query_id is set to auto.
+	 */
+	EnableQueryId();
+
 	DefineCustomEnumVariable("aqo.mode",
 							 "Mode of aqo usage.",
 							 NULL,
@@ -257,7 +261,7 @@ _PG_init(void)
 							&fs_max_items,
 							10000,
 							1, INT_MAX,
-							PGC_SUSET,
+							PGC_POSTMASTER,
 							0,
 							NULL,
 							NULL,
@@ -270,7 +274,7 @@ _PG_init(void)
 							&fss_max_items,
 							100000,
 							0, INT_MAX,
-							PGC_SUSET,
+							PGC_POSTMASTER,
 							0,
 							NULL,
 							NULL,
@@ -371,7 +375,7 @@ _PG_init(void)
 	 */
 	AQOLearnMemCtx = AllocSetContextCreate(AQOTopMemCtx,
 											 "AQOLearnMemoryContext",
- 											 ALLOCSET_DEFAULT_SIZES);
+											 ALLOCSET_DEFAULT_SIZES);
 	RegisterResourceReleaseCallback(aqo_free_callback, NULL);
 	RegisterAQOPlanNodeMethods();
 

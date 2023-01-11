@@ -1,12 +1,11 @@
 #ifndef AQO_SHARED_H
 #define AQO_SHARED_H
 
-
+#include "lib/dshash.h"
 #include "storage/dsm.h"
 #include "storage/ipc.h"
 #include "storage/lwlock.h"
 #include "utils/dsa.h"
-#include "lib/dshash.h"
 
 #define AQO_SHARED_MAGIC	0x053163
 

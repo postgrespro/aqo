@@ -1,4 +1,12 @@
 CREATE EXTENSION aqo;
+-- Utility tool. Allow to filter system-dependent strings from an explain output.
+CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
+BEGIN
+  RETURN QUERY
+    EXECUTE format('%s', query_string);
+  RETURN;
+END;
+$$ LANGUAGE PLPGSQL;
 SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
@@ -367,7 +375,6 @@ SELECT count(*) FROM
                              Filter: (x <> t_1.x)
                              Rows Removed by Filter: 50
          ->  Hash (actual rows=851 loops=1)
-               AQO not used
                ->  Seq Scan on t (actual rows=851 loops=1)
                      AQO: rows=851, error=0%
                      Filter: (((x % 3))::numeric < (SubPlan 1))
@@ -382,7 +389,7 @@ SELECT count(*) FROM
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1
-(31 rows)
+(30 rows)
 
 -- Two identical subplans in a clause
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
@@ -485,17 +492,6 @@ SELECT * FROM
 -- any prediction on number of fetched tuples.
 -- So, if selectivity was wrong we could make bad choice of Scan operation.
 -- For example, we could choose suboptimal index.
---
--- Returns string-by-string explain of a query. Made for removing some strings
--- from the explain output.
---
-CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
-BEGIN
-    RETURN QUERY
-        EXECUTE format('EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF) %s', query_string);
-    RETURN;
-END;
-$$ LANGUAGE PLPGSQL;
 -- Turn off statistics gathering for simple demonstration of filtering problem.
 ALTER TABLE t SET (autovacuum_enabled = 'false');
 CREATE INDEX ind1 ON t(x);
@@ -531,10 +527,11 @@ SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
     50
 (1 row)
 
-SELECT str AS result
-FROM expln('SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1') AS str
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+    SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1') AS str
 WHERE str NOT LIKE '%Heap Blocks%';
-                             result                              
+                               str                               
 -----------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
@@ -545,12 +542,11 @@ WHERE str NOT LIKE '%Heap Blocks%';
          Filter: (t.x < 3)
          Rows Removed by Filter: 300
          ->  Bitmap Index Scan on ind2 (actual rows=350 loops=1)
-               AQO not used
                Index Cond: (mod(t.x, 3) = 1)
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(14 rows)
+(13 rows)
 
 -- Best choice is ...
 ANALYZE t;
@@ -579,7 +575,7 @@ ORDER BY (md5(query_text),error) DESC;
 -------+------------------------------------------------------------------------------------------------
  0.768 | SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,y)) AS q1;
  0.070 | SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
- 1.416 | SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
+ 0.000 | SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
  0.000 | SELECT * FROM                                                                                 +
        |         (SELECT * FROM t WHERE x < 0) AS t0                                                   +
        |                 JOIN                                                                          +

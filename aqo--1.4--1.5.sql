@@ -19,6 +19,7 @@ DROP TABLE public.aqo_data CASCADE;
 DROP TABLE public.aqo_queries CASCADE;
 DROP TABLE public.aqo_query_texts CASCADE;
 DROP TABLE public.aqo_query_stat CASCADE;
+DROP FUNCTION invalidate_deactivated_queries_cache;
 
 /*
  * VIEWs to discover AQO data.

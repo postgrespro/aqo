@@ -391,8 +391,8 @@ aqo_stat_reset(void)
 	hash_seq_init(&hash_seq, stat_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
-		if (hash_search(stat_htab, &entry->queryid, HASH_REMOVE, NULL) == NULL)
-			elog(ERROR, "[AQO] hash table corrupted");
+		if (!hash_search(stat_htab, &entry->queryid, HASH_REMOVE, NULL))
+			elog(PANIC, "[AQO] hash table corrupted");
 		num_remove++;
 	}
 	aqo_state->stat_changed = true;
@@ -1228,7 +1228,7 @@ _aqo_data_remove(data_key *key)
 		dsa_free(data_dsa, entry->data_dp);
 		entry->data_dp = InvalidDsaPointer;
 
-		if (hash_search(data_htab, key, HASH_REMOVE, NULL) == NULL)
+		if (!hash_search(data_htab, key, HASH_REMOVE, NULL))
 			elog(PANIC, "[AQO] Inconsistent data hash table");
 
 		aqo_state->data_changed = true;
@@ -1259,8 +1259,8 @@ aqo_qtexts_reset(void)
 
 		Assert(DsaPointerIsValid(entry->qtext_dp));
 		dsa_free(qtext_dsa, entry->qtext_dp);
-		if (hash_search(qtexts_htab, &entry->queryid, HASH_REMOVE, NULL) == NULL)
-			elog(ERROR, "[AQO] hash table corrupted");
+		if (!hash_search(qtexts_htab, &entry->queryid, HASH_REMOVE, NULL))
+			elog(PANIC, "[AQO] hash table corrupted");
 		num_remove++;
 	}
 	aqo_state->qtexts_changed = true;
@@ -1796,8 +1796,8 @@ _aqo_data_clean(uint64 fs)
 		LWLockRelease(&aqo_state->neighbours_lock);
 
 
-		if (hash_search(data_htab, &entry->key, HASH_REMOVE, NULL) == NULL)
-			elog(ERROR, "[AQO] hash table corrupted");
+		if (!hash_search(data_htab, &entry->key, HASH_REMOVE, NULL))
+			elog(PANIC, "[AQO] hash table corrupted");
 		removed++;
 	}
 
@@ -1823,8 +1823,8 @@ aqo_data_reset(void)
 	{
 		Assert(DsaPointerIsValid(entry->data_dp));
 		dsa_free(data_dsa, entry->data_dp);
-		if (hash_search(data_htab, &entry->key, HASH_REMOVE, NULL) == NULL)
-			elog(ERROR, "[AQO] hash table corrupted");
+		if (!hash_search(data_htab, &entry->key, HASH_REMOVE, NULL))
+			elog(PANIC, "[AQO] hash table corrupted");
 		num_remove++;
 	}
 
@@ -1963,8 +1963,8 @@ aqo_queries_reset(void)
 			/* Don't remove default feature space */
 			continue;
 
-		if (hash_search(queries_htab, &entry->queryid, HASH_REMOVE, NULL) == NULL)
-			elog(ERROR, "[AQO] hash table corrupted");
+		if (!hash_search(queries_htab, &entry->queryid, HASH_REMOVE, NULL))
+			elog(PANIC, "[AQO] hash table corrupted");
 		num_remove++;
 	}
 
@@ -2404,39 +2404,16 @@ aqo_cleanup(PG_FUNCTION_ARGS)
 {
 	int					fs_num;
 	int					fss_num;
-	ReturnSetInfo	   *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	TupleDesc			tupDesc;
-	MemoryContext		per_query_ctx;
-	MemoryContext		oldcontext;
-	Tuplestorestate	   *tupstore;
+	HeapTuple			tuple;
+	Datum				result;
 	Datum				values[2];
 	bool				nulls[2] = {0, 0};
 
-	/* check to see if caller supports us returning a tuplestore */
-	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("set-valued function called in context that cannot accept a set")));
-	if (!(rsinfo->allowedModes & SFRM_Materialize))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("materialize mode required, but it is not allowed in this context")));
-
-	/* Switch into long-lived context to construct returned data structures */
-	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
-	oldcontext = MemoryContextSwitchTo(per_query_ctx);
-
-	/* Build a tuple descriptor for our result type */
 	if (get_call_result_type(fcinfo, NULL, &tupDesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
+
 	Assert(tupDesc->natts == 2);
-
-	tupstore = tuplestore_begin_heap(true, false, work_mem);
-	rsinfo->returnMode = SFRM_Materialize;
-	rsinfo->setResult = tupstore;
-	rsinfo->setDesc = tupDesc;
-
-	MemoryContextSwitchTo(oldcontext);
 
 	/*
 	 * Make forced cleanup: if at least one fss isn't actual, remove parent FS
@@ -2450,9 +2427,10 @@ aqo_cleanup(PG_FUNCTION_ARGS)
 
 	values[0] = Int32GetDatum(fs_num);
 	values[1] = Int32GetDatum(fss_num);
-	tuplestore_putvalues(tupstore, tupDesc, values, nulls);
-	tuplestore_donestoring(tupstore);
-	return (Datum) 0;
+	tuple = heap_form_tuple(tupDesc, values, nulls);
+	result = HeapTupleGetDatum(tuple);
+
+	PG_RETURN_DATUM(result);
 }
 
 /*

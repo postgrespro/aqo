@@ -225,7 +225,6 @@ extern int njoins;
 /* AQO Memory contexts */
 extern MemoryContext AQOTopMemCtx;
 extern MemoryContext AQOCacheMemCtx;
-extern MemoryContext AQOUtilityMemCtx;
 extern MemoryContext AQOPredictMemCtx;
 extern MemoryContext AQOLearnMemCtx;
 
@@ -284,7 +283,6 @@ void aqo_ExecutorEnd(QueryDesc *queryDesc);
 extern void automatical_query_tuning(uint64 query_hash, struct StatEntry *stat);
 
 /* Utilities */
-extern int int64_compare(const void *a, const void *b);
 extern int int_cmp(const void *a, const void *b);
 extern int double_cmp(const void *a, const void *b);
 extern int *argsort(void *a, int n, size_t es,

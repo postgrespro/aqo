@@ -54,17 +54,29 @@ SELECT x FROM frgn;
 (5 rows)
 
 -- Push down base filters. Use verbose mode to see filters.
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE))
-SELECT x FROM frgn WHERE x < 10;
-ERROR:  syntax error at or near ")"
-LINE 1: ...LAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE))
-                                                                      ^
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
-SELECT x FROM frgn WHERE x < 10;
-                        QUERY PLAN                         
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+    SELECT x FROM frgn WHERE x < 10;
+') AS str;
+                            str                            
 -----------------------------------------------------------
  Foreign Scan on public.frgn (actual rows=1 loops=1)
    AQO not used
+   Output: x
+   Remote SQL: SELECT x FROM public.local WHERE ((x < 10))
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(7 rows)
+
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+    SELECT x FROM frgn WHERE x < 10;
+') AS str;
+                            str                            
+-----------------------------------------------------------
+ Foreign Scan on public.frgn (actual rows=1 loops=1)
+   AQO: rows=1, error=0%
    Output: x
    Remote SQL: SELECT x FROM public.local WHERE ((x < 10))
  Using aqo: true
@@ -98,13 +110,15 @@ SELECT str FROM expln('
  JOINS: 0
 (6 rows)
 
--- TODO: Should learn on postgres_fdw nodes
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
-  SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
-                                               QUERY PLAN                                               
+-- Should learn on postgres_fdw nodes
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+    SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
+') AS str;
+                                                  str                                                   
 --------------------------------------------------------------------------------------------------------
  Foreign Scan (actual rows=1 loops=1)
-   AQO not used
+   AQO: rows=1, error=0%
    Output: a.x, b.x
    Relations: (public.frgn a) INNER JOIN (public.frgn b)
    Remote SQL: SELECT r1.x, r2.x FROM (public.local r1 INNER JOIN public.local r2 ON (((r1.x = r2.x))))
@@ -113,6 +127,126 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
  JOINS: 0
 (8 rows)
 
+CREATE TABLE local_a(aid int primary key, aval text);
+CREATE TABLE local_b(bid int primary key, aid int references local_a(aid), bval text);
+INSERT INTO local_a SELECT i, 'val_' || i FROM generate_series(1,100) i;
+INSERT INTO local_b SELECT i, mod((i+random()*10)::numeric, 10) + 1, 'val_' || i FROM generate_series(1,1000) i;
+ANALYZE local_a, local_b;
+CREATE FOREIGN TABLE frgn_a(aid int, aval text) SERVER loopback OPTIONS (table_name 'local_a');
+CREATE FOREIGN TABLE frgn_b(bid int, aid int, bval text) SERVER loopback OPTIONS (table_name 'local_b');
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+SELECT * from frgn_a AS a, frgn_b AS b
+WHERE a.aid = b.aid AND b.bval like 'val%';
+                  QUERY PLAN                   
+-----------------------------------------------
+ Foreign Scan (actual rows=1000 loops=1)
+   AQO not used
+   Relations: (frgn_a a) INNER JOIN (frgn_b b)
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(6 rows)
+
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+SELECT * from frgn_a AS a, frgn_b AS b
+WHERE a.aid = b.aid AND b.bval like 'val%';
+                  QUERY PLAN                   
+-----------------------------------------------
+ Foreign Scan (actual rows=1000 loops=1)
+   AQO: rows=1000, error=0%
+   Relations: (frgn_a a) INNER JOIN (frgn_b b)
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(6 rows)
+
+-- Partitioned join over foreign tables
+set enable_partitionwise_join = on;
+ALTER SERVER loopback OPTIONS (ADD fdw_tuple_cost '1.0');
+CREATE TABLE local_main_p0(aid int, aval text);
+CREATE TABLE local_main_p1(aid int, aval text);
+CREATE TABLE main (aid int, aval text) PARTITION BY HASH(aid);
+CREATE FOREIGN TABLE main_p0 PARTITION OF main FOR VALUES WITH (MODULUS 3, REMAINDER 0)
+	SERVER loopback OPTIONS (table_name 'local_main_p0');
+CREATE FOREIGN TABLE main_p1 PARTITION OF main FOR VALUES WITH (MODULUS 3, REMAINDER 1)
+	SERVER loopback OPTIONS (table_name 'local_main_p1');
+CREATE TABLE main_p2 PARTITION OF main FOR VALUES WITH (MODULUS 3, REMAINDER 2);
+CREATE TABLE local_ref_p0(bid int, aid int, bval text);
+CREATE TABLE local_ref_p1(bid int, aid int, bval text);
+CREATE TABLE ref (bid int, aid int, bval text) PARTITION BY HASH(aid);
+CREATE FOREIGN TABLE ref_p0 PARTITION OF ref FOR VALUES WITH (MODULUS 3, REMAINDER 0)
+	SERVER loopback OPTIONS (table_name 'local_ref_p0');
+CREATE FOREIGN TABLE ref_p1 PARTITION OF ref FOR VALUES WITH (MODULUS 3, REMAINDER 1)
+	SERVER loopback OPTIONS (table_name 'local_ref_p1');
+CREATE TABLE ref_p2 PARTITION OF ref FOR VALUES WITH (MODULUS 3, REMAINDER 2);
+INSERT INTO main SELECT i, 'val_' || i FROM generate_series(1,100) i;
+INSERT INTO ref SELECT i, mod(i, 10) + 1, 'val_' || i FROM generate_series(1,1000) i;
+ANALYZE local_main_p0, local_main_p1, main_p2;
+ANALYZE local_ref_p0, local_ref_p1, ref_p2;
+SELECT str AS result
+FROM expln('
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+SELECT * from main AS a, ref AS b
+WHERE a.aid = b.aid AND b.bval like ''val%''') AS str
+WHERE str NOT LIKE '%Memory%';
+                               result                               
+--------------------------------------------------------------------
+ Append (actual rows=1000 loops=1)
+   AQO not used
+   ->  Foreign Scan (actual rows=400 loops=1)
+         AQO not used
+         Relations: (main_p0 a_1) INNER JOIN (ref_p0 b_1)
+   ->  Foreign Scan (actual rows=300 loops=1)
+         AQO not used
+         Relations: (main_p1 a_2) INNER JOIN (ref_p1 b_2)
+   ->  Hash Join (actual rows=300 loops=1)
+         AQO not used
+         Hash Cond: (b_3.aid = a_3.aid)
+         ->  Seq Scan on ref_p2 b_3 (actual rows=300 loops=1)
+               AQO not used
+               Filter: (bval ~~ 'val%'::text)
+         ->  Hash (actual rows=38 loops=1)
+               ->  Seq Scan on main_p2 a_3 (actual rows=38 loops=1)
+                     AQO not used
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 1
+(20 rows)
+
+SELECT str AS result
+FROM expln('
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+SELECT * from main AS a, ref AS b
+WHERE a.aid = b.aid AND b.bval like ''val%''') AS str
+WHERE str NOT LIKE '%Memory%';
+                               result                               
+--------------------------------------------------------------------
+ Append (actual rows=1000 loops=1)
+   AQO not used
+   ->  Foreign Scan (actual rows=400 loops=1)
+         AQO: rows=400, error=0%
+         Relations: (main_p0 a_1) INNER JOIN (ref_p0 b_1)
+   ->  Foreign Scan (actual rows=300 loops=1)
+         AQO: rows=300, error=0%
+         Relations: (main_p1 a_2) INNER JOIN (ref_p1 b_2)
+   ->  Hash Join (actual rows=300 loops=1)
+         AQO: rows=300, error=0%
+         Hash Cond: (b_3.aid = a_3.aid)
+         ->  Seq Scan on ref_p2 b_3 (actual rows=300 loops=1)
+               AQO: rows=300, error=0%
+               Filter: (bval ~~ 'val%'::text)
+         ->  Hash (actual rows=38 loops=1)
+               ->  Seq Scan on main_p2 a_3 (actual rows=38 loops=1)
+                     AQO: rows=38, error=0%
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 1
+(20 rows)
+
+DROP TABLE main, local_main_p0, local_main_p1;
+DROP TABLE ref, local_ref_p0, local_ref_p1;
+ALTER SERVER loopback OPTIONS (DROP fdw_tuple_cost);
+reset enable_partitionwise_join;
 -- TODO: Non-mergejoinable join condition.
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
@@ -126,12 +260,14 @@ SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
  JOINS: 0
 (6 rows)
 
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
-SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
-                                               QUERY PLAN                                               
+SELECT str FROM expln('
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+    SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
+') AS str;
+                                                  str                                                   
 --------------------------------------------------------------------------------------------------------
  Foreign Scan (actual rows=0 loops=1)
-   AQO not used
+   AQO: rows=1, error=100%
    Output: a.x, b.x
    Relations: (public.frgn a) INNER JOIN (public.frgn b)
    Remote SQL: SELECT r1.x, r2.x FROM (public.local r1 INNER JOIN public.local r2 ON (((r1.x < r2.x))))
@@ -142,8 +278,12 @@ SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
 
 DROP EXTENSION aqo CASCADE;
 DROP EXTENSION postgres_fdw CASCADE;
-NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to 5 other objects
 DETAIL:  drop cascades to server loopback
 drop cascades to user mapping for public on server loopback
 drop cascades to foreign table frgn
+drop cascades to foreign table frgn_a
+drop cascades to foreign table frgn_b
 DROP TABLE local;
+DROP TABLE local_b;
+DROP TABLE local_a;

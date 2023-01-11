@@ -23,6 +23,7 @@
 #include "aqo.h"
 #include "hash.h"
 
+#include "postgres_fdw.h"
 
 /*
  * Hook on creation of a plan node. We need to store AQO-specific data to
@@ -61,11 +62,34 @@ create_aqo_plan_node()
 	return node;
 }
 
+
+/* Ensure that it's postgres_fdw's foreign server oid */
+static bool
+is_postgres_fdw_server(Oid serverid)
+{
+	ForeignServer *server;
+	ForeignDataWrapper *fdw;
+
+	if (!OidIsValid(serverid))
+		return false;
+
+	server = GetForeignServerExtended(serverid, FSV_MISSING_OK);
+	if (!server)
+		return false;
+
+	fdw = GetForeignDataWrapperExtended(server->fdwid, FDW_MISSING_OK);
+	if (!fdw || !fdw->fdwname)
+		return false;
+
+	if (strcmp(fdw->fdwname, "postgres_fdw") != 0)
+		return false;
+
+	return true;
+}
+
 /*
  * Extract an AQO node from the plan private field.
- * If no one node was found, return pointer to the default value or allocate new
- * node (with default value) according to 'create' field.
- * Can't return NULL value at all.
+ * If no one node was found, return pointer to the default value or return NULL.
  */
 AQOPlanNode *
 get_aqo_plan_node(Plan *plan, bool create)
@@ -90,7 +114,7 @@ get_aqo_plan_node(Plan *plan, bool create)
 	if (node == NULL)
 	{
 		if (!create)
-			return &DefaultAQOPlanNode;
+			return NULL;
 
 		node = create_aqo_plan_node();
 		plan->ext_nodes = lappend(plan->ext_nodes, node);
@@ -131,10 +155,10 @@ get_selectivities(PlannerInfo *root,
 /*
  * Based on the hashTupleDesc() routine
  */
-static uint64
+static uint32
 hashTempTupleDesc(TupleDesc desc)
 {
-	uint64		s;
+	uint32		s;
 	int			i;
 
 	s = hash_combine(0, hash_uint32(desc->natts));
@@ -142,11 +166,11 @@ hashTempTupleDesc(TupleDesc desc)
 	for (i = 0; i < desc->natts; ++i)
 	{
 		const char *attname = NameStr(TupleDescAttr(desc, i)->attname);
-		uint64		s1;
+		uint32		s1;
 
-		s = hash_combine64(s, hash_uint32(TupleDescAttr(desc, i)->atttypid));
-		s1 = hash_bytes_extended((const unsigned char *) attname, strlen(attname), 0);
-		s = hash_combine64(s, s1);
+		s = hash_combine(s, hash_uint32(TupleDescAttr(desc, i)->atttypid));
+		s1 = hash_bytes((const unsigned char *) attname, strlen(attname));
+		s = hash_combine(s, s1);
 	}
 	return s;
 }
@@ -182,8 +206,8 @@ get_list_of_relids(PlannerInfo *root, Relids relids, RelSortOut *rels)
 
 		if (!OidIsValid(entry->relid))
 		{
-			/* Invalid oid */
-			hashes = lappend_uint64(hashes, (UINT64_MAX / 7));
+			/* TODO: Explain this logic. */
+			hashes = lappend_int(hashes, INT32_MAX / 3);
 			continue;
 		}
 
@@ -208,7 +232,7 @@ get_list_of_relids(PlannerInfo *root, Relids relids, RelSortOut *rels)
 			trel = relation_open(entry->relid, NoLock);
 			tdesc = RelationGetDescr(trel);
 			Assert(CheckRelationLockedByMe(trel, AccessShareLock, true));
-			hashes = lappend_uint64(hashes, hashTempTupleDesc(tdesc));
+			hashes = lappend_int(hashes, hashTempTupleDesc(tdesc));
 			relation_close(trel, NoLock);
 		}
 		else
@@ -218,9 +242,9 @@ get_list_of_relids(PlannerInfo *root, Relids relids, RelSortOut *rels)
 						get_namespace_name(get_rel_namespace(entry->relid)),
 							relrewrite ? get_rel_name(relrewrite) : relname);
 
-			hashes = lappend_uint64(hashes, DatumGetInt64(hash_any_extended(
+			hashes = lappend_int(hashes, DatumGetInt32(hash_any(
 											(unsigned char *) relname,
-											strlen(relname), 0)));
+											strlen(relname))));
 
 			hrels = lappend_oid(hrels, entry->relid);
 		}
@@ -481,9 +505,14 @@ is_appropriate_path(Path *path)
 }
 
 /*
- * Converts path info into plan node for collecting it after query execution.
+ * Add AQO data into the plan node, if necessary.
+ *
+ * The necesssary case is when AQO is learning on this query, used for a
+ * prediction (and we will need the data to show prediction error at the end) or
+ * just to gather a plan statistics.
  * Don't switch here to any AQO-specific memory contexts, because we should
- * store AQO prediction in the same context, as the plan.
+ * store AQO prediction in the same context, as the plan. So, explicitly free
+ * all unneeded data.
  */
 void
 aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
@@ -495,11 +524,13 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 	if (prev_create_plan_hook)
 		prev_create_plan_hook(root, src, dest);
 
-	if (!query_context.use_aqo && !query_context.learn_aqo)
+	if (!query_context.use_aqo && !query_context.learn_aqo &&
+		!query_context.collect_stat)
 		return;
 
 	is_join_path = (src->type == T_NestPath || src->type == T_MergePath ||
-					src->type == T_HashPath);
+					src->type == T_HashPath ||
+					(src->type == T_ForeignPath && IS_JOIN_REL(src->parent)));
 
 	node = get_aqo_plan_node(plan, true);
 
@@ -515,8 +546,32 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 
 	if (is_join_path)
 	{
-		node->clauses = aqo_get_clauses(root, ((JoinPath *) src)->joinrestrictinfo);
-		node->jointype = ((JoinPath *) src)->jointype;
+		if (IsA(src, ForeignPath))
+		{
+			PgFdwRelationInfo *fpinfo = (PgFdwRelationInfo *) src->parent->fdw_private;
+			List	*restrictclauses = NIL;
+
+			if (!fpinfo)
+				return;
+
+			/* We have to ensure that this is postgres_fdw ForeignPath */
+			if (!is_postgres_fdw_server(src->parent->serverid))
+				return;
+
+			restrictclauses = list_concat(restrictclauses, fpinfo->joinclauses);
+			restrictclauses = list_concat(restrictclauses, fpinfo->remote_conds);
+			restrictclauses = list_concat(restrictclauses, fpinfo->local_conds);
+
+			node->clauses = aqo_get_clauses(root, restrictclauses);
+			node->jointype = fpinfo->jointype;
+
+			list_free(restrictclauses);
+		}
+		else
+		{
+			node->clauses = aqo_get_clauses(root, ((JoinPath *) src)->joinrestrictinfo);
+			node->jointype = ((JoinPath *) src)->jointype;
+		}
 	}
 	else if (IsA(src, AggPath))
 	/* Aggregation node must store grouping clauses. */
@@ -552,6 +607,11 @@ aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
 	}
 	else
 	{
+		/*
+		 * In the case of forced stat gathering AQO must store fss as well as
+		 * parallel divisor. Negative predicted cardinality field will be a sign
+		 * that it is not a prediction, just statistics.
+		 */
 		node->prediction = src->parent->predicted_cardinality;
 		node->fss = src->parent->fss_hash;
 	}
@@ -575,7 +635,7 @@ AQOnodeCopy(struct ExtensibleNode *enew, const struct ExtensibleNode *eold)
 	/* These lists couldn't contain AQO nodes. Use basic machinery */
 	new->rels = palloc(sizeof(RelSortOut));
 	new->rels->hrels = list_copy(old->rels->hrels);
-	new->rels->signatures = list_copy_uint64(old->rels->signatures);
+	new->rels->signatures = list_copy(old->rels->signatures);
 
 	new->clauses = copyObject(old->clauses);
 	new->grouping_exprs = copyObject(old->grouping_exprs);
@@ -610,21 +670,19 @@ AQOnodeEqual(const struct ExtensibleNode *a, const struct ExtensibleNode *b)
 #define WRITE_FLOAT_FIELD(fldname,format) \
 	appendStringInfo(str, " :" CppAsString(fldname) " " format, node->fldname)
 
+/*
+ * Serialize AQO plan node to a string.
+ *
+ * Right now we can't correctly serialize all fields of the node. Taking into
+ * account that this action needed when a plan moves into parallel workers or
+ * just during debugging, we serialize it only partially, just for debug
+ * purposes.
+ * Some extensions may manipulate by parts of serialized plan too.
+ */
 static void
 AQOnodeOut(struct StringInfoData *str, const struct ExtensibleNode *enode)
 {
 	AQOPlanNode *node = (AQOPlanNode *) enode;
-
-	Assert(0);
-	WRITE_BOOL_FIELD(had_path);
-	WRITE_NODE_FIELD(rels);
-	WRITE_NODE_FIELD(clauses);
-	WRITE_NODE_FIELD(selectivities);
-	WRITE_NODE_FIELD(grouping_exprs);
-
-	WRITE_ENUM_FIELD(jointype, JoinType);
-	WRITE_FLOAT_FIELD(parallel_divisor, "%.5f");
-	WRITE_BOOL_FIELD(was_parametrized);
 
 	/* For Adaptive optimization DEBUG purposes */
 	WRITE_INT_FIELD(fss);
@@ -661,6 +719,11 @@ AQOnodeOut(struct StringInfoData *str, const struct ExtensibleNode *enode)
 	(void) token;				/* in case not used elsewhere */ \
 	local_node->fldname = nodeRead(NULL, 0)
 
+/*
+ * Deserialize AQO plan node from a string to internal representation.
+ *
+ * Should work in coherence with AQOnodeOut().
+ */
 static void
 AQOnodeRead(struct ExtensibleNode *enode)
 {
@@ -668,16 +731,15 @@ AQOnodeRead(struct ExtensibleNode *enode)
 	const char	*token;
 	int			length;
 
-	Assert(0);
-	READ_BOOL_FIELD(had_path);
-	READ_NODE_FIELD(rels);
-	READ_NODE_FIELD(clauses);
-	READ_NODE_FIELD(selectivities);
-	READ_NODE_FIELD(grouping_exprs);
+	local_node->had_path = false;
+	local_node->jointype = 0;
+	local_node->parallel_divisor = 1.0;
+	local_node->was_parametrized = false;
 
-	READ_ENUM_FIELD(jointype, JoinType);
-	READ_FLOAT_FIELD(parallel_divisor);
-	READ_BOOL_FIELD(was_parametrized);
+	local_node->rels = palloc0(sizeof(RelSortOut));
+	local_node->clauses = NIL;
+	local_node->selectivities = NIL;
+	local_node->grouping_exprs = NIL;
 
 	/* For Adaptive optimization DEBUG purposes */
 	READ_INT_FIELD(fss);

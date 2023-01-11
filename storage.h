@@ -77,7 +77,7 @@ struct DataEntry
 	/*
 	 * Link to DSA-allocated memory block. Can be shared across backends.
 	 * Contains:
- 	 * matrix[][], targets[], reliability[], oids.
+	 * matrix[][], targets[], reliability[], oids.
 	 */
 	dsa_pointer data_dp;
 };

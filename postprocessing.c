@@ -18,8 +18,6 @@
 
 #include "postgres.h"
 
-#include "aqo.h"
-
 #include "access/parallel.h"
 #include "optimizer/optimizer.h"
 #include "postgres_fdw.h"
@@ -111,13 +109,14 @@ learn_agg_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 	 * Learn 'not executed' nodes only once, if no one another knowledge exists
 	 * for current feature subspace.
 	 */
-	if (notExecuted && aqo_node->prediction > 0.)
+	if (notExecuted && aqo_node && aqo_node->prediction > 0.)
 		return;
 
 	target = log(learned);
 	child_fss = get_fss_for_object(rels->signatures, ctx->clauselist,
 								   NIL, NULL,NULL);
-	fss = get_grouped_exprs_hash(child_fss, aqo_node->grouping_exprs);
+	fss = get_grouped_exprs_hash(child_fss,
+								 aqo_node ? aqo_node->grouping_exprs : NIL);
 
 	/* Critical section */
 	atomic_fss_learn_step(fs, fss, data, NULL,
@@ -146,13 +145,13 @@ learn_sample(aqo_obj_stat *ctx, RelSortOut *rels,
 							 ctx->selectivities, &ncols, &features);
 
 	/* Only Agg nodes can have non-empty a grouping expressions list. */
-	Assert(!IsA(plan, Agg) || aqo_node->grouping_exprs != NIL);
+	Assert(!IsA(plan, Agg) || !aqo_node || aqo_node->grouping_exprs != NIL);
 
 	/*
 	 * Learn 'not executed' nodes only once, if no one another knowledge exists
 	 * for current feature subspace.
 	 */
-	if (notExecuted && aqo_node->prediction > 0)
+	if (notExecuted && aqo_node && aqo_node->prediction > 0)
 		return;
 
 	data = OkNNr_allocate(ncols);
@@ -177,7 +176,6 @@ restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 	int			nargs;
 	int			*args_hash;
 	int			*eclass_hash;
-	double		*cur_sel;
 	int			cur_hash;
 	int			cur_relid;
 
@@ -192,30 +190,29 @@ restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 	foreach(l, clauselist)
 	{
 		RestrictInfo *rinfo = (RestrictInfo *) lfirst(l);
+		Selectivity  *cur_sel = NULL;
 
-		cur_sel = NULL;
 		if (parametrized_sel)
 		{
 			cur_hash = get_clause_hash(rinfo->clause, nargs,
 									   args_hash, eclass_hash);
 			cur_sel = selectivity_cache_find_global_relid(cur_hash, cur_relid);
-			if (cur_sel == NULL)
-			{
-				if (join_type == JOIN_INNER)
-					cur_sel = &rinfo->norm_selec;
-				else
-					cur_sel = &rinfo->outer_selec;
-			}
 		}
-		else if (join_type == JOIN_INNER)
-			cur_sel = &rinfo->norm_selec;
-		else
-			cur_sel = &rinfo->outer_selec;
 
-		if (*cur_sel < 0)
-			*cur_sel = 0;
+		if (cur_sel == NULL)
+		{
+			cur_sel = palloc(sizeof(double));
 
-		Assert(cur_sel > 0);
+			if (join_type == JOIN_INNER)
+				*cur_sel = rinfo->norm_selec;
+			else
+				*cur_sel = rinfo->outer_selec;
+
+			if (*cur_sel < 0)
+				*cur_sel = 0;
+		}
+
+		Assert(*cur_sel >= 0);
 
 		lst = lappend(lst, cur_sel);
 	}
@@ -303,18 +300,18 @@ learn_subplan_recurse(PlanState *p, aqo_obj_stat *ctx)
 
 static bool
 should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
-			 double predicted, double *nrows, double *rfactor)
+			 double predicted, double nrows, double *rfactor)
 {
 	if (ctx->isTimedOut)
 	{
-		if (ctx->learn && *nrows > predicted * 1.2)
+		if (ctx->learn && nrows > predicted * 1.2)
 		{
 			/* This node s*/
 			if (aqo_show_details)
 				elog(NOTICE,
 					 "[AQO] Learn on a plan node ("UINT64_FORMAT", %d), "
 					"predicted rows: %.0lf, updated prediction: %.0lf",
-					 query_context.query_hash, node->fss, predicted, *nrows);
+					 query_context.query_hash, node->fss, predicted, nrows);
 
 			*rfactor = RELIABILITY_MIN;
 			return true;
@@ -326,11 +323,11 @@ should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
 		{
 			/* This is much more reliable data. So we can correct our prediction. */
 			if (ctx->learn && aqo_show_details &&
-				fabs(*nrows - predicted) / predicted > 0.2)
+				fabs(nrows - predicted) / predicted > 0.2)
 				elog(NOTICE,
 					 "[AQO] Learn on a finished plan node ("UINT64_FORMAT", %d), "
 					 "predicted rows: %.0lf, updated prediction: %.0lf",
-					 query_context.query_hash, node->fss, predicted, *nrows);
+					 query_context.query_hash, node->fss, predicted, nrows);
 
 			*rfactor = 0.9 * (RELIABILITY_MAX - RELIABILITY_MIN);
 			return true;
@@ -371,7 +368,12 @@ learnOnPlanState(PlanState *p, void *context)
 		/* If something goes wrong, return quickly. */
 		return true;
 
-	aqo_node = get_aqo_plan_node(p->plan, false);
+	if ((aqo_node = get_aqo_plan_node(p->plan, false)) == NULL)
+		/*
+		 * Skip the node even for error calculation. It can be incorrect in the
+		 * case of parallel workers (parallel_divisor not known).
+		 */
+		goto end;
 
 	/*
 	 * Compute real value of rows, passed through this node. Summarize rows
@@ -477,7 +479,7 @@ learnOnPlanState(PlanState *p, void *context)
 
 	/*
 	 * Some nodes inserts after planning step (See T_Hash node type).
-	 * In this case we have'nt AQO prediction and fss record.
+	 * In this case we haven't AQO prediction and fss record.
 	 */
 	if (aqo_node->had_path)
 	{
@@ -507,7 +509,7 @@ learnOnPlanState(PlanState *p, void *context)
 
 				Assert(predicted >= 1. && learn_rows >= 1.);
 
-				if (should_learn(p, aqo_node, ctx, predicted, &learn_rows, &rfactor))
+				if (should_learn(p, aqo_node, ctx, predicted, learn_rows, &rfactor))
 				{
 					if (IsA(p, AggState))
 						learn_agg_sample(&SubplanCtx,
@@ -523,6 +525,7 @@ learnOnPlanState(PlanState *p, void *context)
 		}
 	}
 
+end:
 	ctx->clauselist = list_concat(ctx->clauselist, SubplanCtx.clauselist);
 	ctx->selectivities = list_concat(ctx->selectivities,
 													SubplanCtx.selectivities);
@@ -632,6 +635,13 @@ static bool
 set_timeout_if_need(QueryDesc *queryDesc)
 {
 	TimestampTz	fin_time;
+
+	if (IsParallelWorker())
+		/*
+		 * AQO timeout should stop only main worker. Other workers would be
+		* terminated by a regular ERROR machinery.
+		*/
+		return false;
 
 	if (!get_timeout_active(STATEMENT_TIMEOUT) || !aqo_learn_statement_timeout)
 		return false;
@@ -933,7 +943,8 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan)
 	if (IsQueryDisabled() || !plan || es->format != EXPLAIN_FORMAT_TEXT)
 		return;
 
-	aqo_node = get_aqo_plan_node(plan, false);
+	if ((aqo_node = get_aqo_plan_node(plan, false)) == NULL)
+		return;
 
 	if (!aqo_show_details || !ps)
 		goto explain_end;
