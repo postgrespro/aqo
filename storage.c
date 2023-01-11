@@ -1395,19 +1395,18 @@ aqo_data_store(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 		LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
 
 		prev = (NeighboursEntry *) hash_search(fss_neighbours, &key.fss, HASH_ENTER, &found);
-		if (!found)
+
+		/* A new element contains backward link to the first element list and
+		 * the first element contains toward link to the new element.
+		 * The new element has become the first element of the list.
+		*/
+		if (found)
 		{
-			entry->list.prev = NULL;
-			entry->list.next = NULL;
-		}
-		else
-		{
-			prev->data->list.next = entry;
-			entry->list.next = NULL;
-			entry->list.prev = prev->data;
+			prev->data->neighbour_refs.next = entry;
+			entry->neighbour_refs.prev = prev->data;
 		}
 		prev->data = entry;
-
+		aqo_state->neighbours_changed = true;
 		LWLockRelease(&aqo_state->neighbours_lock);
 	}
 
@@ -1590,6 +1589,9 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 		neighbour_entry = (NeighboursEntry *) hash_search(fss_neighbours, &fss, HASH_FIND, &found);
 		entry = found ? neighbour_entry->data : NULL;
 
+		/*
+		 * Go through the list, starting from the first element and go to back.
+		*/
 		while (entry != NULL)
 		{
 			List *tmp_oids = NIL;
@@ -1620,7 +1622,11 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 
 			build_knn_matrix(data, temp_data);
 
-			entry = entry->list.prev;
+			/*
+			 * We have a backward oriented list since the first element always stay
+			 * the last element of list, so go to the next element on the backward link.
+			*/
+			entry = entry->neighbour_refs.prev;
 		}
 		LWLockRelease(&aqo_state->neighbours_lock);
 	}
@@ -1758,15 +1764,15 @@ _aqo_data_clean(uint64 fs)
 		entry->data_dp = InvalidDsaPointer;
 
 		/* fix neighbour list */
-		if (entry->list.next)
+		if (entry->neighbour_refs.next)
 			has_next = true;
-		if (entry->list.prev)
+		if (entry->neighbour_refs.prev)
 			has_prev = true;
 
 		if (has_prev)
-			entry->list.prev->list.next = has_next ? entry->list.next : NULL;
+			entry->neighbour_refs.prev->neighbour_refs.next = has_next ? entry->neighbour_refs.next : NULL;
 		if (has_next)
-			entry->list.next->list.prev = has_prev ? entry->list.prev : NULL;
+			entry->neighbour_refs.next->neighbour_refs.prev = has_prev ? entry->neighbour_refs.prev : NULL;
 
 		/* Fix or remove neighbours htab entry*/
 		LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
@@ -1775,15 +1781,20 @@ _aqo_data_clean(uint64 fs)
 		{
 			if (has_prev)
 			{
-				fss_htab_entry->data = entry->list.prev;
+				fss_htab_entry->data = entry->neighbour_refs.prev;
 			}
 			else
 			{
 				hash_search(fss_neighbours, &entry->key.fss, HASH_REMOVE, NULL);
 			}
+			/*
+			 * We found element in Neibours hash table and made change:
+			 * either delete element of table or replace its value.
+			*/
+			aqo_state->neighbours_changed = true;
 		}
 		LWLockRelease(&aqo_state->neighbours_lock);
-	
+
 
 		if (hash_search(data_htab, &entry->key, HASH_REMOVE, NULL) == NULL)
 			elog(ERROR, "[AQO] hash table corrupted");
@@ -2324,15 +2335,15 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 			entry = (DataEntry *) hash_search(data_htab, &key, HASH_FIND, &found);
 			if (found)
 			{
-				if (entry->list.next)
+				if (entry->neighbour_refs.next)
 					has_next = true;
-				if (entry->list.prev)
+				if (entry->neighbour_refs.prev)
 					has_prev = true;
 
 				if (has_prev)
-					entry->list.prev->list.next = has_next ? entry->list.next : NULL;
+					entry->neighbour_refs.prev->neighbour_refs.next = has_next ? entry->neighbour_refs.next : NULL;
 				if (has_next)
-					entry->list.next->list.prev = has_prev ? entry->list.prev : NULL;
+					entry->neighbour_refs.next->neighbour_refs.prev = has_prev ? entry->neighbour_refs.prev : NULL;
 
 				/* Fix or remove neighbours htab entry*/
 				LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
@@ -2341,12 +2352,17 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 				{
 					if (has_prev)
 					{
-						fss_htab_entry->data = entry->list.prev;
+						fss_htab_entry->data = entry->neighbour_refs.prev;
 					}
 					else
 					{
 						hash_search(fss_neighbours, &key.fss, HASH_REMOVE, NULL);
 					}
+					/*
+					* We found element in Neibours hash table and made change:
+					* either delete element of table or replace its value.
+					*/
+					aqo_state->neighbours_changed = true;
 				}
 				LWLockRelease(&aqo_state->neighbours_lock);
 			}
