@@ -1791,8 +1791,8 @@ _aqo_data_clean(uint64 fs)
 			 * We found element in Neibours hash table and made change:
 			 * either delete element of table or replace its value.
 			*/
-			aqo_state->neighbours_changed = true;
 		}
+		aqo_state->neighbours_changed = true;
 		LWLockRelease(&aqo_state->neighbours_lock);
 <<<<<<< HEAD
 =======
@@ -2365,8 +2365,8 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 					* We found element in Neibours hash table and made change:
 					* either delete element of table or replace its value.
 					*/
-					aqo_state->neighbours_changed = true;
 				}
+				aqo_state->neighbours_changed = true;
 				LWLockRelease(&aqo_state->neighbours_lock);
 			}
 

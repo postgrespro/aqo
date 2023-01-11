@@ -298,7 +298,7 @@ aqo_memsize(void)
 	size = add_size(size, hash_estimate_size(fs_max_items, sizeof(QueryTextEntry)));
 	size = add_size(size, hash_estimate_size(fss_max_items, sizeof(DataEntry)));
 	size = add_size(size, hash_estimate_size(fs_max_items, sizeof(QueriesEntry)));
-	size = add_size(size, hash_estimate_size(fss_max_items, sizeof(DataEntry *)));
+	size = add_size(size, hash_estimate_size(fss_max_items, sizeof(NeighboursEntry)));
 
 	return size;
 }
