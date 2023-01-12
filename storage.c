@@ -1586,7 +1586,7 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 
 		found = false;
 		LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
-		neighbour_entry = (NeighboursEntry *) hash_search(fss_neighbours, &fss, HASH_FIND, &found);
+		neighbour_entry = (NeighboursEntry *) hash_search(fss_neighbours, &key.fss, HASH_FIND, &found);
 		entry = found ? neighbour_entry->data : NULL;
 
 		/*
@@ -2120,13 +2120,8 @@ aqo_neighbours_load(void)
 
 	LWLockAcquire(&aqo_state->neighbours_lock, LW_EXCLUSIVE);
 
-	if (hash_get_num_entries(fss_neighbours) != 0)
-	{
-		/* Someone have done it concurrently. */
-		elog(LOG, "[AQO] Another backend have loaded neighbours data concurrently.");
-		LWLockRelease(&aqo_state->neighbours_lock);
-		return;
-	}
+	/* Load on postmaster sturtup. So no any concurrent actions possible here. */
+	Assert(hash_get_num_entries(fss_neighbours) == 0);
 
 	data_load(PGAQO_NEIGHBOURS_FILE, _deform_neighbours_record_cb, NULL);
 
