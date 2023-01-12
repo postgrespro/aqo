@@ -1791,13 +1791,9 @@ _aqo_data_clean(uint64 fs)
 			 * We found element in Neibours hash table and made change:
 			 * either delete element of table or replace its value.
 			*/
+			aqo_state->neighbours_changed = true;
 		}
-		aqo_state->neighbours_changed = true;
 		LWLockRelease(&aqo_state->neighbours_lock);
-<<<<<<< HEAD
-=======
-
->>>>>>> c4dbd74 (Fix after review)
 
 		if (!hash_search(data_htab, &entry->key, HASH_REMOVE, NULL))
 			elog(ERROR, "[AQO] hash table corrupted");
@@ -2365,8 +2361,8 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 					* We found element in Neibours hash table and made change:
 					* either delete element of table or replace its value.
 					*/
+					aqo_state->neighbours_changed = true;
 				}
-				aqo_state->neighbours_changed = true;
 				LWLockRelease(&aqo_state->neighbours_lock);
 			}
 
