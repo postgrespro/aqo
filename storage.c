@@ -110,7 +110,7 @@ PG_FUNCTION_INFO_V1(aqo_execution_time);
 bool
 load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids)
 {
-	return load_aqo_data(fs, fss, data, reloids, false);
+	return load_aqo_data(fs, fss, data, reloids, false, NULL);
 }
 
 bool
