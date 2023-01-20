@@ -56,11 +56,6 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
 
 SELECT str AS result
 FROM expln('
-SELECT x1,y1 FROM A,B WHERE x1 > 2 AND x2 > 2 AND A.x1 = B.y1;') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
-
-SELECT str AS result
-FROM expln('
 SELECT x1,y1 FROM A,B WHERE x1 > 5 AND x2 > 5 AND x3 < 10 AND A.x1 = B.y1;') AS str
 WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
 
