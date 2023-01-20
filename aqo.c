@@ -327,7 +327,7 @@ _PG_init(void)
 							 PGC_USERSET,
 							 0,
 							 NULL,
-							 lc_assign_hook,
+							 NULL,
 							 NULL);
 
 	prev_shmem_startup_hook						= shmem_startup_hook;
