@@ -3,8 +3,9 @@ SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
 set aqo.show_hash = 'off';
-SET aqo.k_neighbors_threshold_for_predict = 1;
-
+SET aqo.k_neighbors_threshold = 1;
+SET enable_nestloop = 'off';
+SET enable_mergejoin = 'off';
 SET enable_material = 'off';
 
 DROP TABLE IF EXISTS a,b CASCADE;
@@ -35,92 +36,107 @@ $$ LANGUAGE PLPGSQL;
 SELECT str AS result
 FROM expln('
 SELECT x1,y1 FROM A,B WHERE x1 = 5 AND x2 = 5 AND A.x1 = B.y1;') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+
+SELECT str AS result
+FROM expln('
+SELECT x1,y1 FROM A LEFT JOIN b ON A.x1 = B.y1 WHERE x1 = 5 AND x2 = 5;') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
 SELECT str AS result
 FROM expln('
 SELECT x1,y1 FROM A,B WHERE x1 < 5 AND x2 < 5 AND A.x1 = B.y1;') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
-
-SELECT str AS result
-FROM expln('
-SELECT x1,y1 FROM A,B WHERE x1 < 5 AND x2 = 5 AND A.x1 = B.y1;') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
 --query contains nodes that have already been predicted
 
 SELECT str AS result
 FROM expln('
 SELECT x1,y1 FROM A,B WHERE x1 < 10 AND x2 < 5 AND A.x1 = B.y1;') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
 SELECT str AS result
 FROM expln('
 SELECT x1,y1 FROM A,B WHERE x1 > 2 AND x2 > 2 AND A.x1 = B.y1;') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
 SELECT str AS result
 FROM expln('
 SELECT x1,y1 FROM A,B WHERE x1 > 5 AND x2 > 5 AND x3 < 10 AND A.x1 = B.y1;') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
 SELECT str AS result
 FROM expln('
 SELECT x1,y1 FROM A,B WHERE x1 < 5 AND x2 < 5 AND x3 < 10 AND A.x1 = B.y1;') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
 --query contains nodes that have already been predicted
 
 SELECT str AS result
 FROM expln('
 SELECT x1,y1 FROM A,B WHERE x1 < 5 AND x2 < 4 AND x3 < 5 AND A.x1 = B.y1;') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
 SELECT str AS result
 FROM expln('
 SELECT x1 FROM A,B WHERE x1 < 4 AND x3 > 1 GROUP BY(x1);') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
 --query contains nodes that have already been predicted
 
 SELECT str AS result
 FROM expln('
 SELECT x1 FROM A,B WHERE x1 < 4 AND x3 > 1 GROUP BY(x1);') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
 SELECT str AS result
 FROM expln('
 SELECT x1 FROM A,B WHERE x1 < 4 AND x3 > 2 GROUP BY(x1);') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
 SELECT str AS result
 FROM expln('
 SELECT x1 FROM A,B WHERE x1 < 3 AND x2 < 5 AND x3 > 1 GROUP BY(x1);') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
 SELECT str AS result
 FROM expln('
 SELECT x1 FROM A,B WHERE x1 > 1 AND x2 < 4 AND x3 > 1 GROUP BY(x1);') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
 SELECT str AS result
 FROM expln('
 SELECT x1 FROM A,B WHERE x1 > 1 AND x2 < 4 AND x3 < 5 GROUP BY(x1);') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
 SELECT str AS result
 FROM expln('
 SELECT x1 FROM A,B WHERE x1 < 4 AND x2 < 5 AND x3 > 1 and y1 > 2 GROUP BY(x1);') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
 --query contains nodes that have already been predicted
 
 SELECT str AS result
 FROM expln('
 SELECT x1 FROM A,B WHERE x1 < 3 AND x2 < 4 AND x3 > 1 and y1 > 2 GROUP BY(x1);') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+
+CREATE TABLE c (z1 int, z2 int, z3 int);
+INSERT INTO c (z1, z2, z3) SELECT mod(ival + 1,10), mod(ival + 1,10), mod(ival + 1,10) FROM generate_series(1,1000) As ival;
+
+SELECT str AS result
+FROM expln('
+SELECT * FROM (a LEFT JOIN b ON a.x1 = b.y1) sc WHERE
+not exists (SELECT z1 FROM c WHERE sc.x1=c.z1 );') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+
+SELECT str AS result
+FROM expln('
+SELECT * FROM (A LEFT JOIN B ON A.x1 = B.y1) sc left join C on sc.x1=C.z1;') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
 SELECT 1 FROM aqo_reset();
 DROP TABLE a;
 DROP TABLE b;
+DROP FUNCTION expln;
 DROP EXTENSION aqo CASCADE;
