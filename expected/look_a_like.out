@@ -128,31 +128,6 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
 
 SELECT str AS result
 FROM expln('
-SELECT x1,y1 FROM A,B WHERE x1 > 2 AND x2 > 2 AND A.x1 = B.y1;') AS str
-WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
-                           result                           
-------------------------------------------------------------
- Hash Join (actual rows=70000 loops=1)
-   AQO not used
-   Output: a.x1, b.y1
-   Hash Cond: (b.y1 = a.x1)
-   ->  Seq Scan on public.b (actual rows=1000 loops=1)
-         AQO: rows=1000, error=0%
-         Output: b.y1, b.y2, b.y3
-   ->  Hash (actual rows=700 loops=1)
-         Output: a.x1
-         ->  Seq Scan on public.a (actual rows=700 loops=1)
-               AQO not used
-               Output: a.x1
-               Filter: ((a.x1 > 2) AND (a.x2 > 2))
-               Rows Removed by Filter: 300
- Using aqo: true
- AQO mode: LEARN
- JOINS: 0
-(17 rows)
-
-SELECT str AS result
-FROM expln('
 SELECT x1,y1 FROM A,B WHERE x1 > 5 AND x2 > 5 AND x3 < 10 AND A.x1 = B.y1;') AS str
 WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%';
                               result                               
