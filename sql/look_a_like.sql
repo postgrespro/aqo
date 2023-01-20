@@ -138,5 +138,6 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
 SELECT 1 FROM aqo_reset();
 DROP TABLE a;
 DROP TABLE b;
+DROP TABLE c;
 DROP FUNCTION expln;
 DROP EXTENSION aqo CASCADE;
