@@ -294,8 +294,8 @@ _PG_init(void)
 							NULL
 	);
 
-	DefineCustomIntVariable("aqo.k_neighbors_threshold",
-							"Set the threshold of number of neighbors for predicting.",
+	DefineCustomIntVariable("aqo.min_neighbors_for_predicting",
+							"Set how many neighbors the cardinality prediction will be calculated",
 							NULL,
 							&aqo_k,
 							3,
@@ -307,7 +307,7 @@ _PG_init(void)
 							NULL);
 
 	DefineCustomBoolVariable("aqo.predict_with_few_neighbors",
-							"Make prediction with less neighbors than we should have.",
+							"Establish the ability to make predictions with fewer neighbors than were found.",
 							 NULL,
 							 &aqo_predict_with_few_neighbors,
 							 true,
