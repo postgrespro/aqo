@@ -72,7 +72,6 @@ SELECT x, sum(x) FROM A,B WHERE y = 5 AND A.x = B.y group by(x);') AS str
  GroupAggregate (actual rows=1 loops=1)
    AQO not used
    Output: a.x, sum(a.x)
-   Group Key: a.x
    ->  Nested Loop (actual rows=10000 loops=1)
          AQO: rows=10000, error=0%
          Output: a.x
@@ -89,7 +88,7 @@ SELECT x, sum(x) FROM A,B WHERE y = 5 AND A.x = B.y group by(x);') AS str
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1
-(20 rows)
+(19 rows)
 
 -- cardinality 100 in the first Seq Scan on a
 SELECT str AS result
@@ -100,7 +99,6 @@ SELECT x, sum(x) FROM A WHERE x = 5 group by(x);') AS str;
  GroupAggregate (actual rows=1 loops=1)
    AQO not used
    Output: x, sum(x)
-   Group Key: a.x
    ->  Seq Scan on public.a (actual rows=100 loops=1)
          AQO: rows=100, error=0%
          Output: x
@@ -109,7 +107,7 @@ SELECT x, sum(x) FROM A WHERE x = 5 group by(x);') AS str;
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(12 rows)
+(11 rows)
 
 -- no one predicted rows. we use knowledge cardinalities of the query
 -- in the next queries with the same fss_hash

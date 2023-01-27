@@ -100,7 +100,7 @@ $res = $node->safe_psql('postgres', "
 	SELECT count(*) FROM pg_stat_statements
 	WHERE queryid NOT IN (SELECT queryid FROM aqo_query_texts)
 "); # Trivial select and utility query to pg_stat_statements
-is($res, 2);
+is($res, 3);
 
 $node->safe_psql('postgres', "
 	SELECT * FROM trig WHERE sinx < 0.5 and cosx > -0.5
@@ -113,13 +113,13 @@ $res = $node->safe_psql('postgres', "
 	SELECT count(*) FROM aqo_query_texts aqt, pg_stat_statements pgss
 	WHERE aqt.queryid = pgss.queryid
 ");
-is($res, 4);
+is($res, 2);
 
 $res = $node->safe_psql('postgres', "
 	SELECT count(*) FROM pg_stat_statements
 	WHERE queryid NOT IN (SELECT queryid FROM aqo_query_texts)
 "); # pgss logs queries to AQO tables these AQO are skip
-is($res, 4);
+is($res, 6);
 $res = $node->safe_psql('postgres', "
 	SELECT count(*) FROM aqo_queries
 	WHERE queryid NOT IN (SELECT queryid FROM pg_stat_statements)
@@ -162,7 +162,7 @@ $res = $node->safe_psql('postgres', "
 	SELECT count(*) FROM aqo_query_texts aqt, pg_stat_statements pgss
 	WHERE aqt.queryid = pgss.queryid
 "); # Check, both extensions added the query with the same query ID.
-is($res, 8);
+is($res, 6);
 
 # Check query texts identity.
 # TODO: Maybe AQO should use parameterized query text too?
@@ -171,13 +171,13 @@ $res = $node->safe_psql('postgres', "
 	FROM aqo_query_texts aqt, pg_stat_statements pgss
 	WHERE aqt.queryid = pgss.queryid AND aqt.query_text != pgss.query
 "); # PGSS processes a query and generalizes it. So, some queries is diferent
-is($res, 6);
+is($res, 5);
 $res = $node->safe_psql('postgres', "
 	SELECT count(*)
 	FROM aqo_query_texts aqt, pg_stat_statements pgss
 	WHERE aqt.queryid = pgss.queryid AND aqt.query_text = pgss.query
 "); # Non-parameterized queries (without constants in a body of query) will have the same query text.
-is($res, 2);
+is($res, 1);
 
 # Check queries hasn't logged by another extension
 
@@ -186,7 +186,7 @@ $res = $node->safe_psql('postgres', "
 	WHERE queryid NOT IN (SELECT queryid FROM aqo_queries)
 		AND query NOT LIKE '%aqo_quer%'
 "); # PGSS logs all the same except queries with AQO-related objects.
-is($res, 1); # allow to find shifts in PGSS logic
+is($res, 3); # allow to find shifts in PGSS logic
 
 # TODO: why queries in EXPLAIN ANALYZE mode have different query ID in AQO
 # and PGSS extensions?
