@@ -90,6 +90,8 @@ static bool _aqo_stat_remove(uint64 queryid);
 static bool _aqo_queries_remove(uint64 queryid);
 static bool _aqo_qtexts_remove(uint64 queryid);
 static bool _aqo_data_remove(data_key *key);
+static bool neirest_neighbor(double **matrix, int old_rows, double *neighbor, int cols);
+static double fs_distance(double *a, double *b, int len);
 
 PG_FUNCTION_INFO_V1(aqo_query_stat);
 PG_FUNCTION_INFO_V1(aqo_query_texts);
@@ -108,7 +110,7 @@ PG_FUNCTION_INFO_V1(aqo_execution_time);
 bool
 load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids)
 {
-	return load_aqo_data(fs, fss, data, reloids, false);
+	return load_aqo_data(fs, fss, data, reloids, false, NULL);
 }
 
 bool
@@ -1409,25 +1411,73 @@ end:
 	return result;
 }
 
+static double
+fs_distance(double *a, double *b, int len)
+{
+	double		res = 0;
+	int			i;
+
+	for (i = 0; i < len; ++i)
+		res += (a[i] - b[i]) * (a[i] - b[i]);
+	if (len != 0)
+		res = sqrt(res);
+	return res;
+}
+
+bool
+neirest_neighbor(double **matrix, int old_rows, double *neibour, int cols)
+{
+	int i;
+	for (i=0; i<old_rows; i++)
+	{
+		if (fs_distance(neibour, matrix[i], cols) == 0)
+			return true;
+	}
+	return false;
+}
+
 static void
-build_knn_matrix(OkNNrdata *data, const OkNNrdata *temp_data)
+build_knn_matrix(OkNNrdata *data, const OkNNrdata *temp_data, double *features)
 {
 	Assert(data->cols == temp_data->cols);
 	Assert(data->matrix);
 
-	if (data->rows > 0)
-		/* trivial strategy - use first suitable record and ignore others */
-		return;
-
-	memcpy(data, temp_data, sizeof(OkNNrdata));
-	if (data->cols > 0)
+	if (features != NULL)
 	{
-		int i;
+		int old_rows = data->rows;
+		int k = old_rows;
 
-		for (i = 0; i < data->rows; i++)
+		if (data->cols > 0)
 		{
-			Assert(data->matrix[i]);
-			memcpy(data->matrix[i], temp_data->matrix[i], data->cols * sizeof(double));
+			int i;
+
+			for (i = 0; i < data->rows; i++)
+			{
+				if (k < aqo_K && !neirest_neighbor(data->matrix, old_rows, data->matrix[i], data->cols))
+				{
+					memcpy(data->matrix[k], temp_data->matrix[i], data->cols * sizeof(double));
+					data->rfactors[k] = temp_data->rfactors[i];
+					data->targets[k] = temp_data->targets[i];
+					k++;
+				}
+			}
+		}
+	}
+	else
+	{
+		if (data->rows > 0)
+			/* trivial strategy - use first suitable record and ignore others */
+			return;
+		memcpy(data, temp_data, sizeof(OkNNrdata));
+		if (data->cols > 0)
+		{
+			int i;
+
+			for (i = 0; i < data->rows; i++)
+			{
+				Assert(data->matrix[i]);
+				memcpy(data->matrix[i], temp_data->matrix[i], data->cols * sizeof(double));
+			}
 		}
 	}
 }
@@ -1503,7 +1553,7 @@ _fill_knn_data(const DataEntry *entry, List **reloids)
  */
 bool
 load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
-			  bool wideSearch)
+			  bool wideSearch, double *features)
 {
 	DataEntry  *entry;
 	bool		found;
@@ -1538,7 +1588,7 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 		}
 
 		temp_data = _fill_knn_data(entry, reloids);
-		build_knn_matrix(data, temp_data);
+		build_knn_matrix(data, temp_data, features);
 	}
 	else
 	/* Iterate across all elements of the table. XXX: Maybe slow. */
@@ -1576,7 +1626,7 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 			else
 				list_free(tmp_oids);
 
-			build_knn_matrix(data, temp_data);
+			build_knn_matrix(data, temp_data, NULL);
 			found = true;
 		}
 	}

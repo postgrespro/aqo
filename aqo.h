@@ -224,6 +224,7 @@ extern double auto_tuning_convergence_error;
 /* Machine learning parameters */
 
 extern int	aqo_k;
+extern bool aqo_predict_with_few_neighbors;
 extern double log_selectivity_lower_bound;
 
 /* Parameters for current query */
