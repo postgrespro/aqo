@@ -420,7 +420,7 @@ _PG_init(void)
 							"Set how many neighbors the cardinality prediction will be calculated",
 							NULL,
 							&aqo_k,
-							1, INT_MAX / 1000,
+							3, 1, INT_MAX / 1000,
 							PGC_USERSET,
 							0,
 							NULL,
