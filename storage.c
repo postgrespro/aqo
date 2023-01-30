@@ -1345,6 +1345,7 @@ aqo_data_store(uint64 fs, int fss, AqoDataArgs *data, List *reloids)
 	int			nrels = is_raw_data ? data->nrels : list_length(reloids);
 
 	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
+	Assert(data->rows > 0);
 
 	dsa_init();
 
