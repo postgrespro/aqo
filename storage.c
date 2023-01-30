@@ -1513,7 +1513,7 @@ build_knn_matrix(OkNNrdata *data, const OkNNrdata *temp_data, double *features)
 
 			for (i = 0; i < data->rows; i++)
 			{
-				if (k < aqo_K && !neirest_neighbor(data->matrix, old_rows, data->matrix[i], data->cols))
+				if (k < aqo_K && !neirest_neighbor(data->matrix, old_rows, temp_data->matrix[i], data->cols))
 				{
 					memcpy(data->matrix[k], temp_data->matrix[i], data->cols * sizeof(double));
 					data->rfactors[k] = temp_data->rfactors[i];
