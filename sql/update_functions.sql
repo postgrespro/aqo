@@ -22,6 +22,10 @@ CREATE EXTENSION aqo;
 SET aqo.join_threshold = 0;
 
 SET aqo.mode='intelligent';
+SET enable_material = 'off';
+SET enable_hashjoin = 'off';
+SET enable_bitmapscan = 'off';
+SET enable_mergejoin = 'off';
 
 SELECT count(*) FROM aqo_test1 a, aqo_test2 b WHERE a.a=b.a;
 SELECT count(*) FROM aqo_test1 a, aqo_test2 b, aqo_test2 c WHERE a.a = b.a AND b.a = c.a;

@@ -19,6 +19,10 @@ ANALYZE aqo_test2;
 CREATE EXTENSION aqo;
 SET aqo.join_threshold = 0;
 SET aqo.mode='intelligent';
+SET enable_material = 'off';
+SET enable_hashjoin = 'off';
+SET enable_bitmapscan = 'off';
+SET enable_mergejoin = 'off';
 SELECT count(*) FROM aqo_test1 a, aqo_test2 b WHERE a.a=b.a;
  count 
 -------
@@ -326,8 +330,7 @@ ORDER BY res;
  t
  t
  t
- t
-(27 rows)
+(26 rows)
 
 -- Check if data is the same as in source, no result rows expected.
 (TABLE aqo_data_dump EXCEPT TABLE aqo_data)
@@ -369,8 +372,7 @@ ORDER BY res;
  t
  t
  t
- t
-(27 rows)
+(26 rows)
 
 -- Check if data is the same as in source, no result rows expected.
 (TABLE aqo_data_dump EXCEPT TABLE aqo_data)
