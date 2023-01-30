@@ -69,18 +69,13 @@ SET statement_timeout = 100; -- [0.1s]
 SET aqo.statement_timeout = 150;
 SELECT count(a.x1),count(B.y1) FROM A a LEFT JOIN B ON a.x1 = B.y1 LEFT JOIN A a1 ON a1.x1 = B.y1;
 NOTICE:  [AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data. Timeout is 63
-NOTICE:  [AQO] Time limit for execution of the statement was increased. Current timeout is 1728
- count  | count  
---------+--------
- 563300 | 562500
-(1 row)
-
+ERROR:  canceling statement due to statement timeout
 select smart_timeout, count_increase_timeout from aqo_queries, aqo_query_texts
         where query_text = 'SELECT count(a.x1),count(B.y1) FROM A a LEFT JOIN B ON a.x1 = B.y1 LEFT JOIN A a1 ON a1.x1 = B.y1;'
         and aqo_query_texts.queryid = aqo_queries.queryid limit 1;
  smart_timeout | count_increase_timeout 
 ---------------+------------------------
-          1728 |                      4
+            63 |                      3
 (1 row)
 
 SELECT 1 FROM aqo_reset();
