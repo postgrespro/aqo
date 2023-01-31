@@ -295,40 +295,10 @@ UNION ALL
 -- aqo_data_update() testing.
 --
 -- Populate aqo_data with dump data.
-SELECT aqo_data_update(fs, fss, nfeatures, features, targets, reliability, oids) AS res
-FROM aqo_data_dump
-ORDER BY res;
- res 
------
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
-(27 rows)
-
+SELECT count(*) AS res1 FROM
+  aqo_data_dump,
+  LATERAL aqo_data_update(fs, fss, nfeatures, features, targets, reliability, oids) AS ret
+WHERE ret \gset
 -- Check if data is the same as in source, no result rows expected.
 (TABLE aqo_data_dump EXCEPT TABLE aqo_data)
 UNION ALL
@@ -338,39 +308,15 @@ UNION ALL
 (0 rows)
 
 -- Update aqo_data with dump data.
-SELECT aqo_data_update(fs, fss, nfeatures, features, targets, reliability, oids) AS res
-FROM aqo_data_dump
-ORDER BY res;
- res 
------
+SELECT count(*) AS res2 FROM
+  aqo_data_dump,
+  LATERAL aqo_data_update(fs, fss, nfeatures, features, targets, reliability, oids) AS ret
+WHERE ret \gset
+SELECT :res1 = :res2 AS ml_sizes_are_equal;
+ ml_sizes_are_equal 
+--------------------
  t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
- t
-(27 rows)
+(1 row)
 
 -- Check if data is the same as in source, no result rows expected.
 (TABLE aqo_data_dump EXCEPT TABLE aqo_data)
