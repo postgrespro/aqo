@@ -15,11 +15,9 @@ test: plancache
 test: update_functions
 # Performance-dependent test. Can be ignored if executes in containers or on slow machines
 ignore: statement_timeout
-ignore: smart_statement_timeout
 test: statement_timeout
 test: temp_tables
 test: top_queries
 test: relocatable
 test: look_a_like
 test: feature_subspace
-test: smart_statement_timeout
