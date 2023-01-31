@@ -41,3 +41,19 @@ jobs:
         ./configure $CONFIGURE_OPTS CFLAGS="-DAQO_DEBUG_PRINT -O0"
         make -j4 > /dev/null && make -j4 -C contrib > /dev/null
         env CLIENTS=50 THREADS=50 make -C contrib/aqo check
+    - name: Archive regression.diffs
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: regression_diffs
+        path: /home/runner/work/aqo/aqo/pg/contrib/aqo/regression.diffs
+        retention-days: 1
+    - name: Archive TAP tests log files
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: tap_logs
+        path: |
+          log
+        retention-days: 1
+
