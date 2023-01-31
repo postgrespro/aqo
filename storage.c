@@ -1465,6 +1465,7 @@ aqo_data_store(uint64 fs, int fss, AqoDataArgs *data, List *reloids)
 		}
 	}
 	aqo_state->data_changed = true;
+	Assert(entry->rows > 0);
 end:
 	result = aqo_state->data_changed;
 	LWLockRelease(&aqo_state->data_lock);
@@ -1505,13 +1506,15 @@ build_knn_matrix(OkNNrdata *data, const OkNNrdata *temp_data, double *features)
 	if (features != NULL)
 	{
 		int old_rows = data->rows;
-		int k = old_rows;
+		int k = (old_rows < 0) ? 0 : old_rows;
 
 		if (data->cols > 0)
 		{
 			int i;
 
-			for (i = 0; i < data->rows; i++)
+			Assert(data->cols == temp_data->cols);
+
+			for (i = 0; i < temp_data->rows; i++)
 			{
 				if (k < aqo_K && !neirest_neighbor(data->matrix, old_rows, data->matrix[i], data->cols))
 				{
@@ -1521,6 +1524,7 @@ build_knn_matrix(OkNNrdata *data, const OkNNrdata *temp_data, double *features)
 					k++;
 				}
 			}
+			data->rows = k;
 		}
 	}
 	else
@@ -1605,11 +1609,13 @@ _fill_knn_data(const DataEntry *entry, List **reloids)
 }
 
 /*
- * Return on feature subspace, unique defined by its class (fs) and hash value
- * (fss).
- * If reloids is NULL, skip loading of this list.
+ * By given feature space and subspace, build kNN data structure.
+ *
  * If wideSearch is true - make seqscan on the hash table to see for relevant
  * data across neighbours.
+ * If reloids is NULL - don't fill this list.
+ *
+ * Return false if the operation was unsuccessful.
  */
 bool
 load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
@@ -1634,7 +1640,7 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 			goto end;
 
 		/* One entry with all correctly filled fields is found */
-		Assert(entry);
+		Assert(entry && entry->rows > 0);
 		Assert(DsaPointerIsValid(entry->data_dp));
 
 		if (entry->cols != data->cols)
@@ -1643,12 +1649,14 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 			elog(LOG, "[AQO] Does a collision happened? Check it if possible "
 				 "(fs: "UINT64_FORMAT", fss: %d).",
 				 fs, fss);
-			found = false;
+			found = false; /* Sign of unsuccessful operation */
 			goto end;
 		}
 
 		temp_data = _fill_knn_data(entry, reloids);
+		Assert(temp_data->rows > 0);
 		build_knn_matrix(data, temp_data, features);
+		Assert(data->rows > 0);
 	}
 	else
 	/* Iterate across all elements of the table. XXX: Maybe slow. */
@@ -1661,6 +1669,8 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 		while ((entry = hash_seq_search(&hash_seq)) != NULL)
 		{
 			List *tmp_oids = NIL;
+
+			Assert(entry->rows > 0);
 
 			if (entry->key.fss != fss || entry->cols != data->cols)
 				continue;
