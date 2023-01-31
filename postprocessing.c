@@ -630,7 +630,7 @@ aqo_timeout_handler(void)
 	if (aqo_statement_timeout == 0)
 		elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data.");
 	else
-		elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data. Timeout is %ld", max_timeout_value);
+		elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data. Timeout is "UINT64_FORMAT"", max_timeout_value);
 
 	learnOnPlanState(timeoutCtl.queryDesc->planstate, (void *) &ctx);
 	MemoryContextSwitchTo(oldctx);
@@ -827,7 +827,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 			if ( aqo_learn_statement_timeout && aqo_statement_timeout > 0 && error >= 0.1)
 			{
 				int64 fintime = increase_smart_timeout();
-				elog(NOTICE, "[AQO] Time limit for execution of the statement was increased. Current timeout is %ld", fintime);
+				elog(NOTICE, "[AQO] Time limit for execution of the statement was increased. Current timeout is "UINT64_FORMAT"", fintime);
 			}
 
 			pfree(stat);
