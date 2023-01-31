@@ -8,9 +8,36 @@ AS (
 CREATE INDEX aqo_test0_idx_a ON aqo_test0 (a);
 ANALYZE aqo_test0;
 CREATE EXTENSION aqo;
+SELECT true FROM aqo_reset();
+ ?column? 
+----------
+ t
+(1 row)
+
 SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.cleanup_bgworker = 'true';
+CREATE OR REPLACE FUNCTION wait_bgworker(value int, timeout_ms int)
+RETURNS void
+AS $$
+DECLARE
+   cnt      int;
+   endtime  timestamp;
+   curtime  timestamp;
+BEGIN
+   SELECT  now() + make_interval(secs := timeout_ms * 1000) INTO endtime;
+   SELECT count(*) FROM aqo_queries INTO cnt;
+   WHILE (cnt <> value) LOOP
+      SELECT count(*) FROM aqo_queries INTO cnt;
+      SELECT now() INTO curtime;
+      IF (curtime > endtime) THEN
+         raise EXCEPTION 'Wait inturrupted because of timeout';
+         EXIT;
+      END IF;
+   END LOOP;
+   raise NOTICE 'Successful AQO cleanup of bgworker process';
+END;
+$$ LANGUAGE PLPGSQL VOLATILE;
 EXPLAIN SELECT t1.a, t2.b FROM aqo_test0 AS t1, aqo_test0 AS t2
 WHERE t1.a < 1 AND t1.b < 1 AND t2.c < 1 AND t2.d < 1;
                                         QUERY PLAN                                        
@@ -49,10 +76,11 @@ AS (
 ) INSERT INTO aqo_test1 (SELECT * FROM t);
 CREATE INDEX aqo_test1_idx_a ON aqo_test1 (a);
 ANALYZE aqo_test1;
-SELECT count(*) FROM aqo_queries;
- count 
--------
-     1
+SELECT wait_bgworker(1, 100);
+NOTICE:  Successful AQO cleanup of bgworker process
+ wait_bgworker 
+---------------
+ 
 (1 row)
 
 EXPLAIN SELECT * FROM aqo_test0
@@ -73,10 +101,11 @@ WHERE a < 4 AND b < 4;
 (2 rows)
 
 -- Test2: Must delete 1 out of 2 entries
-SELECT count(*) FROM aqo_queries;
- count 
--------
-     3
+SELECT wait_bgworker(3, 100);
+NOTICE:  Successful AQO cleanup of bgworker process
+ wait_bgworker 
+---------------
+ 
 (1 row)
 
 DROP TABLE aqo_test1;
@@ -89,10 +118,11 @@ AS (
 ) INSERT INTO aqo_test1 (SELECT * FROM t);
 CREATE INDEX aqo_test1_idx_a ON aqo_test1 (a);
 ANALYZE aqo_test1;
-SELECT count(*) FROM aqo_queries;
- count 
--------
-     1
+SELECT wait_bgworker(1, 100);
+NOTICE:  Successful AQO cleanup of bgworker process
+ wait_bgworker 
+---------------
+ 
 (1 row)
 
 EXPLAIN SELECT * FROM aqo_test0
@@ -113,18 +143,20 @@ WHERE a < 4 AND b < 4;
 (2 rows)
 
 -- Test3: delete 2 out of 2 entries
-SELECT count(*) FROM aqo_queries;
- count 
--------
-     3
+SELECT wait_bgworker(3, 100);
+NOTICE:  Successful AQO cleanup of bgworker process
+ wait_bgworker 
+---------------
+ 
 (1 row)
 
 DROP TABLE aqo_test0;
 DROP TABLE aqo_test1;
-SELECT count(*) FROM aqo_queries;
- count 
--------
-     1
+SELECT wait_bgworker(1, 100);
+NOTICE:  Successful AQO cleanup of bgworker process
+ wait_bgworker 
+---------------
+ 
 (1 row)
 
 SET aqo.cleanup_bgworker = 'false';
