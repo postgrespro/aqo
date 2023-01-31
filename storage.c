@@ -1648,7 +1648,7 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 		}
 
 		temp_data = _fill_knn_data(entry, reloids);
-		build_knn_matrix(data, temp_data, features);
+		build_knn_matrix(data, temp_data, NULL);
 	}
 	else
 	/* Iterate across all elements of the table. XXX: Maybe slow. */
