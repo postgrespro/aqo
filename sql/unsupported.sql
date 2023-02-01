@@ -1,4 +1,5 @@
-CREATE EXTENSION aqo;
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
 
 -- Utility tool. Allow to filter system-dependent strings from an explain output.
 CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
@@ -9,7 +10,6 @@ BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
 
-SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
 
@@ -182,7 +182,7 @@ ORDER BY (md5(query_text),error) DESC;
 DROP TABLE t,t1 CASCADE; -- delete all tables used in the test
 
 SELECT count(*) FROM aqo_data; -- Just to detect some changes in the logic. May some false positives really bother us here?
-SELECT * FROM aqo_cleanup();
+SELECT true AS success FROM aqo_cleanup();
 SELECT count(*) FROM aqo_data; -- No one row should be returned
 
 -- Look for any remaining queries in the ML storage.
@@ -191,5 +191,4 @@ FROM aqo_cardinality_error(true) cef, aqo_query_texts aqt
 WHERE aqt.queryid = cef.id
 ORDER BY (md5(query_text),error) DESC;
 
-SELECT 1 FROM aqo_reset();
 DROP EXTENSION aqo;

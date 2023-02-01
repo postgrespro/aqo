@@ -16,7 +16,13 @@ $node->append_conf('postgresql.conf', qq{
 						pg_stat_statements.track = 'none'
 					});
 my $query_id;
-my ($res, $aqo_res);
+
+# Disable connection default settings, forced by PGOPTIONS in AQO Makefile
+$ENV{PGOPTIONS}="";
+
+# General purpose variables.
+my $res;
+my $aqo_res;
 my $total_classes;
 $node->start();
 
