@@ -16,6 +16,12 @@ TAP_TESTS = 1
 REGRESS = aqo_dummy_test
 REGRESS_OPTS = --schedule=$(srcdir)/regress_schedule
 
+# Set default values of some gucs to be stable on custom settings during
+# a kind of installcheck
+PGOPTIONS = --aqo.force_collect_stat=off --max_parallel_maintenance_workers=1 \
+	--aqo.join_threshold=0 --max_parallel_workers_per_gather=1
+export PGOPTIONS
+
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw
 stat_srcdir = $(top_srcdir)/contrib/pg_stat_statements
 PG_CPPFLAGS += -I$(libpq_srcdir) -I$(fdw_srcdir) -I$(stat_srcdir)

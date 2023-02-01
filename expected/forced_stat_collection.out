@@ -1,5 +1,11 @@
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
+ success 
+---------
+ t
+(1 row)
+
 \set citizens	1000
-SET aqo.join_threshold = 0;
 SET aqo.mode = 'disabled';
 SET aqo.force_collect_stat = 'off';
 CREATE TABLE person (
@@ -19,7 +25,6 @@ INSERT INTO person (id,age,gender,passport)
 	 		END
 	 FROM (SELECT *, 14+(id % 60) AS age FROM generate_series(1, :citizens) id) AS q1
 	);
-CREATE EXTENSION aqo;
 SET aqo.force_collect_stat = 'on';
 SELECT count(*) FROM person WHERE age<18;
  count 
@@ -64,10 +69,4 @@ SELECT query_text FROM aqo_query_texts ORDER BY (md5(query_text));
 (3 rows)
 
 DROP TABLE person;
-SELECT 1 FROM aqo_reset(); -- Full remove of ML data before the end
- ?column? 
-----------
-        1
-(1 row)
-
 DROP EXTENSION aqo;

@@ -23,6 +23,9 @@ my $CLIENTS = 10;
 my $THREADS = 10;
 my $query_id;
 
+# Disable connection default settings, forced by PGOPTIONS in AQO Makefile
+$ENV{PGOPTIONS}="";
+
 # General purpose variables.
 my $res;
 my $total_classes;

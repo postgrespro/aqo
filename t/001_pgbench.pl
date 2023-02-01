@@ -20,6 +20,8 @@ my $TRANSACTIONS = 1000;
 my $CLIENTS = 10;
 my $THREADS = 10;
 
+$ENV{PGOPTIONS}="";
+
 # Change pgbench parameters according to the environment variable.
 if (defined $ENV{TRANSACTIONS})
 {
