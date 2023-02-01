@@ -1,4 +1,3 @@
-DROP EXTENSION IF EXISTS aqo CASCADE;
 DROP SCHEMA IF EXISTS test CASCADE;
 
 -- Check Zero-schema path behaviour
@@ -11,7 +10,7 @@ CREATE EXTENSION aqo;  -- fail
 CREATE SCHEMA IF NOT EXISTS test1;
 SET search_path TO test1, public;
 CREATE EXTENSION aqo;
-SET aqo.join_threshold = 0;
+SELECT true AS success FROM aqo_reset();
 SET aqo.mode = 'intelligent';
 
 CREATE TABLE test (id SERIAL, data TEXT);

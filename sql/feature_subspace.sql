@@ -1,9 +1,9 @@
 -- This test related to some issues on feature subspace calculation
 
-CREATE EXTENSION aqo;
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
 
 SET aqo.mode = 'learn';
-SET aqo.join_threshold = 0;
 SET aqo.show_details = 'on';
 
 CREATE TABLE a AS (SELECT gs AS x FROM generate_series(1,10) AS gs);
@@ -41,5 +41,5 @@ JOIN aqo_data d2 ON (d1.fs <> d2.fs AND d1.fss = d2.fss)
 WHERE 'a'::regclass = ANY (d1.oids) AND 'b'::regclass = ANY (d1.oids) order by target;
 
 DROP TABLE a,b CASCADE;
-SELECT true FROM aqo_reset();
+
 DROP EXTENSION aqo;

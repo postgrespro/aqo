@@ -1,3 +1,12 @@
+-- Create the extension. Drop all lumps which could survive from
+-- previous pass (repeated installcheck as an example).
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
+ success 
+---------
+ t
+(1 row)
+
 CREATE TABLE aqo_test0(a int, b int, c int, d int);
 WITH RECURSIVE t(a, b, c, d)
 AS (
@@ -16,8 +25,6 @@ AS (
 ) INSERT INTO aqo_test1 (SELECT * FROM t);
 CREATE INDEX aqo_test1_idx_a ON aqo_test1 (a);
 ANALYZE aqo_test1;
-CREATE EXTENSION aqo;
-SET aqo.join_threshold = 0;
 SET aqo.mode = 'controlled';
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -151,11 +158,12 @@ SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
 SET aqo.mode = 'controlled';
 SELECT count(*) FROM
 	(SELECT queryid AS id FROM aqo_queries) AS q1,
-	LATERAL aqo_queries_update(q1.id, NULL, true, true, false)
+	LATERAL aqo_queries_update(q1.id, NULL, true, true, false) AS ret
+WHERE NOT ret
 ; -- Enable all disabled query classes
  count 
 -------
-     5
+     1
 (1 row)
 
 EXPLAIN SELECT * FROM aqo_test0
@@ -223,15 +231,8 @@ SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
      0
 (1 row)
 
--- XXX: extension dropping doesn't clear file storage. Do it manually.
-SELECT 1 FROM aqo_reset();
- ?column? 
-----------
-        1
-(1 row)
-
-DROP EXTENSION aqo;
 DROP INDEX aqo_test0_idx_a;
 DROP TABLE aqo_test0;
 DROP INDEX aqo_test1_idx_a;
 DROP TABLE aqo_test1;
+DROP EXTENSION aqo;
