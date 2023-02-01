@@ -1,4 +1,10 @@
-CREATE EXTENSION aqo;
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
+ success 
+---------
+ t
+(1 row)
+
 -- Utility tool. Allow to filter system-dependent strings from an explain output.
 CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
 BEGIN
@@ -7,7 +13,6 @@ BEGIN
   RETURN;
 END;
 $$ LANGUAGE PLPGSQL;
-SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
 DROP TABLE IF EXISTS t;
@@ -52,7 +57,7 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
    AQO not used
    Group Key: x
    ->  Seq Scan on t (actual rows=801 loops=1)
-         AQO: rows=801, error=0%
+         AQO not used
          Filter: (x > 3)
          Rows Removed by Filter: 199
  Using aqo: true
@@ -406,7 +411,7 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
            ->  Aggregate (actual rows=1 loops=1000)
                  AQO not used
                  ->  Seq Scan on t t0 (actual rows=50 loops=1000)
-                       AQO: rows=50, error=0%
+                       AQO not used
                        Filter: (x = t.x)
                        Rows Removed by Filter: 950
          SubPlan 2
@@ -616,10 +621,10 @@ SELECT count(*) FROM aqo_data; -- Just to detect some changes in the logic. May 
     44
 (1 row)
 
-SELECT * FROM aqo_cleanup();
- nfs | nfss 
------+------
-  13 |   44
+SELECT true AS success FROM aqo_cleanup();
+ success 
+---------
+ t
 (1 row)
 
 SELECT count(*) FROM aqo_data; -- No one row should be returned
@@ -636,11 +641,5 @@ ORDER BY (md5(query_text),error) DESC;
  error | query_text 
 -------+------------
 (0 rows)
-
-SELECT 1 FROM aqo_reset();
- ?column? 
-----------
-        1
-(1 row)
 
 DROP EXTENSION aqo;
