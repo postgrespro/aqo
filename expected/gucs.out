@@ -1,4 +1,11 @@
-CREATE EXTENSION aqo;
+-- Preliminaries
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
+ success 
+---------
+ t
+(1 row)
+
 -- Utility tool. Allow to filter system-dependent strings from an explain output.
 CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
 BEGIN
@@ -7,16 +14,15 @@ BEGIN
     RETURN;
 END;
 $$ LANGUAGE PLPGSQL;
-SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = true;
 SET compute_query_id = 'auto';
 CREATE TABLE t(x int);
 INSERT INTO t (x) (SELECT * FROM generate_series(1, 100) AS gs);
 ANALYZE t;
-SELECT true FROM aqo_reset(); -- Remember! DROP EXTENSION doesn't remove any AQO data gathered.
- ?column? 
-----------
+SELECT true AS success FROM aqo_reset();
+ success 
+---------
  t
 (1 row)
 
@@ -127,9 +133,9 @@ SELECT count(*) FROM aqo_query_stat;
      1
 (1 row)
 
-SELECT true FROM aqo_reset(); -- Remove one record from all tables
- ?column? 
-----------
+SELECT true AS success FROM aqo_reset();
+ success 
+---------
  t
 (1 row)
 

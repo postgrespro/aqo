@@ -1,3 +1,6 @@
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
+
 -- The function just copied from stats_ext.sql
 create function check_estimated_rows(text) returns table (estimated int, actual int)
 language plpgsql as
@@ -38,9 +41,6 @@ AS (
 ) INSERT INTO aqo_test1 (SELECT * FROM t);
 CREATE INDEX aqo_test1_idx_a ON aqo_test1 (a);
 ANALYZE aqo_test1;
-
-CREATE EXTENSION aqo;
-SET aqo.join_threshold = 0;
 
 SET aqo.mode = 'intelligent';
 
@@ -124,7 +124,7 @@ WHERE t1.a = t2.b AND t2.a = t3.b AND t3.a = t4.b;
 SELECT count(*) FROM tmp1;
 
 -- Remove data on some unneeded instances of tmp1 table.
-SELECT * FROM aqo_cleanup();
+SELECT true AS success FROM aqo_cleanup();
 
 -- Result of the query below should be empty
 SELECT * FROM aqo_query_texts aqt1, aqo_query_texts aqt2
@@ -313,8 +313,5 @@ DROP INDEX aqo_test0_idx_a;
 DROP TABLE aqo_test0;
 DROP INDEX aqo_test1_idx_a;
 DROP TABLE aqo_test1;
-
--- XXX: extension dropping doesn't clear file storage. Do it manually.
-SELECT 1 FROM aqo_reset();
 
 DROP EXTENSION aqo;

@@ -1,6 +1,12 @@
 -- Specifically test AQO machinery for queries uses partial paths and executed
 -- with parallel workers.
-CREATE EXTENSION aqo;
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
+ success 
+---------
+ t
+(1 row)
+
 -- Utility tool. Allow to filter system-dependent strings from explain output.
 CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
 BEGIN
@@ -9,7 +15,6 @@ BEGIN
     RETURN;
 END;
 $$ LANGUAGE PLPGSQL;
-SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = true;
 -- Be generous with a number parallel workers to test the machinery

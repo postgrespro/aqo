@@ -4,13 +4,13 @@
 -- Aggregate push-down
 -- Push-down of groupings with HAVING clause.
 
-CREATE EXTENSION aqo;
-CREATE EXTENSION postgres_fdw;
+CREATE EXTENSION IF NOT EXISTS aqo;
+CREATE EXTENSION IF NOT EXISTS postgres_fdw;
+SELECT true AS success FROM aqo_reset();
 
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'true'; -- show AQO info for each node and entire query.
 SET aqo.show_hash = 'false'; -- a hash value is system-depended. Ignore it.
-SET aqo.join_threshold = 0;
 
 DO $d$
     BEGIN
