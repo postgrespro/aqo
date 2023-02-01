@@ -1,3 +1,7 @@
+-- Preliminaries
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
+
 CREATE TABLE aqo_test1(a int, b int);
 WITH RECURSIVE t(a, b)
 AS (
@@ -17,9 +21,6 @@ AS (
 ) INSERT INTO aqo_test2 (SELECT * FROM t);
 CREATE INDEX aqo_test2_idx_a ON aqo_test2 (a);
 ANALYZE aqo_test2;
-
-CREATE EXTENSION aqo;
-SET aqo.join_threshold = 0;
 
 SET aqo.mode='intelligent';
 
@@ -61,7 +62,7 @@ CREATE TABLE aqo_queries_dump AS SELECT * FROM aqo_queries;
 CREATE TABLE aqo_query_stat_dump AS SELECT * FROM aqo_query_stat;
 CREATE TABLE aqo_data_dump AS SELECT * FROM aqo_data;
 
-SELECT 1 FROM aqo_reset();
+SELECT true AS success FROM aqo_reset();
 
 --
 -- aqo_query_texts_update() testing.
@@ -202,8 +203,8 @@ SELECT aqo_data_update(1, 1, 1, '{{1}}', '{1}', '{1, 1}', '{1, 2, 3}');
 SELECT aqo_data_update(1, 1, 1, '{{1}, {2}}', '{1}', '{1}', '{1, 2, 3}');
 
 SET aqo.mode='disabled';
-SELECT 1 FROM aqo_reset();
-DROP EXTENSION aqo;
+
+DROP EXTENSION aqo CASCADE;
 
 DROP TABLE aqo_test1, aqo_test2;
 DROP TABLE aqo_query_texts_dump, aqo_queries_dump, aqo_query_stat_dump, aqo_data_dump;

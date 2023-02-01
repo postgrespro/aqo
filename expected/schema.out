@@ -1,5 +1,3 @@
-DROP EXTENSION IF EXISTS aqo CASCADE;
-NOTICE:  extension "aqo" does not exist, skipping
 DROP SCHEMA IF EXISTS test CASCADE;
 NOTICE:  schema "test" does not exist, skipping
 -- Check Zero-schema path behaviour
@@ -12,7 +10,12 @@ ERROR:  no schema has been selected to create in
 CREATE SCHEMA IF NOT EXISTS test1;
 SET search_path TO test1, public;
 CREATE EXTENSION aqo;
-SET aqo.join_threshold = 0;
+SELECT true AS success FROM aqo_reset();
+ success 
+---------
+ t
+(1 row)
+
 SET aqo.mode = 'intelligent';
 CREATE TABLE test (id SERIAL, data TEXT);
 INSERT INTO test (data) VALUES ('string');

@@ -1,5 +1,8 @@
-CREATE EXTENSION aqo;
-SET aqo.join_threshold = 0;
+-- Preliminaries
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
+
+SET aqo.wide_search = 'on';
 SET aqo.mode = 'learn';
 
 CREATE TEMP TABLE tt();
@@ -17,10 +20,10 @@ SELECT count(*) FROM pt AS pt1, tt AS tt1, tt AS tt2, pt AS pt2;
 SELECT count(*) FROM aqo_data; -- Don't bother about false negatives because of trivial query plans
 
 DROP TABLE tt;
-SELECT * FROM aqo_cleanup();
+SELECT true AS success FROM aqo_cleanup();
 SELECT count(*) FROM aqo_data; -- Should return the same as previous call above
 DROP TABLE pt;
-SELECT * FROM aqo_cleanup();
+SELECT true AS success FROM aqo_cleanup();
 SELECT count(*) FROM aqo_data; -- Should be 0
 SELECT query_text FROM aqo_queries aq LEFT JOIN aqo_query_texts aqt
 ON aq.queryid = aqt.queryid
@@ -67,7 +70,7 @@ SELECT * FROM check_estimated_rows('
 
 SET aqo.mode = 'forced'; -- Now we use all fss records for each query
 DROP TABLE pt;
-SELECT * FROM aqo_cleanup();
+SELECT true AS success FROM aqo_cleanup();
 CREATE TABLE pt AS SELECT x AS x, (x % 10) AS y FROM generate_series(1,100) AS x;
 CREATE TEMP TABLE ttd1 AS
   SELECT -(x*3) AS x, (x % 9) AS y1 FROM generate_series(1,100) AS x;
@@ -91,7 +94,9 @@ SELECT * FROM check_estimated_rows('
 	SELECT pt.x, avg(pt.y) FROM pt,ttd1  WHERE pt.x = ttd1.x GROUP BY (pt.x);
 '); -- Don't use AQO for temp table because of different attname
 
+-- Clear common parts of AQO state
+RESET aqo.wide_search;
+DROP EXTENSION aqo CASCADE;
+
 DROP TABLE pt CASCADE;
-SELECT 1 FROM aqo_reset();
-DROP EXTENSION aqo;
 DROP FUNCTION check_estimated_rows;

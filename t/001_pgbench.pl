@@ -21,6 +21,9 @@ my $TRANSACTIONS = 1000;
 my $CLIENTS = 10;
 my $THREADS = 10;
 
+# Disable connection default settings, forced by PGOPTIONS in AQO Makefile
+$ENV{PGOPTIONS}="";
+
 # Change pgbench parameters according to the environment variable.
 if (defined $ENV{TRANSACTIONS})
 {

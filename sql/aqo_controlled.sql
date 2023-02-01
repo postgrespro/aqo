@@ -1,3 +1,6 @@
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
+
 CREATE TABLE aqo_test0(a int, b int, c int, d int);
 WITH RECURSIVE t(a, b, c, d)
 AS (
@@ -27,9 +30,6 @@ AS (
 ) INSERT INTO aqo_test2 (SELECT * FROM t);
 CREATE INDEX aqo_test2_idx_a ON aqo_test2 (a);
 ANALYZE aqo_test2;
-
-CREATE EXTENSION aqo;
-SET aqo.join_threshold = 0;
 
 SET aqo.mode = 'controlled';
 
@@ -111,7 +111,8 @@ WHERE t1.a = t2.b AND t2.a = t3.b;
 
 SELECT count(*) FROM
 	(SELECT queryid AS id FROM aqo_queries) AS q1,
-	LATERAL aqo_queries_update(q1.id, NULL, NULL, true, NULL)
+	LATERAL aqo_queries_update(q1.id, NULL, NULL, true, NULL) AS ret
+WHERE NOT ret
 ; -- set use = true
 
 EXPLAIN (COSTS FALSE)
@@ -147,14 +148,9 @@ WHERE t1.a = t2.b AND t2.a = t3.b;
 
 DROP INDEX aqo_test0_idx_a;
 DROP TABLE aqo_test0;
-
 DROP INDEX aqo_test1_idx_a;
 DROP TABLE aqo_test1;
-
 DROP INDEX aqo_test2_idx_a;
 DROP TABLE aqo_test2;
-
--- XXX: extension dropping doesn't clear file storage. Do it manually.
-SELECT 1 FROM aqo_reset();
 
 DROP EXTENSION aqo;

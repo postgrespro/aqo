@@ -3,12 +3,17 @@
 -- JOIN push-down (check push of baserestrictinfo and joininfo)
 -- Aggregate push-down
 -- Push-down of groupings with HAVING clause.
-CREATE EXTENSION aqo;
-CREATE EXTENSION postgres_fdw;
+CREATE EXTENSION IF NOT EXISTS aqo;
+CREATE EXTENSION IF NOT EXISTS postgres_fdw;
+SELECT true AS success FROM aqo_reset();
+ success 
+---------
+ t
+(1 row)
+
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'true'; -- show AQO info for each node and entire query.
 SET aqo.show_hash = 'false'; -- a hash value is system-depended. Ignore it.
-SET aqo.join_threshold = 0;
 DO $d$
     BEGIN
         EXECUTE $$CREATE SERVER loopback FOREIGN DATA WRAPPER postgres_fdw
@@ -100,15 +105,23 @@ SELECT str FROM expln('
   EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
   SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
 ') AS str WHERE str NOT LIKE '%Sort Method%';
-                    str                    
--------------------------------------------
- Foreign Scan (actual rows=1 loops=1)
+                            str                             
+------------------------------------------------------------
+ Merge Join (actual rows=1 loops=1)
    AQO not used
-   Relations: (frgn a) INNER JOIN (frgn b)
+   Merge Cond: (a.x = b.x)
+   ->  Sort (actual rows=1 loops=1)
+         Sort Key: a.x
+         ->  Foreign Scan on frgn a (actual rows=1 loops=1)
+               AQO not used
+   ->  Sort (actual rows=1 loops=1)
+         Sort Key: b.x
+         ->  Foreign Scan on frgn b (actual rows=1 loops=1)
+               AQO not used
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(6 rows)
+(14 rows)
 
 -- Should learn on postgres_fdw nodes
 SELECT str FROM expln('
