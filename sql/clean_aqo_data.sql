@@ -1,5 +1,6 @@
-CREATE EXTENSION aqo;
-SET aqo.join_threshold = 0;
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
+
 SET aqo.mode = 'learn';
 
 DROP TABLE IF EXISTS a;
@@ -7,7 +8,7 @@ DROP TABLE IF EXISTS b;
 CREATE TABLE a();
 SELECT * FROM a;
 SELECT 'a'::regclass::oid AS a_oid \gset
-SELECT true FROM aqo_cleanup();
+SELECT true AS success FROM aqo_cleanup();
 
 /*
  * lines with a_oid in aqo_data,
@@ -27,7 +28,7 @@ SELECT count(*) FROM aqo_query_stat WHERE
         aqo_queries.fs = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :a_oid=ANY(oids)));
 
 DROP TABLE a;
-SELECT true FROM aqo_cleanup();
+SELECT true AS success FROM aqo_cleanup();
 
 /*
  * lines with a_oid in aqo_data,
@@ -79,7 +80,7 @@ SELECT count(*) FROM aqo_query_stat WHERE
         aqo_queries.fs = ANY(SELECT aqo_data.fs FROM aqo_data WHERE :b_oid=ANY(oids)));
 
 DROP TABLE a;
-SELECT true FROM aqo_cleanup();
+SELECT true AS success FROM aqo_cleanup();
 
 /*
  * lines corresponding to a_oid and both a_oid's fs deleted in aqo_data,
@@ -115,7 +116,7 @@ SELECT count(*) FROM aqo_query_stat WHERE
             aqo_queries.fs = aqo_queries.queryid);
 
 DROP TABLE b;
-SELECT true FROM aqo_cleanup();
+SELECT true AS success FROM aqo_cleanup();
 
 -- lines corresponding to b_oid in theese tables deleted
 SELECT count(*) FROM aqo_data WHERE :b_oid=ANY(oids);

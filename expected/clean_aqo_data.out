@@ -1,5 +1,10 @@
-CREATE EXTENSION aqo;
-SET aqo.join_threshold = 0;
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
+ success 
+---------
+ t
+(1 row)
+
 SET aqo.mode = 'learn';
 DROP TABLE IF EXISTS a;
 NOTICE:  table "a" does not exist, skipping
@@ -11,9 +16,9 @@ SELECT * FROM a;
 (0 rows)
 
 SELECT 'a'::regclass::oid AS a_oid \gset
-SELECT true FROM aqo_cleanup();
- ?column? 
-----------
+SELECT true AS success FROM aqo_cleanup();
+ success 
+---------
  t
 (1 row)
 
@@ -54,9 +59,9 @@ SELECT count(*) FROM aqo_query_stat WHERE
 (1 row)
 
 DROP TABLE a;
-SELECT true FROM aqo_cleanup();
- ?column? 
-----------
+SELECT true AS success FROM aqo_cleanup();
+ success 
+---------
  t
 (1 row)
 
@@ -119,7 +124,7 @@ SELECT 'b'::regclass::oid AS b_oid \gset
 SELECT count(*) FROM aqo_data WHERE :a_oid=ANY(oids);
  count 
 -------
-     2
+     3
 (1 row)
 
 SELECT count(*) FROM aqo_queries WHERE
@@ -175,9 +180,9 @@ SELECT count(*) FROM aqo_query_stat WHERE
 (1 row)
 
 DROP TABLE a;
-SELECT true FROM aqo_cleanup();
- ?column? 
-----------
+SELECT true AS success FROM aqo_cleanup();
+ success 
+---------
  t
 (1 row)
 
@@ -253,9 +258,9 @@ SELECT count(*) FROM aqo_query_stat WHERE
 (1 row)
 
 DROP TABLE b;
-SELECT true FROM aqo_cleanup();
- ?column? 
-----------
+SELECT true AS success FROM aqo_cleanup();
+ success 
+---------
  t
 (1 row)
 

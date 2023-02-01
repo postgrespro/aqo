@@ -1,7 +1,8 @@
 -- Tests on interaction of AQO with cached plans.
 
-CREATE EXTENSION aqo;
-SET aqo.join_threshold = 0;
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
+
 SET aqo.mode = 'intelligent';
 SET aqo.show_details = 'on';
 SET aqo.show_hash = 'off';
@@ -44,5 +45,5 @@ SELECT * FROM f1();
 
 DROP FUNCTION f1;
 DROP TABLE test CASCADE;
-SELECT true FROM aqo_reset();
+
 DROP EXTENSION aqo;

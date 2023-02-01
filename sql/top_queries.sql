@@ -1,5 +1,7 @@
-CREATE EXTENSION aqo;
-SET aqo.join_threshold = 0;
+-- Preliminaries
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
+
 SET aqo.mode = 'disabled';
 SET aqo.force_collect_stat = 'on';
 
@@ -51,5 +53,4 @@ FROM aqo_cardinality_error(false) ce, aqo_query_texts aqt
 WHERE ce.id = aqt.queryid
 ORDER BY (md5(query_text));
 
-SELECT 1 FROM aqo_reset();
 DROP EXTENSION aqo;

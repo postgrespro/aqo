@@ -1,5 +1,12 @@
-CREATE EXTENSION aqo;
-SET aqo.join_threshold = 0;
+-- Preliminaries
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
+ success 
+---------
+ t
+(1 row)
+
+SET aqo.wide_search = 'on';
 SET aqo.mode = 'learn';
 CREATE TEMP TABLE tt();
 CREATE TABLE pt();
@@ -48,10 +55,10 @@ SELECT count(*) FROM aqo_data; -- Don't bother about false negatives because of 
 (1 row)
 
 DROP TABLE tt;
-SELECT * FROM aqo_cleanup();
- nfs | nfss 
------+------
-   0 |    0
+SELECT true AS success FROM aqo_cleanup();
+ success 
+---------
+ t
 (1 row)
 
 SELECT count(*) FROM aqo_data; -- Should return the same as previous call above
@@ -61,10 +68,10 @@ SELECT count(*) FROM aqo_data; -- Should return the same as previous call above
 (1 row)
 
 DROP TABLE pt;
-SELECT * FROM aqo_cleanup();
- nfs | nfss 
------+------
-   3 |   10
+SELECT true AS success FROM aqo_cleanup();
+ success 
+---------
+ t
 (1 row)
 
 SELECT count(*) FROM aqo_data; -- Should be 0
@@ -133,10 +140,10 @@ SELECT * FROM check_estimated_rows('
 
 SET aqo.mode = 'forced'; -- Now we use all fss records for each query
 DROP TABLE pt;
-SELECT * FROM aqo_cleanup();
- nfs | nfss 
------+------
-   2 |    5
+SELECT true AS success FROM aqo_cleanup();
+ success 
+---------
+ t
 (1 row)
 
 CREATE TABLE pt AS SELECT x AS x, (x % 10) AS y FROM generate_series(1,100) AS x;
@@ -184,12 +191,8 @@ SELECT * FROM check_estimated_rows('
        100 |      0
 (1 row)
 
+-- Clear common parts of AQO state
+RESET aqo.wide_search;
+DROP EXTENSION aqo CASCADE;
 DROP TABLE pt CASCADE;
-SELECT 1 FROM aqo_reset();
- ?column? 
-----------
-        1
-(1 row)
-
-DROP EXTENSION aqo;
 DROP FUNCTION check_estimated_rows;

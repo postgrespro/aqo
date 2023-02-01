@@ -1,6 +1,9 @@
-CREATE EXTENSION aqo;
-SELECT true FROM aqo_reset();
-SET aqo.join_threshold = 0;
+-- Preliminaries
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
+
+SET aqo.wide_search = 'on';
+
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
 set aqo.show_hash = 'off';
@@ -136,9 +139,10 @@ FROM expln('
 SELECT * FROM (A LEFT JOIN B ON A.x1 = B.y1) sc left join C on sc.x1=C.z1;') AS str
 WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
-SELECT 1 FROM aqo_reset();
+RESET aqo.wide_search;
+DROP EXTENSION aqo CASCADE;
+
 DROP TABLE a;
 DROP TABLE b;
 DROP TABLE c;
 DROP FUNCTION expln;
-DROP EXTENSION aqo CASCADE;
