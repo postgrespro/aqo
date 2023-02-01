@@ -1,0 +1,157 @@
+name: 'Join Order Benchmark'
+
+env:
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+
+# Trigger the workflow on each push
+on: push
+
+jobs:
+  AQO_Tests:
+
+    runs-on: self-hosted
+
+    steps:
+    - name: "Set common paths"
+      run: |
+        echo "$HOME/aqo/.github/scripts/job" >> $GITHUB_PATH
+        echo "JOB_DIR=$HOME/jo-bench" >> $GITHUB_ENV
+
+        # PostgreSQL-related environment variables
+        echo "$GITHUB_WORKSPACE/pg/tmp_install/bin" >> $GITHUB_PATH
+        echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/pg/tmp_install/lib" >> $GITHUB_ENV
+        echo "PGDATABASE=`whoami`" >> $GITHUB_ENV
+        echo "PGHOST=localhost" >> $GITHUB_ENV
+        echo "PGDATA=PGDATA" >> $GITHUB_ENV
+        echo "PGUSER=`whoami`" >> $GITHUB_ENV
+        echo "PGPORT=5432" >> $GITHUB_ENV
+
+    # Set major PostgreSQL version for all underlying steps
+    - name: "Extract Postgres major version number"
+      run: |
+        PG_MAJOR_VERSION=$(echo "$BRANCH_NAME" | grep --only-matching 'stable[0-9].' | grep --only-matching '[0-9].')
+
+        # Declare PG_MAJOR_VERSION as a environment variable
+        echo "PG_MAJOR_VERSION=$PG_MAJOR_VERSION" >> $GITHUB_ENV
+        echo "CORE_BRANCH_NAME=REL_${PG_MAJOR_VERSION}_STABLE" >> $GITHUB_ENV
+        echo "AQO_PATCH_NAME=aqo_pg$PG_MAJOR_VERSION.patch" >> $GITHUB_ENV
+    - name: "Set proper names for the master case"
+      if: env.PG_MAJOR_VERSION == ''
+      run: |
+        echo "PG_MAJOR_VERSION=master" >> $GITHUB_ENV
+        echo "CORE_BRANCH_NAME=master" >> $GITHUB_ENV
+        echo "AQO_PATCH_NAME=aqo_master.patch" >> $GITHUB_ENV
+
+    # Just for debug
+    - name: "Print environment variables"
+      run: |
+        echo "Test data: $PG_MAJOR_VERSION; Core branch: $CORE_BRANCH_NAME, AQO patch: $AQO_PATCH_NAME"
+        echo "Paths: $PATH, JOB path: $JOB_DIR"
+        echo "PG Libs: $LD_LIBRARY_PATH"
+        echo "PG Environment: dbname: $PGDATABASE, host: $PGHOST, pgdata: $PGDATA, pguser: $PGUSER, pgport: $PGPORT"
+
+    # Runner contains clone of postgres and AQO repositories. We must refresh them
+    - name: "Code pre-cleanup"
+      run: |
+        rm -rf pg
+        git -C ~/pg clean -fdx
+        git -C ~/pg pull
+        git -C ~/pg checkout $CORE_BRANCH_NAME
+        git -C ~/pg pull
+
+        git -C ~/aqo clean -fdx
+        git -C ~/aqo pull
+        git -C ~/aqo checkout $BRANCH_NAME
+        git -C ~/aqo pull
+
+    # Copy the codes into test folder, arrange code versions and do the patching
+    - name: "Prepare code directory"
+      run: |
+        cp -r ~/pg pg
+        cd pg
+        cp -r ~/aqo contrib/aqo
+        patch -p1 --no-backup-if-mismatch < contrib/aqo/$AQO_PATCH_NAME
+
+    - name: "Compilation"
+      run: |
+        cd pg
+        export COPT=-Werror
+        export CONFIGURE_OPTS="--prefix=`pwd`/tmp_install --enable-tap-tests --enable-cassert"
+        ./configure $CONFIGURE_OPTS CFLAGS="-O0"
+        make clean > /dev/null
+        make -C contrib clean > /dev/null
+        make -j2 > /dev/null && make -j2 -C contrib > /dev/null
+        make install >> make.log
+        make -C contrib install >> make.log
+        make -C doc install > /dev/null
+
+    - name: "Launch AQO instance"
+      run: |
+        cd pg
+        make -j2 > /dev/null && make -j2 -C contrib > /dev/null
+        make install > /dev/null && make -C contrib install > /dev/null
+
+        # Launch an instance with AQO extension
+        aqo_instance_launch.sh
+        AQO_VERSION=$(psql -t -c "SELECT extversion FROM pg_extension WHERE extname='aqo'")
+        echo "AQO_VERSION=$AQO_VERSION" >> $GITHUB_ENV
+
+    - name: "Load a dump of the test database"
+      run: |
+        cd pg
+        echo "AQO_VERSION: $AQO_VERSION"
+        load_imdb.sh
+
+    # Quick pass in parallel mode with statistics
+    - name: "Test No.1: Gather statistics in disabled mode"
+      run: |
+        cd pg
+        set_test_conditions_1.sh
+        job_pass.sh
+        dump_knowledge.sh
+
+    - name: "Archive JOB test results"
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ env.AQO_VERSION }}-${{ env.CORE_BRANCH_NAME }}-${{ env.BRANCH_NAME }}-result_base_stat
+        path: |
+          pg/explains.txt
+          pg/report.txt
+          pg/knowledge_base.dump
+          pg/logfile.log
+        retention-days: 1
+
+    # Test No.2: Learn on all incoming queries
+    - name: "Test No.2: Learning stage"
+      run: |
+        cd pg
+        set_test_conditions_2.sh
+        job_pass.sh 10
+        check_result.sh
+
+    # One pass on frozen AQO data, dump knowledge base, check total error
+    - name: "Test No.3: Frozen execution"
+      run: |
+        cd pg
+        set_test_conditions_3.sh
+        job_pass.sh
+        dump_knowledge.sh
+
+    - name: "Archive JOB test results - frozen"
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ env.AQO_VERSION }}-${{ env.CORE_BRANCH_NAME }}-${{ env.BRANCH_NAME }}-result_frozen
+        path: |
+          pg/explains.txt
+          pg/report.txt
+          pg/knowledge_base.dump
+          pg/logfile.log
+        retention-days: 7
+
+    - name: "Cleanup"
+      run: |
+        cd pg
+        pg_ctl -D PGDATA stop
+
