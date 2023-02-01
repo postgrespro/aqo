@@ -1,0 +1,141 @@
+name: 'Join Order Benchmark'
+
+env:
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+
+# Trigger the workflow on each push
+on: push
+
+jobs:
+  AQO_Tests:
+
+    runs-on: self-hosted
+
+    steps:
+    # Set major PostgreSQL version for all underlying steps
+    - name: pg_major_version
+      run: |
+        PG_MAJOR_VERSION=$(echo "$BRANCH_NAME" | grep --only-matching 'stable[0-9].' | grep --only-matching '[0-9].')
+        # Declare PG_MAJOR_VERSION as a environment variable
+        echo "PG_MAJOR_VERSION=$PG_MAJOR_VERSION" >> $GITHUB_ENV
+        echo "CORE_BRANCH_NAME=REL_${PG_MAJOR_VERSION}_STABLE" >> $GITHUB_ENV
+        echo "AQO_PATCH_NAME=aqo_pg$PG_MAJOR_VERSION.patch" >> $GITHUB_ENV
+
+    - name: Set proper names for the master case
+      if: env.PG_MAJOR_VERSION == ''
+      run: |
+        echo "PG_MAJOR_VERSION=master" >> $GITHUB_ENV
+        echo "CORE_BRANCH_NAME=master" >> $GITHUB_ENV
+        echo "AQO_PATCH_NAME=aqo_master.patch" >> $GITHUB_ENV
+
+    # Runner contains clone of postgres and AQO repositories. We must refresh them.
+    - name: cleanup
+      run: |
+        echo "PG Version: $PG_MAJOR_VERSION; Core branch: $CORE_BRANCH_NAME, AQO patch: $AQO_PATCH_NAME"
+        rm -rf pg
+        git -C ~/pg clean -fdx
+        git -C ~/aqo clean -fdx
+        git -C ~/pg pull
+        git -C ~/aqo pull
+
+    # Copy the codes into test folder, arrange code versions and do the patching
+    - name: prepare_code
+      run: |
+        cp -r ~/pg pg
+        cd pg
+        git checkout $CORE_BRANCH_NAME
+        cp -r ~/aqo contrib/aqo
+        git -C contrib/aqo checkout $BRANCH_NAME
+        git clean -fdx
+        patch -p1 --no-backup-if-mismatch < contrib/aqo/$AQO_PATCH_NAME
+
+    - name: compilation
+      run: |
+        cd pg
+        export COPT=-Werror
+        export CONFIGURE_OPTS="--prefix=`pwd`/tmp_install --enable-tap-tests --enable-cassert"
+        ls -la
+        ./configure $CONFIGURE_OPTS CFLAGS="-O0"
+        make clean > /dev/null
+        make -C contrib clean > /dev/null
+        make -j2 > /dev/null && make -j2 -C contrib > /dev/null
+        make install >> make.log
+        make -C contrib install >> make.log
+        make -C doc install > /dev/null
+
+    - name: make_check
+      run: |
+        cd pg
+        env CLIENTS=50 THREADS=50 make -C contrib/aqo check
+
+    - name: Archive regression.diffs
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: regression_diffs
+        path: pg/contrib/aqo/regression.diffs
+        retention-days: 1
+    - name: Archive Regression tests log files
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: regress_logs
+        path: |
+          pg/contrib/aqo/log
+        retention-days: 1
+
+    - name: launch_aqo_instance
+      run: |
+        cd pg
+        make -j2 > /dev/null && make -j2 -C contrib > /dev/null
+        make install >> make.log && make -C contrib install >> make.log
+        # Launch an instance with AQO extension
+        ~/scripts/aqo_instance_launch.sh
+
+    # Pass installcheck in disabled mode
+    - name: installcheck_disabled
+      run: |
+        cd pg
+        . ~/scripts/paths.sh
+        psql -c "ALTER SYSTEM SET aqo.force_collect_stat = 'off'"
+        psql -c "SELECT pg_reload_conf()"
+        make installcheck-world
+
+    - name: Archive installcheck_regression.diffs
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: installcheck_disabled_diffs
+        path: pg/src/test/regress/regression.diffs
+        retention-days: 1
+
+    # Pass installcheck in disabled mode with forced gathering of AQO stat
+    - name: installcheck_disabled_forced_stat
+      run: |
+        cd pg
+        . ~/scripts/paths.sh
+        psql -c "ALTER SYSTEM SET aqo.force_collect_stat = 'on'"
+        psql -c "SELECT pg_reload_conf()"
+        make installcheck-world
+
+    - name: Archive installcheck_regression.diffs
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: installcheck_disabled_forced_stat_diffs
+        path: pg/src/test/regress/regression.diffs
+        retention-days: 1
+    - name: Archive logfile
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: logfile_installcheck
+        path: pg/logfile.log
+        retention-days: 1
+
+    - name: post_cleanup
+      run: |
+        cd pg
+        . ~/scripts/paths.sh
+        pg_ctl -D PGDATA stop
+
