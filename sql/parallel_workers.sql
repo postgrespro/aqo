@@ -1,7 +1,8 @@
 -- Specifically test AQO machinery for queries uses partial paths and executed
 -- with parallel workers.
 
-CREATE EXTENSION aqo;
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
 
 -- Utility tool. Allow to filter system-dependent strings from explain output.
 CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
@@ -12,7 +13,6 @@ BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
 
-SET aqo.join_threshold = 0;
 SET aqo.mode = 'learn';
 SET aqo.show_details = true;
 
@@ -51,7 +51,6 @@ SELECT count(*) FROM
 WHERE q1.id = q2.id;') AS str
 WHERE str NOT LIKE '%Workers%' AND str NOT LIKE '%Sort Method%'
   AND str NOT LIKE '%Gather Merge%';
-
 
 RESET parallel_tuple_cost;
 RESET parallel_setup_cost;

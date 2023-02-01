@@ -1,11 +1,12 @@
-CREATE EXTENSION aqo;
-SELECT true FROM aqo_reset();
- ?column? 
-----------
+-- Preliminaries
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
+ success 
+---------
  t
 (1 row)
 
-SET aqo.join_threshold = 0;
+SET aqo.wide_search = 'on';
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
 set aqo.show_hash = 'off';
@@ -547,14 +548,9 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
  JOINS: 1
 (24 rows)
 
-SELECT 1 FROM aqo_reset();
- ?column? 
-----------
-        1
-(1 row)
-
+RESET aqo.wide_search;
+DROP EXTENSION aqo CASCADE;
 DROP TABLE a;
 DROP TABLE b;
 DROP TABLE c;
 DROP FUNCTION expln;
-DROP EXTENSION aqo CASCADE;
