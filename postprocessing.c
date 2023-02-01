@@ -757,7 +757,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	cardinality_sum_errors = 0.;
 	cardinality_num_objects = 0;
 
-	if (!ExtractFromQueryEnv(queryDesc))
+	if (IsQueryDisabled() || !ExtractFromQueryEnv(queryDesc))
 		/* AQO keep all query-related preferences at the query context.
 		 * It is needed to prevent from possible recursive changes, at
 		 * preprocessing stage of subqueries.
@@ -768,7 +768,6 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 
 	njoins = (enr != NULL) ? *(int *) enr->reldata : -1;
 
-	Assert(!IsQueryDisabled());
 	Assert(!IsParallelWorker());
 
 	if (query_context.explain_only)
