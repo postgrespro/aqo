@@ -195,7 +195,7 @@ init_deactivated_queries_storage(void)
 	MemSet(&hash_ctl, 0, sizeof(hash_ctl));
 	hash_ctl.keysize = sizeof(uint64);
 	hash_ctl.entrysize = sizeof(uint64);
-	deactivated_queries = hash_create("aqo_deactivated_queries",
+	deactivated_queries = hash_create("AQO deactivated queries",
 									  128,		/* start small and extend */
 									  &hash_ctl,
 									  HASH_ELEM | HASH_BLOBS);
@@ -207,7 +207,7 @@ query_is_deactivated(uint64 queryid)
 {
 	bool		found;
 
-	hash_search(deactivated_queries, &queryid, HASH_FIND, &found);
+	(void) hash_search(deactivated_queries, &queryid, HASH_FIND, &found);
 	return found;
 }
 
@@ -215,7 +215,21 @@ query_is_deactivated(uint64 queryid)
 void
 add_deactivated_query(uint64 queryid)
 {
-	hash_search(deactivated_queries, &queryid, HASH_ENTER, NULL);
+	(void) hash_search(deactivated_queries, &queryid, HASH_ENTER, NULL);
+}
+
+static void
+reset_deactivated_queries(void)
+{
+	HASH_SEQ_STATUS		hash_seq;
+	uint64			   *queryid;
+
+	hash_seq_init(&hash_seq, deactivated_queries);
+	while ((queryid = hash_seq_search(&hash_seq)) != NULL)
+	{
+		if (!hash_search(deactivated_queries, queryid, HASH_REMOVE, NULL))
+			elog(PANIC, "[AQO] hash table corrupted");
+	}
 }
 
 /*
@@ -2179,7 +2193,6 @@ aqo_queries_update(PG_FUNCTION_ARGS)
 		{ PG_ARGISNULL(AQ_FS), PG_ARGISNULL(AQ_LEARN_AQO),
 		  PG_ARGISNULL(AQ_USE_AQO), PG_ARGISNULL(AQ_AUTO_TUNING) };
 
-
 	if (PG_ARGISNULL(AQ_QUERYID))
 		PG_RETURN_BOOL(false);
 
@@ -2211,6 +2224,10 @@ aqo_reset(PG_FUNCTION_ARGS)
 	counter += aqo_qtexts_reset();
 	counter += aqo_data_reset();
 	counter += aqo_queries_reset();
+
+	/* Cleanup cache of deactivated queries */
+	reset_deactivated_queries();
+
 	PG_RETURN_INT64(counter);
 }
 
