@@ -128,8 +128,6 @@ aqo_planner(Query *parse,
 	bool			query_is_stored = false;
 	MemoryContext	oldctx;
 
-	oldctx = MemoryContextSwitchTo(AQOPredictMemCtx);
-
 	 /*
 	  * We do not work inside an parallel worker now by reason of insert into
 	  * the heap during planning. Transactions are synchronized between parallel
@@ -146,7 +144,6 @@ aqo_planner(Query *parse,
 		 * We should disable AQO for this query to remember this decision along
 		 * all execution stages.
 		 */
-		MemoryContextSwitchTo(oldctx);
 		disable_aqo_for_query();
 
 		return call_default_planner(parse,
@@ -176,7 +173,6 @@ aqo_planner(Query *parse,
 		 * feature space, that is processing yet (disallow invalidation
 		 * recursion, as an example).
 		 */
-		MemoryContextSwitchTo(oldctx);
 		disable_aqo_for_query();
 
 		return call_default_planner(parse,
@@ -188,11 +184,9 @@ aqo_planner(Query *parse,
 	elog(DEBUG1, "AQO will be used for query '%s', class "UINT64_FORMAT,
 		 query_string ? query_string : "null string", query_context.query_hash);
 
-	MemoryContextSwitchTo(oldctx);
 	oldctx = MemoryContextSwitchTo(AQOCacheMemCtx);
 	cur_classes = lappend_uint64(cur_classes, query_context.query_hash);
 	MemoryContextSwitchTo(oldctx);
-	oldctx = MemoryContextSwitchTo(AQOPredictMemCtx);
 
 	if (aqo_mode == AQO_MODE_DISABLED)
 	{
@@ -351,7 +345,7 @@ ignore_query_settings:
 		INSTR_TIME_SET_CURRENT(query_context.start_planning_time);
 	{
 		PlannedStmt *stmt;
-		MemoryContextSwitchTo(oldctx);
+
 		stmt = call_default_planner(parse, query_string,
 												 cursorOptions, boundParams);
 
@@ -458,7 +452,6 @@ jointree_walker(Node *jtnode, void *context)
 static bool
 isQueryUsingSystemRelation_walker(Node *node, void *context)
 {
-	MemoryContext oldctx = MemoryContextSwitchTo(AQOLearnMemCtx);
 	AQOPreWalkerCtx   *ctx = (AQOPreWalkerCtx *) context;
 
 	if (node == NULL)
@@ -500,7 +493,6 @@ isQueryUsingSystemRelation_walker(Node *node, void *context)
 		}
 
 		jointree_walker((Node *) query->jointree, context);
-		MemoryContextSwitchTo(oldctx);
 
 		/* Recursively plunge into subqueries and CTEs */
 		return query_tree_walker(query,
