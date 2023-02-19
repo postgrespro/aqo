@@ -1,10 +1,7 @@
-name: 'C/C++ CI for the stable15'
+name: 'AQO basic CI'
 
 on:
-  push:
-    branches: [ stable15 ]
   pull_request:
-    branches: [ stable15 ]
 
 env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
@@ -15,45 +12,70 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: pg
+    - uses: actions/checkout@v3
+    - name: "Define PostreSQL major version"
+      run: |
+        echo "$(ls -la)"
+        patch_name=$(ls aqo_*.patch|tail -1)
+        echo "CORE_PATCH_NAME=$patch_name" >> $GITHUB_ENV
+
+        # we can get number, otherwise set up master
+        vers_number=$(echo "$patch_name"|tr -d -c 0-9)
+        echo "PG_MAJOR_VERSION=$vers_number" >> $GITHUB_ENV
+
+        branch_name="REL_${vers_number}_STABLE"
+        echo "PG_BRANCH=$branch_name" >> $GITHUB_ENV
+        
+        echo "COPT=-Werror" >> $GITHUB_ENV
+        echo "CONFIGURE_OPTS=--prefix=`pwd`/tmp_install --enable-tap-tests --enable-cassert" >> $GITHUB_ENV
+
+    - name: "Set master branch name, if needed"
+      if: env.PG_MAJOR_VERSION == ''
+      run: |
+        branch_name="master"
+        echo "PG_BRANCH=$branch_name" >> $GITHUB_ENV
+
+    - name: "Environment (debug output)"
+      if: ${{ always() }}
+      run: |
+        echo "Use PostgreSQL branch $PG_BRANCH (patch: $CORE_PATCH_NAME)"
+        echo "COPT: $COPT"
+        echo "CONFIGURE_OPTS: $CONFIGURE_OPTS"
+        echo "Deploying to production server on branch" $BRANCH_NAME "(PG $PG_BRANCH)"
+        git config --global user.email "ci@postgrespro.ru"
+        git config --global user.name "CI PgPro admin"
+
+    - name: "Prepare PG directory"
+      run: |
+        git clone -b $PG_BRANCH --depth=1 --single-branch https://github.com/postgres/postgres.git $GITHUB_WORKSPACE/../pg
+        cd $GITHUB_WORKSPACE/../pg
+        ls -la
+        cp -r ../aqo contrib/aqo
+        patch -p1 --no-backup-if-mismatch < contrib/aqo/$CORE_PATCH_NAME
+
+    - name: "make check"
       run: |
         sudo apt install libipc-run-perl
 
-        echo "Deploying to production server on branch" $BRANCH_NAME
-        git config --global user.email "ci@postgrespro.ru"
-        git config --global user.name "CI PgPro admin"
-        export COPT=-Werror
-        export CONFIGURE_OPTS="--prefix=`pwd`/tmp_install --enable-tap-tests --enable-cassert"
-        git clone https://github.com/postgres/postgres.git pg
-        cd pg
-
-        git checkout REL_15_STABLE
-        git clone https://github.com/postgrespro/aqo.git contrib/aqo
-        git -C contrib/aqo checkout $BRANCH_NAME
-        patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg15.patch
-        ./configure $CONFIGURE_OPTS CFLAGS="-O3"
+        cd $GITHUB_WORKSPACE/../pg
+        ./configure $CONFIGURE_OPTS CFLAGS="-O2" > /dev/null
         make -j4 > /dev/null && make -j4 -C contrib > /dev/null
         env CLIENTS=50 THREADS=50 make -C contrib/aqo check
 
         echo "Use AQO with debug code included"
         git clean -fdx
         git -C contrib/aqo clean -fdx
-        ./configure $CONFIGURE_OPTS CFLAGS="-DAQO_DEBUG_PRINT -O0"
+        ./configure $CONFIGURE_OPTS CFLAGS="-DAQO_DEBUG_PRINT -O0" > /dev/null
         make -j4 > /dev/null && make -j4 -C contrib > /dev/null
         env CLIENTS=50 THREADS=50 make -C contrib/aqo check
-    - name: Archive regression.diffs
-      if: ${{ always() }}
-      uses: actions/upload-artifact@v3
-      with:
-        name: regression_diffs
-        path: /home/runner/work/aqo/aqo/pg/contrib/aqo/regression.diffs
-        retention-days: 1
-    - name: Archive TAP tests log files
-      if: ${{ always() }}
-      uses: actions/upload-artifact@v3
-      with:
-        name: tap_logs
-        path: |
-          log
-        retention-days: 1
 
+    - name: Archive artifacts
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: make_check_logs
+        path: |
+          /home/runner/work/aqo/pg/contrib/aqo/regression.diffs
+          /home/runner/work/aqo/pg/contrib/aqo/log
+          /home/runner/work/aqo/pg/contrib/aqo/tmp_check/log
+        retention-days: 7
