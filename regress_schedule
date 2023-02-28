@@ -14,7 +14,7 @@ test: parallel_workers
 test: plancache
 test: update_functions
 # Performance-dependent test. Can be ignored if executes in containers or on slow machines
-ignore: statement_timeout
+test: statement_timeout
 test: temp_tables
 test: top_queries
 test: relocatable
