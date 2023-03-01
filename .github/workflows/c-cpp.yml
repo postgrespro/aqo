@@ -15,7 +15,6 @@ jobs:
     - uses: actions/checkout@v3
     - name: "Define PostreSQL major version"
       run: |
-        echo "$(ls -la)"
         patch_name=$(ls aqo_*.patch|tail -1)
         echo "CORE_PATCH_NAME=$patch_name" >> $GITHUB_ENV
 
@@ -49,7 +48,6 @@ jobs:
       run: |
         git clone -b $PG_BRANCH --depth=1 --single-branch https://github.com/postgres/postgres.git $GITHUB_WORKSPACE/../pg
         cd $GITHUB_WORKSPACE/../pg
-        ls -la
         cp -r ../aqo contrib/aqo
         patch -p1 --no-backup-if-mismatch < contrib/aqo/$CORE_PATCH_NAME
 
@@ -70,7 +68,7 @@ jobs:
         env CLIENTS=50 THREADS=50 make -C contrib/aqo check
 
     - name: Archive artifacts
-      if: ${{ always() }}
+      if: ${{ failure() }}
       uses: actions/upload-artifact@v3
       with:
         name: make_check_logs
