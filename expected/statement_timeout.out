@@ -35,6 +35,7 @@ SET statement_timeout = 80; -- [0.1s]
 SELECT *, pg_sleep(0.1) FROM t;
 NOTICE:  [AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data.
 ERROR:  canceling statement due to statement timeout
+RESET statement_timeout;
 SELECT check_estimated_rows('SELECT *, pg_sleep(0.1) FROM t;'); -- haven't any partial data
  check_estimated_rows 
 ----------------------
@@ -46,6 +47,7 @@ SET statement_timeout = 350;
 SELECT *, pg_sleep(0.1) FROM t;
 NOTICE:  [AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data.
 ERROR:  canceling statement due to statement timeout
+RESET statement_timeout;
 SELECT check_estimated_rows('SELECT *, pg_sleep(0.1) FROM t;');
  check_estimated_rows 
 ----------------------
@@ -64,6 +66,7 @@ SELECT *, pg_sleep(0.1) FROM t;
  5 | 
 (5 rows)
 
+RESET statement_timeout;
 SELECT check_estimated_rows('SELECT *, pg_sleep(0.1) FROM t;');
  check_estimated_rows 
 ----------------------
@@ -84,6 +87,7 @@ SET statement_timeout = 80;
 SELECT *, pg_sleep(0.1) FROM t; -- Not learned
 NOTICE:  [AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data.
 ERROR:  canceling statement due to statement timeout
+RESET statement_timeout;
 SELECT check_estimated_rows('SELECT *, pg_sleep(0.1) FROM t;');
  check_estimated_rows 
 ----------------------
@@ -94,6 +98,7 @@ SET statement_timeout = 350;
 SELECT *, pg_sleep(0.1) FROM t; -- Learn!
 NOTICE:  [AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data.
 ERROR:  canceling statement due to statement timeout
+RESET statement_timeout;
 SELECT check_estimated_rows('SELECT *, pg_sleep(0.1) FROM t;');
  check_estimated_rows 
 ----------------------
@@ -111,6 +116,7 @@ SELECT *, pg_sleep(0.1) FROM t; -- Get reliable data
  5 | 
 (5 rows)
 
+RESET statement_timeout;
 SELECT check_estimated_rows('SELECT *, pg_sleep(0.1) FROM t;');
  check_estimated_rows 
 ----------------------
@@ -134,18 +140,19 @@ SELECT count(*) FROM aqo_data; -- Must be zero
 SELECT x, pg_sleep(0.1) FROM t WHERE x > 0;
 NOTICE:  [AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data.
 ERROR:  canceling statement due to statement timeout
+RESET statement_timeout;
 SELECT count(*) FROM aqo_data; -- Must be one
  count 
 -------
      1
 (1 row)
 
+DROP TABLE t;
+DROP FUNCTION check_estimated_rows;
 SELECT true AS success FROM aqo_reset();
  success 
 ---------
  t
 (1 row)
 
-DROP TABLE t;
 DROP EXTENSION aqo;
-DROP FUNCTION check_estimated_rows;
