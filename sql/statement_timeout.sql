@@ -32,16 +32,22 @@ SET aqo.learn_statement_timeout = 'on';
 
 SET statement_timeout = 80; -- [0.1s]
 SELECT *, pg_sleep(0.1) FROM t;
+
+RESET statement_timeout;
 SELECT check_estimated_rows('SELECT *, pg_sleep(0.1) FROM t;'); -- haven't any partial data
 
 -- Don't learn because running node has smaller cardinality than an optimizer prediction
 SET statement_timeout = 350;
 SELECT *, pg_sleep(0.1) FROM t;
+
+RESET statement_timeout;
 SELECT check_estimated_rows('SELECT *, pg_sleep(0.1) FROM t;');
 
 -- We have a real learning data.
 SET statement_timeout = 800;
 SELECT *, pg_sleep(0.1) FROM t;
+
+RESET statement_timeout;
 SELECT check_estimated_rows('SELECT *, pg_sleep(0.1) FROM t;');
 
 -- Force to make an underestimated prediction
@@ -52,14 +58,20 @@ SELECT true AS success FROM aqo_reset();
 
 SET statement_timeout = 80;
 SELECT *, pg_sleep(0.1) FROM t; -- Not learned
+
+RESET statement_timeout;
 SELECT check_estimated_rows('SELECT *, pg_sleep(0.1) FROM t;');
 
 SET statement_timeout = 350;
 SELECT *, pg_sleep(0.1) FROM t; -- Learn!
+
+RESET statement_timeout;
 SELECT check_estimated_rows('SELECT *, pg_sleep(0.1) FROM t;');
 
 SET statement_timeout = 550;
 SELECT *, pg_sleep(0.1) FROM t; -- Get reliable data
+
+RESET statement_timeout;
 SELECT check_estimated_rows('SELECT *, pg_sleep(0.1) FROM t;');
 
 -- Interrupted query should immediately appear in aqo_data
@@ -67,9 +79,12 @@ SELECT true AS success FROM aqo_reset();
 SET statement_timeout = 500;
 SELECT count(*) FROM aqo_data; -- Must be zero
 SELECT x, pg_sleep(0.1) FROM t WHERE x > 0;
+
+RESET statement_timeout;
 SELECT count(*) FROM aqo_data; -- Must be one
 
-SELECT true AS success FROM aqo_reset();
 DROP TABLE t;
-DROP EXTENSION aqo;
 DROP FUNCTION check_estimated_rows;
+
+SELECT true AS success FROM aqo_reset();
+DROP EXTENSION aqo;
