@@ -1,10 +1,14 @@
 name: "InstallChecks"
 
+env:
+  # Use it just for a report
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+
+# Trigger it each timeon push or pull request. Honestly, it will be redundant
+# most of the time, but external pull-request checks don't be missed out.
 on:
   push:
-
-env:
-  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+  pull_request:
 
 jobs:
   build:
@@ -12,11 +16,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
-    # Set major PostgreSQL version for all underlying steps
     - uses: actions/checkout@v3
-    - name: "Define PostreSQL major version"
+    - name: "Define PostreSQL major version and set basic environment"
       run: |
+        echo "The action workflow is triggered by the $BRANCH_NAME"
+        sudo apt install libipc-run-perl
+        git config --global user.email "ci@postgrespro.ru"
+        git config --global user.name "CI PgPro admin"
+
         patch_name=$(ls aqo_*.patch|tail -1)
         echo "CORE_PATCH_NAME=$patch_name" >> $GITHUB_ENV
 
@@ -26,47 +33,51 @@ jobs:
 
         branch_name="REL_${vers_number}_STABLE"
         echo "PG_BRANCH=$branch_name" >> $GITHUB_ENV
-
     - name: "Set master branch name, if needed"
       if: env.PG_MAJOR_VERSION == ''
       run: |
         branch_name="master"
         echo "PG_BRANCH=$branch_name" >> $GITHUB_ENV
 
-    - name: "Environment (debug output)"
-      if: ${{ always() }}
+    # Create workspace directory and environment variable.
+    # It is the second step because on the first we define versions and branches
+    - name: "Initial dir"
       run: |
-        echo "Use PostgreSQL branch $PG_BRANCH (patch: $CORE_PATCH_NAME)"
-         echo "Deploying to production server on branch" $BRANCH_NAME "(PG $PG_BRANCH)"
-        git config --global user.email "ci@postgrespro.ru"
-        git config --global user.name "CI PgPro admin"
+        git clone -b $PG_BRANCH --depth=1 --single-branch https://github.com/postgres/postgres.git $GITHUB_WORKSPACE/../pg
+
+        # Invent variable with full path to PG directory just because github
+        # actions don't like relative paths ...
+        cd $GITHUB_WORKSPACE/../pg
+        echo PG_DIR=`pwd` >> $GITHUB_ENV
 
     - name: "Prepare PG directory"
       run: |
-        sudo apt install libipc-run-perl libxml2-utils libxml2-dev xsltproc libxslt1-dev
-        git clone -b $PG_BRANCH --depth=1 --single-branch https://github.com/postgres/postgres.git $GITHUB_WORKSPACE/../pg
-        cd $GITHUB_WORKSPACE/../pg
+        cd $PG_DIR
         cp -r ../aqo contrib/aqo
         patch -p1 --no-backup-if-mismatch < contrib/aqo/$CORE_PATCH_NAME
-
-    - name: "Paths"
-      run: |
-        cd $GITHUB_WORKSPACE/../pg
         echo "COPT=-Werror" >> $GITHUB_ENV
         echo "CONFIGURE_OPTS=--prefix=`pwd`/tmp_install --enable-tap-tests --enable-cassert" >> $GITHUB_ENV
-        echo "$GITHUB_WORKSPACE/../pg/tmp_install/bin" >> $GITHUB_PATH
-        echo "$GITHUB_WORKSPACE/../pg/contrib/aqo/.github/scripts/job" >> $GITHUB_PATH
-        echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/pg/tmp_install/lib" >> $GITHUB_ENV
-        echo "PGDATABASE=`whoami`" >> $GITHUB_ENV
-        echo "PGHOST=localhost" >> $GITHUB_ENV
-        echo "PGDATA=PGDATA" >> $GITHUB_ENV
-        echo "PGUSER=`whoami`" >> $GITHUB_ENV
-        echo "PGPORT=5432" >> $GITHUB_ENV
+
+        # Instance-related environment
+        echo "$PG_DIR/tmp_install/bin" >> $GITHUB_PATH
+        echo "LD_LIBRARY_PATH=$PG_DIR/tmp_install/lib" >> $GITHUB_ENV
+        echo `pwd`/contrib/aqo/.github/scripts/job >> $GITHUB_PATH
+
+    # Just for debug
+    - name: "Environment (debug output)"
+      if: ${{ always() }}
+      run: |
+        echo "PG_MAJOR_VERSION: $PG_MAJOR_VERSION"
+        echo "PG_DIR: $PG_DIR"
+        echo "PG_BRANCH: $PG_BRANCH"
+        echo "CORE_PATCH_NAME: $CORE_PATCH_NAME"
+        # See these paths to understand correctness of the instance initialization
+        echo "PATHs: $PATH"
+        echo "PG Libs: $LD_LIBRARY_PATH"
 
     - name: "Compilation"
       run: |
-        cd $GITHUB_WORKSPACE/../pg
-        echo "paths: $PATH"
+        cd $PG_DIR
         echo "COPT: $COPT"
         echo "CONFIGURE_OPTS: $CONFIGURE_OPTS"
         ./configure $CONFIGURE_OPTS CFLAGS="-O2" > /dev/null
@@ -75,7 +86,7 @@ jobs:
 
     - name: "Launch AQO instance"
       run: |
-        cd $GITHUB_WORKSPACE/../pg
+        cd $PG_DIR
 
         # Launch an instance with AQO extension
         aqo_instance_launch.sh
@@ -86,21 +97,21 @@ jobs:
     # Pass installcheck in disabled mode
     - name: installcheck_disabled
       run: |
-        cd $GITHUB_WORKSPACE/../pg
+        cd $PG_DIR
         psql -c "ALTER SYSTEM SET aqo.force_collect_stat = 'off'"
         psql -c "SELECT pg_reload_conf()"
         make installcheck-world
 
     - name: installcheck_disabled_forced_stat
       run: |
-        cd $GITHUB_WORKSPACE/../pg
+        cd $PG_DIR
         psql -c "ALTER SYSTEM SET aqo.force_collect_stat = 'on'"
         psql -c "SELECT pg_reload_conf()"
         make installcheck-world
 
     - name: installcheck_frozen
       run: |
-        cd $GITHUB_WORKSPACE/../pg
+        cd $PG_DIR
         psql -c "ALTER SYSTEM SET aqo.mode = 'frozen'"
         psql -c "ALTER SYSTEM SET aqo.force_collect_stat = 'on'"
         psql -c "SELECT pg_reload_conf()"
@@ -108,7 +119,7 @@ jobs:
 
     - name: installcheck_controlled
       run: |
-        cd $GITHUB_WORKSPACE/../pg
+        cd $PG_DIR
         psql -c "ALTER SYSTEM SET aqo.mode = 'controlled'"
         psql -c "ALTER SYSTEM SET aqo.force_collect_stat = 'on'"
         psql -c "SELECT pg_reload_conf()"
@@ -117,7 +128,7 @@ jobs:
     - name: installcheck_learn
       continue-on-error: true
       run: |
-        cd $GITHUB_WORKSPACE/../pg
+        cd $PG_DIR
         psql -c "ALTER SYSTEM SET aqo.mode = 'learn'"
         psql -c "ALTER SYSTEM SET aqo.force_collect_stat = 'on'"
         psql -c "SELECT pg_reload_conf()"
@@ -126,7 +137,7 @@ jobs:
     - name: installcheck_intelligent
       continue-on-error: true
       run: |
-        cd $GITHUB_WORKSPACE/../pg
+        cd $PG_DIR
         psql -c "ALTER SYSTEM SET aqo.mode = 'intelligent'"
         psql -c "ALTER SYSTEM SET aqo.force_collect_stat = 'on'"
         psql -c "SELECT pg_reload_conf()"
@@ -135,7 +146,7 @@ jobs:
     - name: installcheck_forced
       continue-on-error: true
       run: |
-        cd $GITHUB_WORKSPACE/../pg
+        cd $PG_DIR
         psql -c "ALTER SYSTEM SET aqo.mode = 'forced'"
         psql -c "ALTER SYSTEM SET aqo.force_collect_stat = 'on'"
         psql -c "SELECT pg_reload_conf()"
@@ -148,8 +159,8 @@ jobs:
       with:
         name: ${{ env.AQO_VERSION }}-${{ env.PG_BRANCH }}-${{ env.CORE_PATCH_NAME }}-artifacts
         path: |
-          pg/src/test/regress/regression.diffs
-          pg/logfile.log
-          pg/contrib/aqo/tmp_check/log
+          ${{ env.PG_DIR }}/src/test/regress/regression.diffs
+          ${{ env.PG_DIR }}/logfile.log
+          ${{ env.PG_DIR }}/contrib/aqo/tmp_check/log
         retention-days: 2
 
