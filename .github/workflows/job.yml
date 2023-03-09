@@ -1,82 +1,94 @@
 name: 'Join Order Benchmark'
 
 env:
+  # Use it just for a report
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
 
-# Trigger the workflow on each push
-on: push
+# Trigger the workflow on each release or on a manual action
+on:
+  workflow_dispatch:
+  release:
 
 jobs:
-  AQO_Tests:
+  AQO_JOB_Benchmark:
 
     runs-on: self-hosted
 
     steps:
-    - name: "Set common paths"
+    - uses: actions/checkout@v3
+    - name: "Define PostreSQL major version and set basic environment"
       run: |
-        echo "$HOME/aqo/.github/scripts/job" >> $GITHUB_PATH
-        echo "JOB_DIR=$HOME/jo-bench" >> $GITHUB_ENV
+        echo "The action workflow is triggered by the $BRANCH_NAME"
 
-        # PostgreSQL-related environment variables
-        echo "$GITHUB_WORKSPACE/pg/tmp_install/bin" >> $GITHUB_PATH
-        echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/pg/tmp_install/lib" >> $GITHUB_ENV
+        # Cleanup, because of self-hosted runner
+        rm -rf $GITHUB_WORKSPACE/../pg
+
+        patch_name=$(ls aqo_*.patch|tail -1)
+        echo "CORE_PATCH_NAME=$patch_name" >> $GITHUB_ENV
+
+        # we can get number, otherwise set up master
+        vers_number=$(echo "$patch_name"|tr -d -c 0-9)
+        echo "PG_MAJOR_VERSION=$vers_number" >> $GITHUB_ENV
+
+        branch_name="REL_${vers_number}_STABLE"
+        echo "PG_BRANCH=$branch_name" >> $GITHUB_ENV
+    - name: "Set master branch name, if needed"
+      if: env.PG_MAJOR_VERSION == ''
+      run: |
+        branch_name="master"
+        echo "PG_BRANCH=$branch_name" >> $GITHUB_ENV
+
+    # Create workspace directory and environment variable.
+    # It is the second step because on the first we define versions and branches
+    - name: "Initial dir"
+      run: |
+        git clone -b $PG_BRANCH --depth=1 --single-branch https://github.com/postgres/postgres.git $GITHUB_WORKSPACE/../pg
+
+        # Invent variable with full path to PG directory just because github
+        # actions don't like relative paths ...
+        cd $GITHUB_WORKSPACE/../pg
+        echo PG_DIR=`pwd` >> $GITHUB_ENV
+
+    - name: "Prepare PG directory"
+      run: |
+        cd $PG_DIR
+        cp -r ../aqo contrib/aqo
+        patch -p1 --no-backup-if-mismatch < contrib/aqo/$CORE_PATCH_NAME
+        echo "COPT=-Werror" >> $GITHUB_ENV
+        echo "CONFIGURE_OPTS=--prefix=`pwd`/tmp_install --enable-tap-tests --enable-cassert" >> $GITHUB_ENV
+
+        # Instance-related environment
+        echo "$PG_DIR/tmp_install/bin" >> $GITHUB_PATH
+        echo "LD_LIBRARY_PATH=$PG_DIR/tmp_install/lib" >> $GITHUB_ENV
+        echo `pwd`/contrib/aqo/.github/scripts/job >> $GITHUB_PATH
+
+        # JOB-specific environment
+        echo "JOB_DIR=$HOME/jo-bench" >> $GITHUB_ENV
         echo "PGDATABASE=`whoami`" >> $GITHUB_ENV
         echo "PGHOST=localhost" >> $GITHUB_ENV
         echo "PGDATA=PGDATA" >> $GITHUB_ENV
         echo "PGUSER=`whoami`" >> $GITHUB_ENV
         echo "PGPORT=5432" >> $GITHUB_ENV
 
-    # Set major PostgreSQL version for all underlying steps
-    - name: "Extract Postgres major version number"
-      run: |
-        PG_MAJOR_VERSION=$(echo "$BRANCH_NAME" | grep --only-matching 'stable[0-9].' | grep --only-matching '[0-9].')
-
-        # Declare PG_MAJOR_VERSION as a environment variable
-        echo "PG_MAJOR_VERSION=$PG_MAJOR_VERSION" >> $GITHUB_ENV
-        echo "CORE_BRANCH_NAME=REL_${PG_MAJOR_VERSION}_STABLE" >> $GITHUB_ENV
-        echo "AQO_PATCH_NAME=aqo_pg$PG_MAJOR_VERSION.patch" >> $GITHUB_ENV
-    - name: "Set proper names for the master case"
-      if: env.PG_MAJOR_VERSION == ''
-      run: |
-        echo "PG_MAJOR_VERSION=master" >> $GITHUB_ENV
-        echo "CORE_BRANCH_NAME=master" >> $GITHUB_ENV
-        echo "AQO_PATCH_NAME=aqo_master.patch" >> $GITHUB_ENV
-
     # Just for debug
-    - name: "Print environment variables"
+    - name: "Environment (debug output)"
+      if: ${{ always() }}
       run: |
-        echo "Test data: $PG_MAJOR_VERSION; Core branch: $CORE_BRANCH_NAME, AQO patch: $AQO_PATCH_NAME"
-        echo "Paths: $PATH, JOB path: $JOB_DIR"
+        echo "PG_MAJOR_VERSION: $PG_MAJOR_VERSION"
+        echo "PG_DIR: $PG_DIR"
+        echo "PG_BRANCH: $PG_BRANCH"
+        echo "CORE_PATCH_NAME: $CORE_PATCH_NAME"
+        # See these paths to understand correctness of the instance initialization
+        echo "PATHs: $PATH"
         echo "PG Libs: $LD_LIBRARY_PATH"
+
+        # JOB-specific environment variable
+        echo "JOB path: $JOB_DIR"
         echo "PG Environment: dbname: $PGDATABASE, host: $PGHOST, pgdata: $PGDATA, pguser: $PGUSER, pgport: $PGPORT"
-
-    # Runner contains clone of postgres and AQO repositories. We must refresh them
-    - name: "Code pre-cleanup"
-      run: |
-        rm -rf pg
-        git -C ~/pg clean -fdx
-        git -C ~/pg pull
-        git -C ~/pg checkout $CORE_BRANCH_NAME
-        git -C ~/pg pull
-
-        git -C ~/aqo clean -fdx
-        git -C ~/aqo pull
-        git -C ~/aqo checkout $BRANCH_NAME
-        git -C ~/aqo pull
-
-    # Copy the codes into test folder, arrange code versions and do the patching
-    - name: "Prepare code directory"
-      run: |
-        cp -r ~/pg pg
-        cd pg
-        cp -r ~/aqo contrib/aqo
-        patch -p1 --no-backup-if-mismatch < contrib/aqo/$AQO_PATCH_NAME
 
     - name: "Compilation"
       run: |
-        cd pg
-        export COPT=-Werror
-        export CONFIGURE_OPTS="--prefix=`pwd`/tmp_install --enable-tap-tests --enable-cassert"
+        cd $PG_DIR
         ./configure $CONFIGURE_OPTS CFLAGS="-O0"
         make clean > /dev/null
         make -C contrib clean > /dev/null
@@ -87,9 +99,7 @@ jobs:
 
     - name: "Launch AQO instance"
       run: |
-        cd pg
-        make -j2 > /dev/null && make -j2 -C contrib > /dev/null
-        make install > /dev/null && make -C contrib install > /dev/null
+        cd $PG_DIR
 
         # Launch an instance with AQO extension
         aqo_instance_launch.sh
@@ -98,14 +108,14 @@ jobs:
 
     - name: "Load a dump of the test database"
       run: |
-        cd pg
+        cd $PG_DIR
         echo "AQO_VERSION: $AQO_VERSION"
         load_imdb.sh
 
     # Quick pass in parallel mode with statistics
     - name: "Test No.1: Gather statistics in disabled mode"
       run: |
-        cd pg
+        cd $PG_DIR
         set_test_conditions_1.sh
         job_pass.sh
         dump_knowledge.sh
@@ -116,16 +126,17 @@ jobs:
       with:
         name: ${{ env.AQO_VERSION }}-${{ env.CORE_BRANCH_NAME }}-${{ env.BRANCH_NAME }}-result_base_stat
         path: |
-          pg/explains.txt
-          pg/report.txt
-          pg/knowledge_base.dump
-          pg/logfile.log
+          # Relative paths not allowed ...
+          ${{ env.PG_DIR }}/explains.txt
+          ${{ env.PG_DIR }}/report.txt
+          ${{ env.PG_DIR }}/knowledge_base.dump
+          ${{ env.PG_DIR }}/logfile.log
         retention-days: 1
 
     # Test No.2: Learn on all incoming queries
     - name: "Test No.2: Learning stage"
       run: |
-        cd pg
+        cd $PG_DIR
         set_test_conditions_2.sh
         job_pass.sh 10
         check_result.sh
@@ -133,7 +144,7 @@ jobs:
     # One pass on frozen AQO data, dump knowledge base, check total error
     - name: "Test No.3: Frozen execution"
       run: |
-        cd pg
+        cd $PG_DIR
         set_test_conditions_3.sh
         job_pass.sh
         dump_knowledge.sh
@@ -144,14 +155,15 @@ jobs:
       with:
         name: ${{ env.AQO_VERSION }}-${{ env.CORE_BRANCH_NAME }}-${{ env.BRANCH_NAME }}-result_frozen
         path: |
-          pg/explains.txt
-          pg/report.txt
-          pg/knowledge_base.dump
-          pg/logfile.log
+          # Relative paths not allowed ...
+          ${{ env.PG_DIR }}/explains.txt
+          ${{ env.PG_DIR }}/report.txt
+          ${{ env.PG_DIR }}/knowledge_base.dump
+          ${{ env.PG_DIR }}/logfile.log
         retention-days: 7
 
     - name: "Cleanup"
       run: |
-        cd pg
+        cd $PG_DIR
         pg_ctl -D PGDATA stop
 
