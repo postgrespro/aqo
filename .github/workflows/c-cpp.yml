@@ -1,10 +1,14 @@
 name: 'AQO basic CI'
 
-on:
-  pull_request:
-
 env:
+  # Use it just for a report
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+
+# Trigger it each timeon push or pull request. Honestly, it will be redundant
+# most of the time, but external pull-request checks don't be missed out.
+on:
+  push:
+  pull_request:
 
 jobs:
   build:
@@ -15,6 +19,11 @@ jobs:
     - uses: actions/checkout@v3
     - name: "Define PostreSQL major version"
       run: |
+        echo "The action workflow is triggered by the $BRANCH_NAME"
+        sudo apt install libipc-run-perl
+        git config --global user.email "ci@postgrespro.ru"
+        git config --global user.name "CI PgPro admin"
+
         patch_name=$(ls aqo_*.patch|tail -1)
         echo "CORE_PATCH_NAME=$patch_name" >> $GITHUB_ENV
 
@@ -24,38 +33,43 @@ jobs:
 
         branch_name="REL_${vers_number}_STABLE"
         echo "PG_BRANCH=$branch_name" >> $GITHUB_ENV
-        
-        echo "COPT=-Werror" >> $GITHUB_ENV
-        echo "CONFIGURE_OPTS=--prefix=`pwd`/tmp_install --enable-tap-tests --enable-cassert" >> $GITHUB_ENV
-
     - name: "Set master branch name, if needed"
       if: env.PG_MAJOR_VERSION == ''
       run: |
         branch_name="master"
         echo "PG_BRANCH=$branch_name" >> $GITHUB_ENV
 
-    - name: "Environment (debug output)"
-      if: ${{ always() }}
+    # Create workspace directory and environment variable.
+    # It is the second step because on the first we define versions and branches
+    - name: "Initial dir"
       run: |
-        echo "Use PostgreSQL branch $PG_BRANCH (patch: $CORE_PATCH_NAME)"
-        echo "COPT: $COPT"
-        echo "CONFIGURE_OPTS: $CONFIGURE_OPTS"
-        echo "Deploying to production server on branch" $BRANCH_NAME "(PG $PG_BRANCH)"
-        git config --global user.email "ci@postgrespro.ru"
-        git config --global user.name "CI PgPro admin"
+        git clone -b $PG_BRANCH --depth=1 --single-branch https://github.com/postgres/postgres.git $GITHUB_WORKSPACE/../pg
+
+        # Invent variable with full path to PG directory just because github
+        # actions don't like relative paths ...
+        cd $GITHUB_WORKSPACE/../pg
+        echo PG_DIR=`pwd` >> $GITHUB_ENV
 
     - name: "Prepare PG directory"
       run: |
-        git clone -b $PG_BRANCH --depth=1 --single-branch https://github.com/postgres/postgres.git $GITHUB_WORKSPACE/../pg
-        cd $GITHUB_WORKSPACE/../pg
+        cd $PG_DIR
         cp -r ../aqo contrib/aqo
         patch -p1 --no-backup-if-mismatch < contrib/aqo/$CORE_PATCH_NAME
+        echo "COPT=-Werror" >> $GITHUB_ENV
+        echo "CONFIGURE_OPTS=--prefix=`pwd`/tmp_install --enable-tap-tests --enable-cassert" >> $GITHUB_ENV
+
+    # Just for debug
+    - name: "Environment (debug output)"
+      if: ${{ always() }}
+      run: |
+        echo "PG_MAJOR_VERSION: $PG_MAJOR_VERSION"
+        echo "PG_DIR: $PG_DIR"
+        echo "PG_BRANCH: $PG_BRANCH"
+        echo "CORE_PATCH_NAME: $CORE_PATCH_NAME"
 
     - name: "make check"
       run: |
-        sudo apt install libipc-run-perl
-
-        cd $GITHUB_WORKSPACE/../pg
+        cd $PG_DIR
         ./configure $CONFIGURE_OPTS CFLAGS="-O2" > /dev/null
         make -j4 > /dev/null && make -j4 -C contrib > /dev/null
         env CLIENTS=50 THREADS=50 make -C contrib/aqo check
@@ -73,7 +87,7 @@ jobs:
       with:
         name: make_check_logs
         path: |
-          /home/runner/work/aqo/pg/contrib/aqo/regression.diffs
-          /home/runner/work/aqo/pg/contrib/aqo/log
-          /home/runner/work/aqo/pg/contrib/aqo/tmp_check/log
+          ${{ env.PG_DIR }}/contrib/aqo/regression.diffs
+          ${{ env.PG_DIR }}/contrib/aqo/log
+          ${{ env.PG_DIR }}/contrib/aqo/tmp_check/log
         retention-days: 7
