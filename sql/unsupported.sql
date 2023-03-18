@@ -165,12 +165,14 @@ SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
 SELECT str FROM expln('
   EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, SUMMARY OFF, TIMING OFF)
     SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1') AS str
-WHERE str NOT LIKE '%Heap Blocks%';
+WHERE str NOT LIKE '%Heap Blocks%' and str NOT LIKE 'Query Identifier%';
 
 -- Best choice is ...
 ANALYZE t;
+SELECT str FROM expln('
 EXPLAIN (COSTS OFF)
 	SELECT count(*) FROM t WHERE x < 3 AND mod(x,3) = 1;
+') AS str WHERE str NOT LIKE 'Query Identifier%';
 
 -- XXX: Do we stuck into an unstable behavior of an error value?
 -- Live with this variant of the test for some time.
