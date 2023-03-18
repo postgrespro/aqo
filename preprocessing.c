@@ -127,6 +127,7 @@ aqo_planner(Query *parse,
 {
 	bool			query_is_stored = false;
 	MemoryContext	oldctx;
+	int query_id_enabled_temp = compute_query_id;
 
 	 /*
 	  * We do not work inside an parallel worker now by reason of insert into
@@ -156,7 +157,11 @@ aqo_planner(Query *parse,
 
 	/* Check unlucky case (get a hash of zero) */
 	if (parse->queryId == UINT64CONST(0))
+	{
+		compute_query_id = COMPUTE_QUERY_ID_ON;
 		JumbleQuery(parse, query_string);
+		compute_query_id = query_id_enabled_temp;
+	}
 
 	Assert(parse->utilityStmt == NULL);
 	Assert(parse->queryId != UINT64CONST(0));
