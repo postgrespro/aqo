@@ -336,6 +336,17 @@ should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
 	}
 	else if (ctx->learn)
 	{
+		elog(NOTICE, "fss %d,  IsNull %s, nloops %lf", node->fss, TupIsNull(ps->ps_ResultTupleSlot) ? "true" : "false", ps->instrument->nloops);
+		if (IsA(ps, HashJoinState))
+		{
+			HashJoinState *hjstate = castNode(HashJoinState, ps);
+			elog(NOTICE, "TerminatedEarly %s", hjstate->hj_TerminatedEarly ? "true" : "false");
+			if (hjstate->hj_TerminatedEarly)
+			{
+				*rfactor = RELIABILITY_MIN;
+				return true;
+			}
+		}
 		*rfactor = RELIABILITY_MAX;
 		return true;
 	}
