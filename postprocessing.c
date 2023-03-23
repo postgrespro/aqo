@@ -336,17 +336,53 @@ should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
 	}
 	else if (ctx->learn)
 	{
-		elog(NOTICE, "fss %d,  IsNull %s, nloops %lf", node->fss, TupIsNull(ps->ps_ResultTupleSlot) ? "true" : "false", ps->instrument->nloops);
-		if (IsA(ps, HashJoinState))
+		//elog(NOTICE, "fss %d,  IsNull %s, nloops %lf", node->fss, TupIsNull(ps->ps_ResultTupleSlot) ? "true" : "false", ps->instrument->nloops);
+		switch (nodeTag(ps))
 		{
-			HashJoinState *hjstate = castNode(HashJoinState, ps);
-			elog(NOTICE, "TerminatedEarly %s", hjstate->hj_TerminatedEarly ? "true" : "false");
-			if (hjstate->hj_TerminatedEarly)
+			case T_SeqScanState:
+			case T_SampleScanState:
+			case T_IndexScanState:
+			case T_IndexOnlyScanState:
+			case T_BitmapHeapScanState:
+			case T_TidScanState:
+			case T_TidRangeScanState:
+			case T_ForeignScanState:
+			case T_CustomScanState:
 			{
-				*rfactor = RELIABILITY_MIN;
-				return true;
+				ScanState  *sstate = (ScanState *) ps;
+
+				if (!TupIsNull(sstate->ss_ScanTupleSlot) && ps->instrument->nloops > 0.) 
+				{
+					/* If the scan node was terminated early, skip it*/
+					elog(NOTICE, "ScanState terminated early");
+					return false;
+				}
+				//elog(NOTICE, "ScanState, isnull ss_ScanTupleSlot %s", TupIsNull(sstate->ss_ScanTupleSlot) ? "true" : "false");
+				break;
 			}
+			case T_HashJoinState:
+			{
+				HashJoinState  *hjstate;
+				ScanState  *sstate;
+				PlanState  *outerNode;
+
+				hjstate = castNode(HashJoinState, ps);
+				outerNode = outerPlanState(hjstate);
+				sstate = (ScanState *) outerNode;
+
+				if (!TupIsNull(sstate->ss_ScanTupleSlot) && outerNode->instrument->nloops > 0.) 
+				{
+					/* If the scan node was terminated early, lower reliability for HashJoin node*/
+					elog(NOTICE, "HashJoin ScanState terminated early");
+					*rfactor = 0.9 * (RELIABILITY_MAX - RELIABILITY_MIN);
+					return true;
+				}
+				break;
+			}
+			default:
+				break;
 		}
+
 		*rfactor = RELIABILITY_MAX;
 		return true;
 	}
