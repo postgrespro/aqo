@@ -13,4 +13,9 @@ extern int get_fss_for_object(List *relsigns, List *clauselist,
 extern int get_int_array_hash(int *arr, int len);
 extern int get_grouped_exprs_hash(int fss, List *group_exprs);
 
+/* Hash functions */
+void get_eclasses(List *clauselist, int *nargs, int **args_hash,
+				  int **eclass_hash);
+int get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash);
+
 #endif							/* AQO_HASH_H */
