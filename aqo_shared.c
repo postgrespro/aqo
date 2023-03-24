@@ -6,27 +6,30 @@
 
 #include "lib/dshash.h"
 #include "miscadmin.h"
+#include "storage/ipc.h"
 #include "storage/shmem.h"
 
 #include "aqo_shared.h"
 #include "storage.h"
 
 
-shmem_startup_hook_type prev_shmem_startup_hook = NULL;
 AQOSharedState *aqo_state = NULL;
 int fs_max_items = 10000; /* Max number of different feature spaces in ML model */
 int fss_max_items = 100000; /* Max number of different feature subspaces in ML model */
 
+static shmem_startup_hook_type	aqo_shmem_startup_next = NULL;
+static shmem_request_hook_type	aqo_shmem_request_next = NULL;
+
 static void on_shmem_shutdown(int code, Datum arg);
 
-void
+static void
 aqo_init_shmem(void)
 {
 	bool		found;
 	HASHCTL		info;
 
-	if (prev_shmem_startup_hook)
-		prev_shmem_startup_hook();
+	if (aqo_shmem_startup_next)
+		aqo_shmem_startup_next();
 
 	aqo_state = NULL;
 	stat_htab = NULL;
@@ -116,10 +119,17 @@ on_shmem_shutdown(int code, Datum arg)
 	return;
 }
 
-Size
-aqo_memsize(void)
+
+/*
+ * Requests any additional shared memory required for aqo.
+ */
+static void
+aqo_shmem_request(void)
 {
-	Size		size;
+	Size	size;
+
+	if (aqo_shmem_request_next)
+		aqo_shmem_request_next();
 
 	size = MAXALIGN(sizeof(AQOSharedState));
 	size = add_size(size, hash_estimate_size(fs_max_items, sizeof(AQOSharedState)));
@@ -128,5 +138,14 @@ aqo_memsize(void)
 	size = add_size(size, hash_estimate_size(fss_max_items, sizeof(DataEntry)));
 	size = add_size(size, hash_estimate_size(fs_max_items, sizeof(QueriesEntry)));
 
-	return size;
+	RequestAddinShmemSpace(size);
+}
+
+void
+aqo_shmem_init(void)
+{
+	aqo_shmem_startup_next	= shmem_startup_hook;
+	shmem_startup_hook		= aqo_init_shmem;
+	aqo_shmem_request_next	= shmem_request_hook;
+	shmem_request_hook		= aqo_shmem_request;
 }
