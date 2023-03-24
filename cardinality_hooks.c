@@ -27,115 +27,31 @@
 
 #include "postgres.h"
 
+#include "optimizer/cost.h"
+#include "utils/selfuncs.h"
+
 #include "aqo.h"
-#include "cardinality_hooks.h"
 #include "hash.h"
 #include "machine_learning.h"
 #include "path_utils.h"
-
-estimate_num_groups_hook_type prev_estimate_num_groups_hook = NULL;
+#include "storage.h"
 
 double predicted_ppi_rows;
 double fss_ppi_hash;
 
-
-/*
- * Calls standard set_baserel_rows_estimate or its previous hook.
- */
-static void
-default_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
-{
-	if (prev_set_baserel_rows_estimate_hook)
-		prev_set_baserel_rows_estimate_hook(root, rel);
-	else
-		set_baserel_rows_estimate_standard(root, rel);
-}
-
-/*
- * Calls standard get_parameterized_baserel_size or its previous hook.
- */
-static double
-default_get_parameterized_baserel_size(PlannerInfo *root,
-											RelOptInfo *rel,
-											List *param_clauses)
-{
-	if (prev_get_parameterized_baserel_size_hook)
-		return prev_get_parameterized_baserel_size_hook(root, rel, param_clauses);
-	else
-		return get_parameterized_baserel_size_standard(root, rel, param_clauses);
-}
-
-/*
- * Calls standard get_parameterized_joinrel_size or its previous hook.
- */
-static double
-default_get_parameterized_joinrel_size(PlannerInfo *root,
-											RelOptInfo *rel,
-											Path *outer_path,
-											Path *inner_path,
-											SpecialJoinInfo *sjinfo,
-											List *restrict_clauses)
-{
-	if (prev_get_parameterized_joinrel_size_hook)
-		return prev_get_parameterized_joinrel_size_hook(root, rel,
-														outer_path,
-														inner_path,
-														sjinfo,
-														restrict_clauses);
-	else
-		return get_parameterized_joinrel_size_standard(root, rel,
-													   outer_path,
-													   inner_path,
-													   sjinfo,
-													   restrict_clauses);
-}
-
-/*
- * Calls standard set_joinrel_size_estimates or its previous hook.
- */
-static void
-default_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
-										RelOptInfo *outer_rel,
-										RelOptInfo *inner_rel,
-										SpecialJoinInfo *sjinfo,
-										List *restrictlist)
-{
-	if (prev_set_joinrel_size_estimates_hook)
-		prev_set_joinrel_size_estimates_hook(root, rel,
-											 outer_rel,
-											 inner_rel,
-											 sjinfo,
-											 restrictlist);
-	else
-		set_joinrel_size_estimates_standard(root, rel,
-											outer_rel,
-											inner_rel,
-											sjinfo,
-											restrictlist);
-}
-
-static double
-default_estimate_num_groups(PlannerInfo *root, List *groupExprs,
-							Path *subpath, RelOptInfo *grouped_rel,
-							List **pgset)
-{
-	double input_rows = subpath->rows;
-
-	if (prev_estimate_num_groups_hook != NULL)
-			return (*prev_estimate_num_groups_hook)(root, groupExprs,
-													subpath,
-													grouped_rel,
-													pgset);
-	else
-		return estimate_num_groups(root, groupExprs, input_rows, pgset);
-}
+static set_baserel_rows_estimate_hook_type		aqo_set_baserel_rows_estimate_next		= NULL;
+static get_parameterized_baserel_size_hook_type	aqo_get_parameterized_baserel_size_next	= NULL;
+static set_joinrel_size_estimates_hook_type		aqo_set_joinrel_size_estimates_next		= NULL;
+static get_parameterized_joinrel_size_hook_type	aqo_get_parameterized_joinrel_size_next	= NULL;
+static set_parampathinfo_postinit_hook_type		aqo_set_parampathinfo_postinit_next		= NULL;
+static estimate_num_groups_hook_type			aqo_estimate_num_groups_next			= NULL;
 
 /*
  * Our hook for setting baserel rows estimate.
  * Extracts clauses, their selectivities and list of relation relids and
  * passes them to predict_for_relation.
  */
-void
+static void
 aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 {
 	double			predicted;
@@ -187,13 +103,15 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 
 default_estimator:
 	rel->predicted_cardinality = -1.;
-	default_set_baserel_rows_estimate(root, rel);
+	aqo_set_baserel_rows_estimate_next(root, rel);
 }
 
-
-void
-ppi_hook(ParamPathInfo *ppi)
+static void
+aqo_parampathinfo_postinit(ParamPathInfo *ppi)
 {
+	if (aqo_set_parampathinfo_postinit_next)
+		(*aqo_set_parampathinfo_postinit_next)(ppi);
+
 	if (IsQueryDisabled())
 		return;
 
@@ -206,7 +124,7 @@ ppi_hook(ParamPathInfo *ppi)
  * Extracts clauses (including parametrization ones), their selectivities
  * and list of relation relids and passes them to predict_for_relation.
  */
-double
+static double
 aqo_get_parameterized_baserel_size(PlannerInfo *root,
 								   RelOptInfo *rel,
 								   List *param_clauses)
@@ -284,7 +202,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 		return predicted;
 
 default_estimator:
-	return default_get_parameterized_baserel_size(root, rel, param_clauses);
+	return aqo_get_parameterized_baserel_size_next(root, rel, param_clauses);
 }
 
 /*
@@ -292,7 +210,7 @@ default_estimator:
  * Extracts clauses, their selectivities and list of relation relids and
  * passes them to predict_for_relation.
  */
-void
+static void
 aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 							   RelOptInfo *outer_rel,
 							   RelOptInfo *inner_rel,
@@ -354,9 +272,8 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 
 default_estimator:
 	rel->predicted_cardinality = -1;
-	default_set_joinrel_size_estimates(root, rel,
-									   outer_rel, inner_rel,
-									   sjinfo, restrictlist);
+	aqo_set_joinrel_size_estimates_next(root, rel, outer_rel, inner_rel,
+										sjinfo, restrictlist);
 }
 
 /*
@@ -364,7 +281,7 @@ default_estimator:
  * Extracts clauses (including parametrization ones), their selectivities
  * and list of relation relids and passes them to predict_for_relation.
  */
-double
+static double
 aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 								   RelOptInfo *rel,
 								   Path *outer_path,
@@ -421,7 +338,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 		return predicted;
 
 default_estimator:
-	return default_get_parameterized_joinrel_size(root, rel,
+	return aqo_get_parameterized_joinrel_size_next(root, rel,
 												  outer_path, inner_path,
 												  sjinfo, clauses);
 }
@@ -476,7 +393,7 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 		/* XXX: Don't support some GROUPING options */
 		goto default_estimator;
 
-	if (prev_estimate_num_groups_hook != NULL)
+	if (aqo_estimate_num_groups_next != NULL)
 		elog(WARNING, "AQO replaced another estimator of a groups number");
 
 	if (groupExprs == NIL)
@@ -503,6 +420,45 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 	MemoryContextSwitchTo(old_ctx_m);
 
 default_estimator:
-	return default_estimate_num_groups(root, groupExprs, subpath, grouped_rel,
-									   pgset);
+	if (aqo_estimate_num_groups_next)
+		return aqo_estimate_num_groups_next(root, groupExprs, subpath,
+											grouped_rel, pgset, estinfo);
+	else
+		return estimate_num_groups(root, groupExprs, subpath->rows,
+								   pgset, estinfo);
+}
+
+void
+aqo_cardinality_hooks_init(void)
+{
+
+	/* Cardinality prediction hooks. */
+	aqo_set_baserel_rows_estimate_next	= set_baserel_rows_estimate_hook ?
+											set_baserel_rows_estimate_hook :
+											set_baserel_rows_estimate_standard;
+	set_baserel_rows_estimate_hook		= aqo_set_baserel_rows_estimate;
+
+	/* XXX: we have a problem here. Should be redesigned later */
+	set_foreign_rows_estimate_hook		= aqo_set_baserel_rows_estimate;
+
+	aqo_get_parameterized_baserel_size_next	= get_parameterized_baserel_size_hook ?
+												get_parameterized_baserel_size_hook :
+												get_parameterized_baserel_size_standard;
+	get_parameterized_baserel_size_hook		= aqo_get_parameterized_baserel_size;
+
+	aqo_set_joinrel_size_estimates_next	= set_joinrel_size_estimates_hook ?
+											set_joinrel_size_estimates_hook :
+											set_joinrel_size_estimates_standard;
+	set_joinrel_size_estimates_hook		= aqo_set_joinrel_size_estimates;
+
+	aqo_get_parameterized_joinrel_size_next	= get_parameterized_joinrel_size_hook ?
+												get_parameterized_joinrel_size_hook :
+												get_parameterized_joinrel_size_standard;
+	get_parameterized_joinrel_size_hook		= aqo_get_parameterized_joinrel_size;
+
+	aqo_set_parampathinfo_postinit_next		=	parampathinfo_postinit_hook;
+	parampathinfo_postinit_hook				=	aqo_parampathinfo_postinit;
+
+	aqo_estimate_num_groups_next		= estimate_num_groups_hook;
+	estimate_num_groups_hook			= aqo_estimate_num_groups;
 }

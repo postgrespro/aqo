@@ -15,8 +15,11 @@
 
 #include "access/relation.h"
 #include "nodes/readfuncs.h"
+#include "optimizer/cost.h"
 #include "optimizer/optimizer.h"
+#include "optimizer/planmain.h"
 #include "path_utils.h"
+#include "storage/lmgr.h"
 #include "utils/syscache.h"
 #include "utils/lsyscache.h"
 
@@ -29,14 +32,6 @@
 # define expression_tree_mutator(node, mutator, context) \
      expression_tree_mutator(node, mutator, context, 0)
 #endif
-
-/*
- * Hook on creation of a plan node. We need to store AQO-specific data to
- * support learning stage.
- */
-create_plan_hook_type prev_create_plan_hook = NULL;
-
-create_upper_paths_hook_type prev_create_upper_paths_hook = NULL;
 
 static AQOPlanNode DefaultAQOPlanNode =
 {
@@ -53,6 +48,15 @@ static AQOPlanNode DefaultAQOPlanNode =
 	.fss = INT_MAX,
 	.prediction = -1
 };
+
+/*
+ * Hook on creation of a plan node. We need to store AQO-specific data to
+ * support learning stage.
+ */
+static create_plan_hook_type			aqo_create_plan_next					= NULL;
+
+static create_upper_paths_hook_type	aqo_create_upper_paths_next				= NULL;
+
 
 static AQOPlanNode *
 create_aqo_plan_node()
@@ -179,8 +183,6 @@ hashTempTupleDesc(TupleDesc desc)
 	}
 	return s;
 }
-
-#include "storage/lmgr.h"
 
 /*
  * Get list of relation indexes and prepare list of permanent table reloids,
@@ -531,15 +533,15 @@ is_appropriate_path(Path *path)
  * store AQO prediction in the same context, as the plan. So, explicitly free
  * all unneeded data.
  */
-void
-aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest)
+static void
+aqo_create_plan(PlannerInfo *root, Path *src, Plan **dest)
 {
 	bool			is_join_path;
 	Plan		   *plan = *dest;
 	AQOPlanNode	   *node;
 
-	if (prev_create_plan_hook)
-		prev_create_plan_hook(root, src, dest);
+	if (aqo_create_plan_next)
+		aqo_create_plan_next(root, src, dest);
 
 	if (!query_context.use_aqo && !query_context.learn_aqo &&
 		!query_context.collect_stat)
@@ -784,20 +786,20 @@ RegisterAQOPlanNodeMethods(void)
  *
  * Assume, that we are last in the chain of path creators.
  */
-void
-aqo_store_upper_signature_hook(PlannerInfo *root,
-							   UpperRelationKind stage,
-							   RelOptInfo *input_rel,
-							   RelOptInfo *output_rel,
-							   void *extra)
+static void
+aqo_store_upper_signature(PlannerInfo *root,
+						  UpperRelationKind stage,
+						  RelOptInfo *input_rel,
+						  RelOptInfo *output_rel,
+						  void *extra)
 {
 	A_Const	   *fss_node = makeNode(A_Const);
 	RelSortOut	rels = {NIL, NIL};
 	List	   *clauses;
 	List	   *selectivities;
 
-	if (prev_create_upper_paths_hook)
-		(*prev_create_upper_paths_hook)(root, stage, input_rel, output_rel, extra);
+	if (aqo_create_upper_paths_next)
+		(*aqo_create_upper_paths_next)(root, stage, input_rel, output_rel, extra);
 
 	if (!query_context.use_aqo && !query_context.learn_aqo && !force_collect_stat)
 		/* Includes 'disabled query' state. */
@@ -815,4 +817,14 @@ aqo_store_upper_signature_hook(PlannerInfo *root,
 	fss_node->val.val.ival = get_fss_for_object(rels.signatures, clauses, NIL,
 												NULL, NULL);
 	output_rel->ext_nodes = lappend(output_rel->ext_nodes, (void *) fss_node);
+}
+
+void
+aqo_path_utils_init(void)
+{
+	aqo_create_plan_next				= create_plan_hook;
+	create_plan_hook					= aqo_create_plan;
+
+	aqo_create_upper_paths_next			= create_upper_paths_hook;
+	create_upper_paths_hook				= aqo_store_upper_signature;
 }

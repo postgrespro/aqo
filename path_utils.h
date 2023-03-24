@@ -3,7 +3,6 @@
 
 #include "nodes/extensible.h"
 #include "nodes/pathnodes.h"
-#include "optimizer/planmain.h"
 #include "optimizer/planner.h"
 
 #define AQO_PLAN_NODE	"AQOPlanNode"
@@ -52,8 +51,6 @@ typedef struct AQOPlanNode
 
 #define booltostr(x)  ((x) ? "true" : "false")
 
-extern create_plan_hook_type prev_create_plan_hook;
-
 /* Extracting path information utilities */
 extern List *get_selectivities(PlannerInfo *root,
 							   List *clauses,
@@ -67,16 +64,11 @@ extern List *get_path_clauses(Path *path,
 							  PlannerInfo *root,
 							  List **selectivities);
 
-extern void aqo_create_plan_hook(PlannerInfo *root, Path *src, Plan **dest);
 extern AQOPlanNode *get_aqo_plan_node(Plan *plan, bool create);
 extern void RegisterAQOPlanNodeMethods(void);
 
-extern create_upper_paths_hook_type prev_create_upper_paths_hook;
-extern void aqo_store_upper_signature_hook(PlannerInfo *root,
-										   UpperRelationKind stage,
-										   RelOptInfo *input_rel,
-										   RelOptInfo *output_rel,
-										   void *extra);
 extern List *aqo_get_clauses(PlannerInfo *root, List *restrictlist);
+
+void aqo_path_utils_init(void);
 
 #endif /* PATH_UTILS_H */
