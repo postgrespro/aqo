@@ -27,7 +27,6 @@
 #include "hash.h"
 #include "path_utils.h"
 #include "machine_learning.h"
-#include "preprocessing.h"
 #include "storage.h"
 
 
@@ -57,6 +56,13 @@ static int64 growth_rate = 3;
  */
 static char *AQOPrivateData = "AQOPrivateData";
 static char *PlanStateInfo = "PlanStateInfo";
+
+/* Saved hooks */
+static ExecutorStart_hook_type		aqo_ExecutorStart_next = NULL;
+static ExecutorRun_hook_type		aqo_ExecutorRun_next = NULL;
+static ExecutorEnd_hook_type		aqo_ExecutorEnd_next = NULL;
+static ExplainOnePlan_hook_type		aqo_ExplainOnePlan_next	= NULL;
+static ExplainOneNode_hook_type		aqo_ExplainOneNode_next	= NULL;
 
 
 /* Query execution statistics collecting utilities */
@@ -542,7 +548,7 @@ end:
 /*
  * Set up flags to store cardinality statistics.
  */
-void
+static void
 aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 {
 	instr_time now;
@@ -594,10 +600,7 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 		StoreToQueryEnv(queryDesc);
 	}
 
-	if (prev_ExecutorStart_hook)
-		prev_ExecutorStart_hook(queryDesc, eflags);
-	else
-		standard_ExecutorStart(queryDesc, eflags);
+	aqo_ExecutorStart_next(queryDesc, eflags);
 
 	if (use_aqo)
 		StorePlanInternals(queryDesc);
@@ -706,7 +709,7 @@ set_timeout_if_need(QueryDesc *queryDesc)
 /*
  * ExecutorRun hook.
  */
-void
+static void
 aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count,
 				 bool execute_once)
 {
@@ -722,10 +725,7 @@ aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count,
 
 	PG_TRY();
 	{
-		if (prev_ExecutorRun)
-			prev_ExecutorRun(queryDesc, direction, count, execute_once);
-		else
-			standard_ExecutorRun(queryDesc, direction, count, execute_once);
+		aqo_ExecutorRun_next(queryDesc, direction, count, execute_once);
 	}
 	PG_FINALLY();
 	{
@@ -743,7 +743,7 @@ aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count,
  * cardinality statistics.
  * Also it updates query execution statistics in aqo_query_stat.
  */
-void
+static void
 aqo_ExecutorEnd(QueryDesc *queryDesc)
 {
 	double					execution_time;
@@ -841,10 +841,7 @@ end:
 	MemoryContextSwitchTo(oldctx);
 	MemoryContextReset(AQOLearnMemCtx);
 
-	if (prev_ExecutorEnd_hook)
-		prev_ExecutorEnd_hook(queryDesc);
-	else
-		standard_ExecutorEnd(queryDesc);
+	aqo_ExecutorEnd_next(queryDesc);
 
 	/*
 	 * standard_ExecutorEnd clears the queryDesc->planstate. After this point no
@@ -975,7 +972,64 @@ ExtractFromQueryEnv(QueryDesc *queryDesc)
 	return true;
 }
 
-void
+/*
+ * Prints if the plan was constructed with AQO.
+ */
+static void
+print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
+				   ExplainState *es, const char *queryString,
+				   ParamListInfo params, const instr_time *planduration,
+				   QueryEnvironment *queryEnv)
+{
+	if (aqo_ExplainOnePlan_next)
+		aqo_ExplainOnePlan_next(plannedstmt, into, es, queryString,
+									 params, planduration, queryEnv);
+
+	if (IsQueryDisabled() || !aqo_show_details)
+		return;
+
+	/* Report to user about aqo state only in verbose mode */
+	ExplainPropertyBool("Using aqo", query_context.use_aqo, es);
+
+	switch (aqo_mode)
+	{
+	case AQO_MODE_INTELLIGENT:
+		ExplainPropertyText("AQO mode", "INTELLIGENT", es);
+		break;
+	case AQO_MODE_FORCED:
+		ExplainPropertyText("AQO mode", "FORCED", es);
+		break;
+	case AQO_MODE_CONTROLLED:
+		ExplainPropertyText("AQO mode", "CONTROLLED", es);
+		break;
+	case AQO_MODE_LEARN:
+		ExplainPropertyText("AQO mode", "LEARN", es);
+		break;
+	case AQO_MODE_FROZEN:
+		ExplainPropertyText("AQO mode", "FROZEN", es);
+		break;
+	case AQO_MODE_DISABLED:
+		ExplainPropertyText("AQO mode", "DISABLED", es);
+		break;
+	default:
+		elog(ERROR, "Bad AQO state");
+		break;
+	}
+
+	/*
+	 * Query class provides an user the conveniently use of the AQO
+	 * auxiliary functions.
+	 */
+	if (aqo_mode != AQO_MODE_DISABLED || force_collect_stat)
+	{
+		if (aqo_show_hash)
+			ExplainPropertyInteger("Query hash", NULL,
+									query_context.query_hash, es);
+		ExplainPropertyInteger("JOINS", NULL, njoins, es);
+	}
+}
+
+static void
 print_node_explain(ExplainState *es, PlanState *ps, Plan *plan)
 {
 	int				wrkrs = 1;
@@ -983,8 +1037,8 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan)
 	AQOPlanNode	   *aqo_node;
 
 	/* Extension, which took a hook early can be executed early too. */
-	if (prev_ExplainOneNode_hook)
-		prev_ExplainOneNode_hook(es, ps, plan);
+	if (aqo_ExplainOneNode_next)
+		aqo_ExplainOneNode_next(es, ps, plan);
 
 	if (IsQueryDisabled() || !plan || es->format != EXPLAIN_FORMAT_TEXT)
 		return;
@@ -1042,59 +1096,20 @@ explain_end:
 		appendStringInfo(es->str, ", fss=%d", aqo_node->fss);
 }
 
-/*
- * Prints if the plan was constructed with AQO.
- */
 void
-print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
-				   ExplainState *es, const char *queryString,
-				   ParamListInfo params, const instr_time *planduration,
-				   QueryEnvironment *queryEnv)
+aqo_postprocessing_init(void)
 {
-	if (prev_ExplainOnePlan_hook)
-		prev_ExplainOnePlan_hook(plannedstmt, into, es, queryString,
-								 params, planduration, queryEnv);
+	/* Executor hooks */
+	aqo_ExecutorStart_next	= ExecutorStart_hook ? ExecutorStart_hook : standard_ExecutorStart;
+	ExecutorStart_hook		= aqo_ExecutorStart;
+	aqo_ExecutorRun_next	= ExecutorRun_hook ? ExecutorRun_hook : standard_ExecutorRun;
+	ExecutorRun_hook		= aqo_ExecutorRun;
+	aqo_ExecutorEnd_next	= ExecutorEnd_hook ? ExecutorEnd_hook : standard_ExecutorEnd;
+	ExecutorEnd_hook		= aqo_ExecutorEnd;
 
-	if (IsQueryDisabled() || !aqo_show_details)
-		return;
-
-	/* Report to user about aqo state only in verbose mode */
-	ExplainPropertyBool("Using aqo", query_context.use_aqo, es);
-
-	switch (aqo_mode)
-	{
-	case AQO_MODE_INTELLIGENT:
-		ExplainPropertyText("AQO mode", "INTELLIGENT", es);
-		break;
-	case AQO_MODE_FORCED:
-		ExplainPropertyText("AQO mode", "FORCED", es);
-		break;
-	case AQO_MODE_CONTROLLED:
-		ExplainPropertyText("AQO mode", "CONTROLLED", es);
-		break;
-	case AQO_MODE_LEARN:
-		ExplainPropertyText("AQO mode", "LEARN", es);
-		break;
-	case AQO_MODE_FROZEN:
-		ExplainPropertyText("AQO mode", "FROZEN", es);
-		break;
-	case AQO_MODE_DISABLED:
-		ExplainPropertyText("AQO mode", "DISABLED", es);
-		break;
-	default:
-		elog(ERROR, "Bad AQO state");
-		break;
-	}
-
-	/*
-	 * Query class provides an user the conveniently use of the AQO
-	 * auxiliary functions.
-	 */
-	if (aqo_mode != AQO_MODE_DISABLED || force_collect_stat)
-	{
-		if (aqo_show_hash)
-			ExplainPropertyInteger("Query hash", NULL,
-									query_context.query_hash, es);
-		ExplainPropertyInteger("JOINS", NULL, njoins, es);
-	}
+	/* Service hooks. */
+	aqo_ExplainOnePlan_next	= ExplainOnePlan_hook;
+	ExplainOnePlan_hook		= print_into_explain;
+	aqo_ExplainOneNode_next	= ExplainOneNode_hook;
+	ExplainOneNode_hook		= print_node_explain;
 }

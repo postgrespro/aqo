@@ -1,9 +1,6 @@
 #ifndef AQO_SHARED_H
 #define AQO_SHARED_H
 
-#include "lib/dshash.h"
-#include "storage/dsm.h"
-#include "storage/ipc.h"
 #include "storage/lwlock.h"
 #include "utils/dsa.h"
 
@@ -31,13 +28,11 @@ typedef struct AQOSharedState
 } AQOSharedState;
 
 
-extern shmem_startup_hook_type prev_shmem_startup_hook;
 extern AQOSharedState *aqo_state;
 
 extern int fs_max_items; /* Max number of feature spaces that AQO can operate */
 extern int fss_max_items;
 
-extern Size aqo_memsize(void);
-extern void aqo_init_shmem(void);
+extern void aqo_shmem_init(void);
 
 #endif /* AQO_SHARED_H */

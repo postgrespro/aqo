@@ -19,9 +19,7 @@
 
 #include "aqo.h"
 #include "aqo_shared.h"
-#include "cardinality_hooks.h"
 #include "path_utils.h"
-#include "preprocessing.h"
 #include "storage.h"
 
 
@@ -98,19 +96,6 @@ MemoryContext 		AQOLearnMemCtx = NULL;
 /* Additional plan info */
 int njoins;
 
-/* Saved hook values */
-post_parse_analyze_hook_type				prev_post_parse_analyze_hook;
-planner_hook_type							prev_planner_hook;
-ExecutorStart_hook_type						prev_ExecutorStart_hook;
-ExecutorRun_hook_type						prev_ExecutorRun;
-ExecutorEnd_hook_type						prev_ExecutorEnd_hook;
-set_baserel_rows_estimate_hook_type			prev_set_foreign_rows_estimate_hook;
-set_baserel_rows_estimate_hook_type			prev_set_baserel_rows_estimate_hook;
-get_parameterized_baserel_size_hook_type	prev_get_parameterized_baserel_size_hook;
-set_joinrel_size_estimates_hook_type		prev_set_joinrel_size_estimates_hook;
-get_parameterized_joinrel_size_hook_type	prev_get_parameterized_joinrel_size_hook;
-ExplainOnePlan_hook_type					prev_ExplainOnePlan_hook;
-ExplainOneNode_hook_type					prev_ExplainOneNode_hook;
 
 /*****************************************************************************
  *
@@ -324,42 +309,11 @@ _PG_init(void)
 							 NULL,
 							 NULL);
 
-	prev_shmem_startup_hook						= shmem_startup_hook;
-	shmem_startup_hook							= aqo_init_shmem;
-	prev_planner_hook							= planner_hook;
-	planner_hook								= aqo_planner;
-	prev_ExecutorStart_hook						= ExecutorStart_hook;
-	ExecutorStart_hook							= aqo_ExecutorStart;
-	prev_ExecutorRun							= ExecutorRun_hook;
-	ExecutorRun_hook							= aqo_ExecutorRun;
-	prev_ExecutorEnd_hook						= ExecutorEnd_hook;
-	ExecutorEnd_hook							= aqo_ExecutorEnd;
-
-	/* Cardinality prediction hooks. */
-	prev_set_baserel_rows_estimate_hook			= set_baserel_rows_estimate_hook;
-	set_foreign_rows_estimate_hook				= aqo_set_baserel_rows_estimate;
-	set_baserel_rows_estimate_hook				= aqo_set_baserel_rows_estimate;
-	prev_get_parameterized_baserel_size_hook	= get_parameterized_baserel_size_hook;
-	get_parameterized_baserel_size_hook			= aqo_get_parameterized_baserel_size;
-	prev_set_joinrel_size_estimates_hook		= set_joinrel_size_estimates_hook;
-	set_joinrel_size_estimates_hook				= aqo_set_joinrel_size_estimates;
-	prev_get_parameterized_joinrel_size_hook	= get_parameterized_joinrel_size_hook;
-	get_parameterized_joinrel_size_hook			= aqo_get_parameterized_joinrel_size;
-	prev_estimate_num_groups_hook				= estimate_num_groups_hook;
-	estimate_num_groups_hook					= aqo_estimate_num_groups_hook;
-	parampathinfo_postinit_hook					= ppi_hook;
-
-	prev_create_plan_hook						= create_plan_hook;
-	create_plan_hook							= aqo_create_plan_hook;
-
-	/* Service hooks. */
-	prev_ExplainOnePlan_hook					= ExplainOnePlan_hook;
-	ExplainOnePlan_hook							= print_into_explain;
-	prev_ExplainOneNode_hook					= ExplainOneNode_hook;
-	ExplainOneNode_hook							= print_node_explain;
-
-	prev_create_upper_paths_hook				= create_upper_paths_hook;
-	create_upper_paths_hook						= aqo_store_upper_signature_hook;
+	aqo_shmem_init();
+	aqo_preprocessing_init();
+	aqo_postprocessing_init();
+	aqo_cardinality_hooks_init();
+	aqo_path_utils_init();
 
 	init_deactivated_queries_storage();
 
@@ -394,7 +348,6 @@ _PG_init(void)
 	RegisterAQOPlanNodeMethods();
 
 	EmitWarningsOnPlaceholders("aqo");
-	RequestAddinShmemSpace(aqo_memsize());
 }
 
 /*

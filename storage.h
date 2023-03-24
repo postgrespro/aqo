@@ -164,4 +164,10 @@ extern void init_deactivated_queries_storage(void);
 extern bool query_is_deactivated(uint64 query_hash);
 extern void add_deactivated_query(uint64 query_hash);
 
+/* Storage interaction */
+extern bool load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids);
+extern bool update_fss_ext(uint64 fs, int fss, OkNNrdata *data, List *reloids);
+
+extern bool update_query_timeout(uint64 queryid, int64 smart_timeout);
+
 #endif /* STORAGE_H */

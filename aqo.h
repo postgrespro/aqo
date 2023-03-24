@@ -132,7 +132,6 @@
 #include "nodes/nodeFuncs.h"
 #include "optimizer/pathnode.h"
 #include "optimizer/planner.h"
-#include "optimizer/cost.h"
 #include "parser/analyze.h"
 #include "parser/parsetree.h"
 #include "utils/builtins.h"
@@ -140,11 +139,9 @@
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
-#include "utils/fmgroids.h"
 #include "utils/snapmgr.h"
 
 #include "machine_learning.h"
-//#include "storage.h"
 
 /* Check PostgreSQL version (9.6.0 contains important changes in planner) */
 #if PG_VERSION_NUM < 90600
@@ -237,58 +234,15 @@ extern MemoryContext AQOCacheMemCtx;
 extern MemoryContext AQOPredictMemCtx;
 extern MemoryContext AQOLearnMemCtx;
 
-/* Saved hook values in case of unload */
-extern post_parse_analyze_hook_type prev_post_parse_analyze_hook;
-extern planner_hook_type prev_planner_hook;
-extern ExecutorStart_hook_type prev_ExecutorStart_hook;
-extern ExecutorRun_hook_type prev_ExecutorRun;
-extern ExecutorEnd_hook_type prev_ExecutorEnd_hook;
-extern set_baserel_rows_estimate_hook_type
-										prev_set_foreign_rows_estimate_hook;
-extern set_baserel_rows_estimate_hook_type
-										prev_set_baserel_rows_estimate_hook;
-extern get_parameterized_baserel_size_hook_type
-									prev_get_parameterized_baserel_size_hook;
-extern set_joinrel_size_estimates_hook_type
-										prev_set_joinrel_size_estimates_hook;
-extern get_parameterized_joinrel_size_hook_type
-									prev_get_parameterized_joinrel_size_hook;
-extern ExplainOnePlan_hook_type prev_ExplainOnePlan_hook;
-extern ExplainOneNode_hook_type prev_ExplainOneNode_hook;
-
-extern void ppi_hook(ParamPathInfo *ppi);
 extern int aqo_statement_timeout;
-
-/* Hash functions */
-void get_eclasses(List *clauselist, int *nargs, int **args_hash,
-				  int **eclass_hash);
-int get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash);
-
-
-/* Storage interaction */
-extern bool load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids);
-extern bool update_fss_ext(uint64 fs, int fss, OkNNrdata *data, List *reloids);
-
-/* Query preprocessing hooks */
-extern void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
-							   ExplainState *es, const char *queryString,
-							   ParamListInfo params,
-							   const instr_time *planduration,
-							   QueryEnvironment *queryEnv);
-extern void print_node_explain(ExplainState *es, PlanState *ps, Plan *plan);
 
 /* Cardinality estimation */
 extern double predict_for_relation(List *restrict_clauses, List *selectivities,
 								   List *relsigns, int *fss);
 
-/* Query execution statistics collecting hooks */
-void aqo_ExecutorStart(QueryDesc *queryDesc, int eflags);
-void aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction,
-					 uint64 count, bool execute_once);
-void aqo_ExecutorEnd(QueryDesc *queryDesc);
-
 /* Automatic query tuning */
 extern void automatical_query_tuning(uint64 query_hash, struct StatEntry *stat);
+extern double get_mean(double *elems, int nelems);
 
 /* Utilities */
 extern int int_cmp(const void *a, const void *b);
@@ -306,8 +260,10 @@ extern void selectivity_cache_clear(void);
 
 extern bool IsQueryDisabled(void);
 
-extern bool update_query_timeout(uint64 queryid, int64 smart_timeout);
-extern double get_mean(double *elems, int nelems);
-
 extern List *cur_classes;
+
+extern void aqo_cardinality_hooks_init(void);
+extern void aqo_preprocessing_init(void);
+extern void aqo_postprocessing_init(void);
+
 #endif

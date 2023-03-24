@@ -64,7 +64,6 @@
 #include "parser/scansup.h"
 #include "aqo.h"
 #include "hash.h"
-#include "preprocessing.h"
 #include "storage.h"
 
 /* List of feature spaces, that are processing in this backend. */
@@ -72,29 +71,11 @@ List *cur_classes = NIL;
 
 int aqo_join_threshold = 0;
 
+static planner_hook_type	aqo_planner_next = NULL;
+
+static void disable_aqo_for_query(void);
 static bool isQueryUsingSystemRelation(Query *query);
 static bool isQueryUsingSystemRelation_walker(Node *node, void *context);
-
-/*
- * Calls standard query planner or its previous hook.
- */
-static PlannedStmt *
-call_default_planner(Query *parse,
-					 const char *query_string,
-					 int cursorOptions,
-					 ParamListInfo boundParams)
-{
-	if (prev_planner_hook)
-		return prev_planner_hook(parse,
-								 query_string,
-								 cursorOptions,
-								 boundParams);
-	else
-		return standard_planner(parse,
-								query_string,
-								cursorOptions,
-								boundParams);
-}
 
 /*
  * Can AQO be used for the query?
@@ -119,10 +100,8 @@ aqoIsEnabled(Query *parse)
  * Creates an entry in aqo_queries for new type of query if it is
  * necessary, i. e. AQO mode is "intelligent".
  */
-PlannedStmt *
-aqo_planner(Query *parse,
-			const char *query_string,
-			int cursorOptions,
+static PlannedStmt *
+aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 			ParamListInfo boundParams)
 {
 	bool			query_is_stored = false;
@@ -149,10 +128,7 @@ aqo_planner(Query *parse,
 		MemoryContextSwitchTo(oldctx);
 		disable_aqo_for_query();
 
-		return call_default_planner(parse,
-									query_string,
-									cursorOptions,
-									boundParams);
+		return aqo_planner_next(parse, query_string, cursorOptions, boundParams);
 	}
 
 	selectivity_cache_clear();
@@ -173,10 +149,7 @@ aqo_planner(Query *parse,
 		MemoryContextSwitchTo(oldctx);
 		disable_aqo_for_query();
 
-		return call_default_planner(parse,
-									query_string,
-									cursorOptions,
-									boundParams);
+		return aqo_planner_next(parse, query_string, cursorOptions, boundParams);
 	}
 
 	elog(DEBUG1, "AQO will be used for query '%s', class "UINT64_FORMAT,
@@ -345,9 +318,9 @@ ignore_query_settings:
 		INSTR_TIME_SET_CURRENT(query_context.start_planning_time);
 	{
 		PlannedStmt *stmt;
+
 		MemoryContextSwitchTo(oldctx);
-		stmt = call_default_planner(parse, query_string,
-												 cursorOptions, boundParams);
+		stmt = aqo_planner_next(parse, query_string, cursorOptions, boundParams);
 
 		/* Release the memory, allocated for AQO predictions */
 		MemoryContextReset(AQOPredictMemCtx);
@@ -358,7 +331,7 @@ ignore_query_settings:
 /*
  * Turn off all AQO functionality for the current query.
  */
-void
+static void
 disable_aqo_for_query(void)
 {
 	query_context.learn_aqo = false;
@@ -506,4 +479,11 @@ isQueryUsingSystemRelation_walker(Node *node, void *context)
 	return expression_tree_walker(node,
 								  isQueryUsingSystemRelation_walker,
 								  context);
+}
+
+void
+aqo_preprocessing_init(void)
+{
+	aqo_planner_next	= planner_hook ? planner_hook : standard_planner;
+	planner_hook		= aqo_planner;
 }
