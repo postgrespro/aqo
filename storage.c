@@ -22,11 +22,11 @@
 #include "funcapi.h"
 #include "miscadmin.h"
 #include "pgstat.h"
+#include "storage/ipc.h"
 
 #include "aqo.h"
 #include "aqo_shared.h"
 #include "machine_learning.h"
-#include "preprocessing.h"
 #include "storage.h"
 
 
