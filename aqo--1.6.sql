@@ -75,6 +75,7 @@ LANGUAGE C STRICT VOLATILE;
 COMMENT ON FUNCTION aqo_execution_time(boolean) IS
 'Get execution time of queries. If controlled = true (AQO could advise cardinality estimations), show time of last execution attempt. Another case (AQO not used), return an average value of execution time across all known executions.';
 
+-- Show how much shared memory AQO are using at the moment
 CREATE FUNCTION aqo_memory_usage(
   OUT name text,
   OUT allocated_size int,
@@ -82,14 +83,11 @@ CREATE FUNCTION aqo_memory_usage(
 )
 RETURNS SETOF record
 AS $$
-  SELECT name, total_bytes, used_bytes FROM pg_backend_memory_contexts
-  WHERE name LIKE 'AQO%'
-  UNION
   SELECT name, allocated_size, size FROM pg_shmem_allocations
   WHERE name LIKE 'AQO%';
 $$ LANGUAGE SQL;
 COMMENT ON FUNCTION aqo_memory_usage() IS
-'Show allocated sizes and used sizes of aqo`s memory contexts and hash tables';
+'Show how much shared memory AQO are using at the moment';
 
 --
 -- Update or insert an aqo_data
