@@ -19,9 +19,7 @@
 
 #include "aqo.h"
 #include "aqo_shared.h"
-#include "cardinality_hooks.h"
 #include "path_utils.h"
-#include "preprocessing.h"
 #include "storage.h"
 
 
@@ -98,19 +96,6 @@ MemoryContext 		AQOLearnMemCtx = NULL;
 /* Additional plan info */
 int njoins;
 
-/* Saved hook values */
-post_parse_analyze_hook_type				prev_post_parse_analyze_hook;
-planner_hook_type							prev_planner_hook;
-ExecutorStart_hook_type						prev_ExecutorStart_hook;
-ExecutorRun_hook_type						prev_ExecutorRun;
-ExecutorEnd_hook_type						prev_ExecutorEnd_hook;
-set_baserel_rows_estimate_hook_type			prev_set_foreign_rows_estimate_hook;
-set_baserel_rows_estimate_hook_type			prev_set_baserel_rows_estimate_hook;
-get_parameterized_baserel_size_hook_type	prev_get_parameterized_baserel_size_hook;
-set_joinrel_size_estimates_hook_type		prev_set_joinrel_size_estimates_hook;
-get_parameterized_joinrel_size_hook_type	prev_get_parameterized_joinrel_size_hook;
-ExplainOnePlan_hook_type					prev_ExplainOnePlan_hook;
-ExplainOneNode_hook_type					prev_ExplainOneNode_hook;
 
 /*****************************************************************************
  *
@@ -330,6 +315,7 @@ _PG_init(void)
 							 NULL,
 							 NULL);
 
+<<<<<<< HEAD
 	prev_shmem_startup_hook						= shmem_startup_hook;
 	shmem_startup_hook							= aqo_init_shmem;
 	prev_planner_hook							= planner_hook;
@@ -366,6 +352,13 @@ _PG_init(void)
 
 	prev_create_upper_paths_hook				= create_upper_paths_hook;
 	create_upper_paths_hook						= aqo_store_upper_signature_hook;
+=======
+	aqo_shmem_init();
+	aqo_preprocessing_init();
+	aqo_postprocessing_init();
+	aqo_cardinality_hooks_init();
+	aqo_path_utils_init();
+>>>>>>> daf05a0 (Bugfix. Do away with possible conflict of hooks, declared as 'extern' in)
 
 	init_deactivated_queries_storage();
 
