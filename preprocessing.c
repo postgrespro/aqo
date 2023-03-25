@@ -83,7 +83,7 @@ static bool isQueryUsingSystemRelation_walker(Node *node, void *context);
 static bool
 aqoIsEnabled(Query *parse)
 {
-	if (creating_extension ||
+	if (creating_extension || !IsQueryIdEnabled() ||
 		(aqo_mode == AQO_MODE_DISABLED && !force_collect_stat) ||
 		(parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT &&
 		parse->commandType != CMD_UPDATE && parse->commandType != CMD_DELETE))
