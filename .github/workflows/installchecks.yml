@@ -132,12 +132,24 @@ jobs:
         psql -c "ALTER SYSTEM SET aqo.mode = 'learn'"
         psql -c "ALTER SYSTEM SET aqo.force_collect_stat = 'on'"
         psql -c "SELECT pg_reload_conf()"
-        learn_result=$(make -k installcheck-world)
+        make -k installcheck-world
+
+    # Should work like a total off for all the AQO features
+    - name: installcheck_learn_queryid_off
+      continue-on-error: true
+      run: |
+        cd $PG_DIR
+        aqo_instance_launch.sh
+        psql -c "ALTER SYSTEM SET compute_query_id = 'off'"
+        psql -c "SELECT pg_reload_conf()"
+        # The AQO tests itself wouldn't pass
+        make -k installcheck-world
 
     - name: installcheck_intelligent
       continue-on-error: true
       run: |
         cd $PG_DIR
+        psql -c "ALTER SYSTEM SET compute_query_id = 'regress'"
         psql -c "ALTER SYSTEM SET aqo.mode = 'intelligent'"
         psql -c "ALTER SYSTEM SET aqo.force_collect_stat = 'on'"
         psql -c "SELECT pg_reload_conf()"
