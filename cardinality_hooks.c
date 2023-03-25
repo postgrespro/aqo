@@ -40,6 +40,12 @@ double predicted_ppi_rows;
 double fss_ppi_hash;
 
 
+/*
+ * Cardinality prediction hooks.
+ * It isn't clear what to do if someone else tries to live in this chain.
+ * Of course, someone may want to just report some stat or something like that.
+ * So, it can be legal, sometimees. So far, we only report this fact.
+ */
 static set_baserel_rows_estimate_hook_type		aqo_set_baserel_rows_estimate_next		= NULL;
 static get_parameterized_baserel_size_hook_type	aqo_get_parameterized_baserel_size_next	= NULL;
 static set_joinrel_size_estimates_hook_type		aqo_set_joinrel_size_estimates_next		= NULL;
@@ -95,12 +101,17 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	/* Return to the caller's memory context. */
 	MemoryContextSwitchTo(old_ctx_m);
 
-	if (predicted >= 0)
-	{
-		rel->rows = predicted;
-		rel->predicted_cardinality = predicted;
-		return;
-	}
+	if (predicted < 0)
+		goto default_estimator;
+
+	if ((aqo_set_baserel_rows_estimate_next != set_baserel_rows_estimate_standard ||
+		set_baserel_rows_estimate_hook != aqo_set_baserel_rows_estimate))
+		/* It is unclear that to do in situation of such kind. Just report it */
+		elog(WARNING, "AQO is in the middle of the set_baserel_rows_estimate_hook chain");
+
+	rel->rows = predicted;
+	rel->predicted_cardinality = predicted;
+	return;
 
 default_estimator:
 	rel->predicted_cardinality = -1.;
@@ -115,6 +126,11 @@ aqo_parampathinfo_postinit(ParamPathInfo *ppi)
 
 	if (IsQueryDisabled())
 		return;
+
+	if ((aqo_set_parampathinfo_postinit_next != NULL ||
+		parampathinfo_postinit_hook != aqo_parampathinfo_postinit))
+		/* It is unclear that to do in situation of such kind. Just report it */
+		elog(WARNING, "AQO is in the middle of the parampathinfo_postinit_hook chain");
 
 	ppi->predicted_ppi_rows = predicted_ppi_rows;
 	ppi->fss_ppi_hash = fss_ppi_hash;
@@ -199,8 +215,15 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	predicted_ppi_rows = predicted;
 	fss_ppi_hash = fss;
 
-	if (predicted >= 0)
-		return predicted;
+	if (predicted < 0)
+		goto default_estimator;
+
+	if ((aqo_get_parameterized_baserel_size_next != get_parameterized_baserel_size_standard ||
+		get_parameterized_baserel_size_hook != aqo_get_parameterized_baserel_size))
+		/* It is unclear that to do in situation of such kind. Just report it */
+		elog(WARNING, "AQO is in the middle of the aqo_get_parameterized_baserel_size_next chain");
+
+	return predicted;
 
 default_estimator:
 	return aqo_get_parameterized_baserel_size_next(root, rel, param_clauses);
@@ -264,12 +287,17 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 
 	rel->fss_hash = fss;
 
-	if (predicted >= 0)
-	{
-		rel->predicted_cardinality = predicted;
-		rel->rows = predicted;
-		return;
-	}
+	if (predicted < 0)
+		goto default_estimator;
+
+	if ((aqo_set_joinrel_size_estimates_next != set_joinrel_size_estimates_standard ||
+		set_joinrel_size_estimates_hook != aqo_set_joinrel_size_estimates))
+		/* It is unclear that to do in situation of such kind. Just report it */
+		elog(WARNING, "AQO is in the middle of the set_joinrel_size_estimates_hook chain");
+
+	rel->predicted_cardinality = predicted;
+	rel->rows = predicted;
+	return;
 
 default_estimator:
 	rel->predicted_cardinality = -1;
@@ -335,8 +363,15 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	predicted_ppi_rows = predicted;
 	fss_ppi_hash = fss;
 
-	if (predicted >= 0)
-		return predicted;
+	if (predicted < 0)
+		goto default_estimator;
+
+	if ((aqo_get_parameterized_joinrel_size_next != get_parameterized_joinrel_size_standard ||
+		get_parameterized_joinrel_size_hook != aqo_get_parameterized_joinrel_size))
+		/* It is unclear that to do in situation of such kind. Just report it */
+		elog(WARNING, "AQO is in the middle of the get_parameterized_joinrel_size_hook chain");
+
+	return predicted;
 
 default_estimator:
 	return aqo_get_parameterized_joinrel_size_next(root, rel,
@@ -394,12 +429,14 @@ aqo_estimate_num_groups(PlannerInfo *root, List *groupExprs,
 		/* XXX: Don't support some GROUPING options */
 		goto default_estimator;
 
-	if (aqo_estimate_num_groups_next != NULL)
-		elog(WARNING, "AQO replaced another estimator of a groups number");
-
 	/* Zero the estinfo output parameter, if non-NULL */
 	if (estinfo != NULL)
 		memset(estinfo, 0, sizeof(EstimationInfo));
+
+	if (aqo_estimate_num_groups_next != NULL ||
+		estimate_num_groups_hook != aqo_estimate_num_groups)
+		/* It is unclear that to do in situation of such kind. Just report it */
+		elog(WARNING, "AQO is in the middle of the estimate_num_groups_hook chain");
 
 	if (groupExprs == NIL)
 		return 1.0;
@@ -436,29 +473,28 @@ default_estimator:
 void
 aqo_cardinality_hooks_init(void)
 {
+	if (set_baserel_rows_estimate_hook ||
+		set_foreign_rows_estimate_hook ||
+		get_parameterized_baserel_size_hook ||
+		set_joinrel_size_estimates_hook ||
+		get_parameterized_joinrel_size_hook ||
+		parampathinfo_postinit_hook ||
+		estimate_num_groups_hook)
+		elog(ERROR, "AQO estimation hooks shouldn't be intercepted");
 
-	/* Cardinality prediction hooks. */
-	aqo_set_baserel_rows_estimate_next	= set_baserel_rows_estimate_hook ?
-											set_baserel_rows_estimate_hook :
-											set_baserel_rows_estimate_standard;
+	aqo_set_baserel_rows_estimate_next	= set_baserel_rows_estimate_standard;
 	set_baserel_rows_estimate_hook		= aqo_set_baserel_rows_estimate;
 
 	/* XXX: we have a problem here. Should be redesigned later */
 	set_foreign_rows_estimate_hook		= aqo_set_baserel_rows_estimate;
 
-	aqo_get_parameterized_baserel_size_next	= get_parameterized_baserel_size_hook ?
-												get_parameterized_baserel_size_hook :
-												get_parameterized_baserel_size_standard;
+	aqo_get_parameterized_baserel_size_next	= get_parameterized_baserel_size_standard;
 	get_parameterized_baserel_size_hook		= aqo_get_parameterized_baserel_size;
 
-	aqo_set_joinrel_size_estimates_next	= set_joinrel_size_estimates_hook ?
-											set_joinrel_size_estimates_hook :
-											set_joinrel_size_estimates_standard;
+	aqo_set_joinrel_size_estimates_next	= set_joinrel_size_estimates_standard;
 	set_joinrel_size_estimates_hook		= aqo_set_joinrel_size_estimates;
 
-	aqo_get_parameterized_joinrel_size_next	= get_parameterized_joinrel_size_hook ?
-												get_parameterized_joinrel_size_hook :
-												get_parameterized_joinrel_size_standard;
+	aqo_get_parameterized_joinrel_size_next	= get_parameterized_joinrel_size_standard;
 	get_parameterized_joinrel_size_hook		= aqo_get_parameterized_joinrel_size;
 
 	aqo_set_parampathinfo_postinit_next		=	parampathinfo_postinit_hook;
