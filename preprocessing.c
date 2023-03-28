@@ -128,7 +128,7 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 		MemoryContextSwitchTo(oldctx);
 		disable_aqo_for_query();
 
-		return aqo_planner_next(parse, query_string, cursorOptions, boundParams);
+		return (*aqo_planner_next)(parse, query_string, cursorOptions, boundParams);
 	}
 
 	selectivity_cache_clear();
@@ -149,7 +149,7 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 		MemoryContextSwitchTo(oldctx);
 		disable_aqo_for_query();
 
-		return aqo_planner_next(parse, query_string, cursorOptions, boundParams);
+		return (*aqo_planner_next)(parse, query_string, cursorOptions, boundParams);
 	}
 
 	elog(DEBUG1, "AQO will be used for query '%s', class "UINT64_FORMAT,
@@ -322,7 +322,7 @@ ignore_query_settings:
 		/* Release the memory, allocated for AQO predictions */
 		MemoryContextReset(AQOPredictMemCtx);
 
-		stmt = aqo_planner_next(parse, query_string, cursorOptions, boundParams);
+		stmt = (*aqo_planner_next)(parse, query_string, cursorOptions, boundParams);
 		return stmt;
 	}
 }
