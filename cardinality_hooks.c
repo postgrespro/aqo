@@ -115,7 +115,7 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 
 default_estimator:
 	rel->predicted_cardinality = -1.;
-	aqo_set_baserel_rows_estimate_next(root, rel);
+	(*aqo_set_baserel_rows_estimate_next)(root, rel);
 }
 
 static void
@@ -226,7 +226,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 	return predicted;
 
 default_estimator:
-	return aqo_get_parameterized_baserel_size_next(root, rel, param_clauses);
+	return (*aqo_get_parameterized_baserel_size_next)(root, rel, param_clauses);
 }
 
 /*
@@ -301,7 +301,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 
 default_estimator:
 	rel->predicted_cardinality = -1;
-	aqo_set_joinrel_size_estimates_next(root, rel, outer_rel, inner_rel,
+	(*aqo_set_joinrel_size_estimates_next)(root, rel, outer_rel, inner_rel,
 										sjinfo, restrictlist);
 }
 
@@ -374,7 +374,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	return predicted;
 
 default_estimator:
-	return aqo_get_parameterized_joinrel_size_next(root, rel,
+	return (*aqo_get_parameterized_joinrel_size_next)(root, rel,
 												  outer_path, inner_path,
 												  sjinfo, clauses);
 }
@@ -463,7 +463,7 @@ aqo_estimate_num_groups(PlannerInfo *root, List *groupExprs,
 
 default_estimator:
 	if (aqo_estimate_num_groups_next)
-		return aqo_estimate_num_groups_next(root, groupExprs, subpath,
+		return (*aqo_estimate_num_groups_next)(root, groupExprs, subpath,
 											grouped_rel, pgset, estinfo);
 	else
 		return estimate_num_groups(root, groupExprs, subpath->rows,
