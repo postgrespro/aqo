@@ -600,7 +600,7 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 		StoreToQueryEnv(queryDesc);
 	}
 
-	aqo_ExecutorStart_next(queryDesc, eflags);
+	(*aqo_ExecutorStart_next)(queryDesc, eflags);
 
 	if (use_aqo)
 		StorePlanInternals(queryDesc);
@@ -725,7 +725,7 @@ aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count,
 
 	PG_TRY();
 	{
-		aqo_ExecutorRun_next(queryDesc, direction, count, execute_once);
+		(*aqo_ExecutorRun_next)(queryDesc, direction, count, execute_once);
 	}
 	PG_FINALLY();
 	{
@@ -841,7 +841,7 @@ end:
 	MemoryContextSwitchTo(oldctx);
 	MemoryContextReset(AQOLearnMemCtx);
 
-	aqo_ExecutorEnd_next(queryDesc);
+	(*aqo_ExecutorEnd_next)(queryDesc);
 
 	/*
 	 * standard_ExecutorEnd clears the queryDesc->planstate. After this point no
@@ -982,7 +982,7 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 				   QueryEnvironment *queryEnv)
 {
 	if (aqo_ExplainOnePlan_next)
-		aqo_ExplainOnePlan_next(plannedstmt, into, es, queryString,
+		(*aqo_ExplainOnePlan_next)(plannedstmt, into, es, queryString,
 									 params, planduration, queryEnv);
 
 	if (IsQueryDisabled() || !aqo_show_details)
@@ -1038,7 +1038,7 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan)
 
 	/* Extension, which took a hook early can be executed early too. */
 	if (aqo_ExplainOneNode_next)
-		aqo_ExplainOneNode_next(es, ps, plan);
+		(*aqo_ExplainOneNode_next)(es, ps, plan);
 
 	if (IsQueryDisabled() || !plan || es->format != EXPLAIN_FORMAT_TEXT)
 		return;
