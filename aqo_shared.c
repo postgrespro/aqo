@@ -28,7 +28,7 @@ aqo_init_shmem(void)
 	HASHCTL		info;
 
 	if (aqo_shmem_startup_next)
-		aqo_shmem_startup_next();
+		(*aqo_shmem_startup_next)();
 
 	aqo_state = NULL;
 	stat_htab = NULL;
