@@ -525,7 +525,7 @@ aqo_create_plan(PlannerInfo *root, Path *src, Plan **dest)
 	AQOPlanNode	   *node;
 
 	if (aqo_create_plan_next)
-		aqo_create_plan_next(root, src, dest);
+		(*aqo_create_plan_next)(root, src, dest);
 
 	if (!query_context.use_aqo && !query_context.learn_aqo &&
 		!query_context.collect_stat)
