@@ -29,7 +29,7 @@ aqo_init_shmem(void)
 	HASHCTL		info;
 
 	if (aqo_shmem_startup_next)
-		aqo_shmem_startup_next();
+		(*aqo_shmem_startup_next)();
 
 	aqo_state = NULL;
 	stat_htab = NULL;
@@ -129,7 +129,7 @@ aqo_shmem_request(void)
 	Size	size;
 
 	if (aqo_shmem_request_next)
-		aqo_shmem_request_next();
+		(*aqo_shmem_request_next)();
 
 	size = MAXALIGN(sizeof(AQOSharedState));
 	size = add_size(size, hash_estimate_size(fs_max_items, sizeof(AQOSharedState)));
