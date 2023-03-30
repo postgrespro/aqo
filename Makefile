@@ -30,7 +30,7 @@ EXTRA_INSTALL = contrib/postgres_fdw contrib/pg_stat_statements
 
 DATA = aqo--1.0.sql aqo--1.0--1.1.sql aqo--1.1--1.2.sql aqo--1.2.sql \
 		aqo--1.2--1.3.sql aqo--1.3--1.4.sql aqo--1.4--1.5.sql \
-		aqo--1.5--1.6.sql
+		aqo--1.5--1.6.sql aqo--1.6.sql
 
 ifdef USE_PGXS
 PG_CONFIG ?= pg_config
