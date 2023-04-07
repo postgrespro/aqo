@@ -406,10 +406,10 @@ predict_num_groups(PlannerInfo *root, Path *subpath, List *group_exprs,
 	return (prediction <= 0) ? -1 : prediction;
 }
 
-double
-aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
-							 Path *subpath, RelOptInfo *grouped_rel,
-							 List **pgset)
+static double
+aqo_estimate_num_groups(PlannerInfo *root, List *groupExprs,
+						Path *subpath, RelOptInfo *grouped_rel,
+						List **pgset)
 {
 	int fss;
 	double predicted;
@@ -422,12 +422,8 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 		/* XXX: Don't support some GROUPING options */
 		goto default_estimator;
 
-	/* Zero the estinfo output parameter, if non-NULL */
-	if (estinfo != NULL)
-		memset(estinfo, 0, sizeof(EstimationInfo));
-
 	if (aqo_estimate_num_groups_next != NULL ||
-		estimate_num_groups_hook != aqo_estimate_num_groups)
+		estimate_num_groups_hook != aqo_estimate_num_groups_next)
 		/* It is unclear that to do in situation of such kind. Just report it */
 		elog(WARNING, "AQO is in the middle of the estimate_num_groups_hook chain");
 
@@ -457,10 +453,10 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 default_estimator:
 	if (aqo_estimate_num_groups_next)
 		return (*aqo_estimate_num_groups_next)(root, groupExprs, subpath,
-											grouped_rel, pgset, estinfo);
+											grouped_rel, pgset);
 	else
 		return estimate_num_groups(root, groupExprs, subpath->rows,
-								   pgset, estinfo);
+								   pgset);
 }
 
 void
