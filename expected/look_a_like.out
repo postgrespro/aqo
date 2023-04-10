@@ -56,7 +56,7 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
          Rows Removed by Filter: 900
  Using aqo: true
  AQO mode: LEARN
- JOINS: 0
+ JOINS: 1
 (16 rows)
 
 SELECT str AS result
@@ -83,7 +83,7 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                Rows Removed by Filter: 900
  Using aqo: true
  AQO mode: LEARN
- JOINS: 0
+ JOINS: 1
 (19 rows)
 
 SELECT str AS result
@@ -108,7 +108,7 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                Rows Removed by Filter: 500
  Using aqo: true
  AQO mode: LEARN
- JOINS: 0
+ JOINS: 1
 (17 rows)
 
 --query contains nodes that have already been predicted
@@ -134,7 +134,7 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                Rows Removed by Filter: 500
  Using aqo: true
  AQO mode: LEARN
- JOINS: 0
+ JOINS: 1
 (17 rows)
 
 SELECT str AS result
@@ -159,7 +159,7 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                Rows Removed by Filter: 300
  Using aqo: true
  AQO mode: LEARN
- JOINS: 0
+ JOINS: 1
 (17 rows)
 
 SELECT str AS result
@@ -184,7 +184,7 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                Rows Removed by Filter: 600
  Using aqo: true
  AQO mode: LEARN
- JOINS: 0
+ JOINS: 1
 (17 rows)
 
 SELECT str AS result
@@ -209,7 +209,7 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                Rows Removed by Filter: 500
  Using aqo: true
  AQO mode: LEARN
- JOINS: 0
+ JOINS: 1
 (17 rows)
 
 --query contains nodes that have already been predicted
@@ -235,7 +235,7 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                Rows Removed by Filter: 600
  Using aqo: true
  AQO mode: LEARN
- JOINS: 0
+ JOINS: 1
 (17 rows)
 
 SELECT str AS result
@@ -516,7 +516,7 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                Output: b.y1, b.y2, b.y3
  Using aqo: true
  AQO mode: LEARN
- JOINS: 1
+ JOINS: 2
 (24 rows)
 
 SELECT str AS result
@@ -548,7 +548,7 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                            Output: c.z1, c.z2, c.z3
  Using aqo: true
  AQO mode: LEARN
- JOINS: 1
+ JOINS: 2
 (24 rows)
 
 RESET aqo.wide_search;
