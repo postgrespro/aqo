@@ -43,7 +43,7 @@ WHERE str NOT LIKE '%Memory%';
                AQO not used
  Using aqo: true
  AQO mode: LEARN
- JOINS: 0
+ JOINS: 1
 (14 rows)
 
 -- TODO: Using method of other classes neighbours we get a bad estimation.
@@ -66,7 +66,7 @@ WHERE str NOT LIKE '%Memory%';
                AQO not used
  Using aqo: true
  AQO mode: LEARN
- JOINS: 0
+ JOINS: 1
 (14 rows)
 
 -- Look into the reason: two JOINs from different classes have the same FSS.
