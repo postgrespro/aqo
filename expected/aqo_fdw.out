@@ -120,7 +120,7 @@ SELECT str FROM expln('
                AQO not used
  Using aqo: true
  AQO mode: LEARN
- JOINS: 0
+ JOINS: 1
 (14 rows)
 
 -- Should learn on postgres_fdw nodes

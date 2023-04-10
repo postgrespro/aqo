@@ -487,7 +487,7 @@ SELECT * FROM
          Filter: (x > 20)
  Using aqo: true
  AQO mode: LEARN
- JOINS: 0
+ JOINS: 1
 (13 rows)
 
 -- AQO needs to predict total fetched tuples in a table.

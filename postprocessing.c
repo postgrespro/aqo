@@ -916,7 +916,7 @@ StorePlanInternals(QueryDesc *queryDesc)
 	MemoryContext oldctx = MemoryContextSwitchTo(AQOCacheMemCtx);
 
 	njoins = 0;
-	planstate_tree_walker(queryDesc->planstate, calculateJoinNum, &njoins);
+	calculateJoinNum(queryDesc->planstate, &njoins);
 
 	if (queryDesc->queryEnv == NULL)
 		queryDesc->queryEnv = create_queryEnv();
