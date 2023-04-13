@@ -403,8 +403,16 @@ $node->safe_psql('postgres', "
 ");
 $node->restart();
 
-$node->command_ok([ 'pgbench', '-T',
+# Some specifics of core PostgreSQL pgbench code don't allow to stable pass this
+# test on Windows OS.
+# See https://www.postgresql.org/message-id/flat/8225e78650dd69f69c8cff37ecce9a09%40postgrespro.ru
+SKIP:
+{
+	skip "Socket allocation issues. ", 1
+	  if ($windows_os);
+	$node->command_ok([ 'pgbench', '-T',
 					"50", '-c', "$CLIENTS", '-j', "$THREADS" , '-f', "$bank"],
 					'Conflicts with an AQO dropping command.');
+}
 
 $node->stop();
