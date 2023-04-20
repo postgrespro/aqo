@@ -43,14 +43,13 @@ SELECT count(*) FROM
 WHERE q1.id = q2.id; -- Learning stage
 -- XXX: Why grouping prediction isn't working here?
 SELECT str FROM expln('
-EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+EXPLAIN (COSTS OFF, TIMING OFF, SUMMARY OFF)
 SELECT count(*) FROM
   (SELECT id FROM t WHERE id % 100 = 0 GROUP BY (id)) AS q1,
   (SELECT max(id) AS id, payload FROM t
     WHERE id % 101 = 0 GROUP BY (payload)) AS q2
 WHERE q1.id = q2.id;') AS str
-WHERE str NOT LIKE '%Workers%' AND str NOT LIKE '%Sort Method%'
-  AND str NOT LIKE '%Gather Merge%';
+WHERE str NOT LIKE '%Workers%';
 
 RESET parallel_tuple_cost;
 RESET parallel_setup_cost;
