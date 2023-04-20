@@ -211,7 +211,6 @@ extern double predicted_ppi_rows;
 extern double fss_ppi_hash;
 
 /* Parameters of autotuning */
-extern int	aqo_stat_size;
 extern int	auto_tuning_window_size;
 extern double auto_tuning_exploration;
 extern int	auto_tuning_max_iterations;

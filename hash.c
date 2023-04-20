@@ -344,7 +344,7 @@ get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash)
 /*
  * Computes hash for given string.
  */
-int
+static int
 get_str_hash(const char *str)
 {
 	return DatumGetInt32(hash_any((const unsigned char *) str,
@@ -381,7 +381,7 @@ get_int_array_hash(int *arr, int len)
  * Sorts given array in-place to compute hash.
  * The hash is order-insensitive.
  */
-int
+static int
 get_unsorted_unsafe_int_array_hash(int *arr, int len)
 {
 	qsort(arr, len, sizeof(*arr), int_cmp);
@@ -396,7 +396,7 @@ get_unsorted_unsafe_int_array_hash(int *arr, int len)
  * using 'hash_any'.
  * Frees allocated memory before returning hash.
  */
-int
+static int
 get_unordered_int_list_hash(List *lst)
 {
 	int			i = 0;
@@ -448,7 +448,7 @@ replace_patterns(const char *str, const char *start_pattern,
  * Computes hash for given feature subspace.
  * Hash is supposed to be clause-order-insensitive.
  */
-int
+static int
 get_fss_hash(int clauses_hash, int eclasses_hash, int relidslist_hash)
 {
 	int			hashes[3];
@@ -517,7 +517,7 @@ remove_locations(const char *str)
  * Returns index of given value in given sorted integer array
  * or -1 if not found.
  */
-int
+static int
 get_id_in_sorted_int_array(int val, int n, int *arr)
 {
 	int		   *i;
@@ -536,7 +536,7 @@ get_id_in_sorted_int_array(int val, int n, int *arr)
  * Returns class of equivalence for given argument hash or 0 if such hash
  * does not belong to any equivalence class.
  */
-int
+static int
 get_arg_eclass(int arg_hash, int nargs, int *args_hash, int *eclass_hash)
 {
 	int			di = get_id_in_sorted_int_array(arg_hash, nargs, args_hash);
@@ -551,7 +551,7 @@ get_arg_eclass(int arg_hash, int nargs, int *args_hash, int *eclass_hash)
  * Builds list of non-constant arguments of equivalence clauses
  * of given clauselist.
  */
-void
+static void
 get_clauselist_args(List *clauselist, int *nargs, int **args_hash)
 {
 	RestrictInfo *rinfo;
@@ -597,7 +597,7 @@ get_clauselist_args(List *clauselist, int *nargs, int **args_hash)
 /*
  * Returns class of an object in disjoint set.
  */
-int
+static int
 disjoint_set_get_parent(int *p, int v)
 {
 	if (p[v] == -1)
@@ -609,7 +609,7 @@ disjoint_set_get_parent(int *p, int v)
 /*
  * Merges two equivalence classes in disjoint set.
  */
-void
+static void
 disjoint_set_merge_eclasses(int *p, int v1, int v2)
 {
 	int			p1,
@@ -629,7 +629,7 @@ disjoint_set_merge_eclasses(int *p, int v1, int v2)
 /*
  * Constructs disjoint set on arguments.
  */
-int *
+static int *
 perform_eclasses_join(List *clauselist, int nargs, int *args_hash)
 {
 	RestrictInfo *rinfo;
@@ -706,7 +706,7 @@ get_eclasses(List *clauselist, int *nargs, int **args_hash, int **eclass_hash)
 /*
  * Checks whether the given char is brace, i. e. '{' or '}'.
  */
-bool
+static bool
 is_brace(char ch)
 {
 	return ch == '{' || ch == '}';
@@ -715,7 +715,7 @@ is_brace(char ch)
 /*
  * Returns whether arguments list contain constants.
  */
-bool
+static bool
 has_consts(List *lst)
 {
 	ListCell   *l;
@@ -729,7 +729,7 @@ has_consts(List *lst)
 /*
  * Returns pointer on the args list in clause or NULL.
  */
-List **
+static List **
 get_clause_args_ptr(Expr *clause)
 {
 	switch (clause->type)
@@ -755,7 +755,7 @@ get_clause_args_ptr(Expr *clause)
 /*
  * Returns whether the clause is an equivalence clause.
  */
-bool
+static bool
 clause_is_eq_clause(Expr *clause)
 {
 	/* TODO: fix this horrible mess */

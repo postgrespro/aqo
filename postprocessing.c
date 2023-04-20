@@ -173,7 +173,7 @@ learn_sample(aqo_obj_stat *ctx, RelSortOut *rels,
  * For given node specified by clauselist, relidslist and join_type restores
  * the same selectivities of clauses as were used at query optimization stage.
  */
-List *
+static List *
 restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 					  bool was_parametrized)
 {
@@ -336,7 +336,7 @@ should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
 					 "predicted rows: %.0lf, updated prediction: %.0lf",
 					 query_context.query_hash, node->fss, predicted, nrows);
 
-			*rfactor = 0.9 * (RELIABILITY_MAX - RELIABILITY_MIN);
+			*rfactor = RELIABILITY_MIN + 0.9 * (RELIABILITY_MAX - RELIABILITY_MIN);
 			return true;
 		}
 	}

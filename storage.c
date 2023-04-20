@@ -100,7 +100,7 @@ static bool _aqo_stat_remove(uint64 queryid);
 static bool _aqo_queries_remove(uint64 queryid);
 static bool _aqo_qtexts_remove(uint64 queryid);
 static bool _aqo_data_remove(data_key *key);
-static bool neirest_neighbor(double **matrix, int old_rows, double *neighbor, int cols);
+static bool nearest_neighbor(double **matrix, int old_rows, double *neighbor, int cols);
 static double fs_distance(double *a, double *b, int len);
 
 PG_FUNCTION_INFO_V1(aqo_query_stat);
@@ -143,7 +143,7 @@ update_fss_ext(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 /*
  * Forms ArrayType object for storage from simple C-array matrix.
  */
-ArrayType *
+static ArrayType *
 form_matrix(double *matrix, int nrows, int ncols)
 {
 	Datum	   *elems;
@@ -375,8 +375,8 @@ aqo_query_stat(PG_FUNCTION_ARGS)
 	MemoryContext		per_query_ctx;
 	MemoryContext		oldcontext;
 	Tuplestorestate	   *tupstore;
-	Datum				values[TOTAL_NCOLS + 1];
-	bool				nulls[TOTAL_NCOLS + 1];
+	Datum				values[TOTAL_NCOLS];
+	bool				nulls[TOTAL_NCOLS];
 	HASH_SEQ_STATUS		hash_seq;
 	StatEntry		   *entry;
 
@@ -408,13 +408,11 @@ aqo_query_stat(PG_FUNCTION_ARGS)
 
 	MemoryContextSwitchTo(oldcontext);
 
-	memset(nulls, 0, TOTAL_NCOLS + 1);
+	memset(nulls, 0, TOTAL_NCOLS);
 	LWLockAcquire(&aqo_state->stat_lock, LW_SHARED);
 	hash_seq_init(&hash_seq, stat_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
-		memset(nulls, 0, TOTAL_NCOLS + 1);
-
 		values[QUERYID] = Int64GetDatum(entry->queryid);
 		values[NEXECS] = Int64GetDatum(entry->execs_without_aqo);
 		values[NEXECS_AQO] = Int64GetDatum(entry->execs_with_aqo);
@@ -1507,8 +1505,8 @@ fs_distance(double *a, double *b, int len)
 	return res;
 }
 
-bool
-neirest_neighbor(double **matrix, int old_rows, double *neibour, int cols)
+static bool
+nearest_neighbor(double **matrix, int old_rows, double *neibour, int cols)
 {
 	int i;
 	for (i=0; i<old_rows; i++)
@@ -1538,7 +1536,9 @@ build_knn_matrix(OkNNrdata *data, const OkNNrdata *temp_data, double *features)
 
 			for (i = 0; i < temp_data->rows; i++)
 			{
-				if (k < aqo_K && !neirest_neighbor(data->matrix, old_rows, data->matrix[i], data->cols))
+				if (k < aqo_K && !nearest_neighbor(data->matrix, old_rows,
+												   temp_data->matrix[i],
+												   data->cols))
 				{
 					memcpy(data->matrix[k], temp_data->matrix[i], data->cols * sizeof(double));
 					data->rfactors[k] = temp_data->rfactors[i];
@@ -1902,8 +1902,8 @@ aqo_queries(PG_FUNCTION_ARGS)
 	MemoryContext		per_query_ctx;
 	MemoryContext		oldcontext;
 	Tuplestorestate	   *tupstore;
-	Datum				values[AQ_TOTAL_NCOLS + 1];
-	bool				nulls[AQ_TOTAL_NCOLS + 1];
+	Datum				values[AQ_TOTAL_NCOLS];
+	bool				nulls[AQ_TOTAL_NCOLS];
 	HASH_SEQ_STATUS		hash_seq;
 	QueriesEntry	   *entry;
 
@@ -1935,12 +1935,12 @@ aqo_queries(PG_FUNCTION_ARGS)
 
 	MemoryContextSwitchTo(oldcontext);
 
+	memset(nulls, 0, AQ_TOTAL_NCOLS);
+
 	LWLockAcquire(&aqo_state->queries_lock, LW_SHARED);
 	hash_seq_init(&hash_seq, queries_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
-		memset(nulls, 0, AQ_TOTAL_NCOLS + 1);
-
 		values[AQ_QUERYID] = Int64GetDatum(entry->queryid);
 		values[AQ_FS] = Int64GetDatum(entry->fs);
 		values[AQ_LEARN_AQO] = BoolGetDatum(entry->learn_aqo);
@@ -2142,7 +2142,7 @@ aqo_queries_find(uint64 queryid, QueryContextData *ctx)
 
 /*
  * Function for update and save value of smart statement timeout
- * for query in aqu_queries table
+ * for query in aqo_queries table
  */
 bool
 update_query_timeout(uint64 queryid, int64 smart_timeout)
@@ -2515,6 +2515,8 @@ aqo_cardinality_error(PG_FUNCTION_ARGS)
 	LWLockAcquire(&aqo_state->queries_lock, LW_SHARED);
 	LWLockAcquire(&aqo_state->stat_lock, LW_SHARED);
 
+	memset(nulls, 0, AQE_TOTAL_NCOLS * sizeof(nulls[0]));
+
 	hash_seq_init(&hash_seq, queries_htab);
 	while ((qentry = hash_seq_search(&hash_seq)) != NULL)
 	{
@@ -2522,8 +2524,6 @@ aqo_cardinality_error(PG_FUNCTION_ARGS)
 		double *ce;
 		int64	nexecs;
 		int		nvals;
-
-		memset(nulls, 0, AQE_TOTAL_NCOLS * sizeof(nulls[0]));
 
 		sentry = (StatEntry *) hash_search(stat_htab, &qentry->queryid,
 										   HASH_FIND, &found);
@@ -2609,6 +2609,8 @@ aqo_execution_time(PG_FUNCTION_ARGS)
 	LWLockAcquire(&aqo_state->queries_lock, LW_SHARED);
 	LWLockAcquire(&aqo_state->stat_lock, LW_SHARED);
 
+	memset(nulls, 0, ET_TOTAL_NCOLS * sizeof(nulls[0]));
+
 	hash_seq_init(&hash_seq, queries_htab);
 	while ((qentry = hash_seq_search(&hash_seq)) != NULL)
 	{
@@ -2617,8 +2619,6 @@ aqo_execution_time(PG_FUNCTION_ARGS)
 		int64	nexecs;
 		int		nvals;
 		double	tm = 0;
-
-		memset(nulls, 0, ET_TOTAL_NCOLS * sizeof(nulls[0]));
 
 		sentry = (StatEntry *) hash_search(stat_htab, &qentry->queryid,
 										   HASH_FIND, &found);
