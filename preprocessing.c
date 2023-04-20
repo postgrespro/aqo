@@ -69,7 +69,7 @@
 /* List of feature spaces, that are processing in this backend. */
 List *cur_classes = NIL;
 
-int aqo_join_threshold = 0;
+int aqo_join_threshold = 3;
 
 static planner_hook_type	aqo_planner_next = NULL;
 
