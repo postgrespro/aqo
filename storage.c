@@ -74,8 +74,12 @@ HTAB *data_htab = NULL;
 dsa_area *data_dsa = NULL;
 HTAB *deactivated_queries = NULL;
 
-/* Used to check data file consistency */
-static const uint32 PGAQO_FILE_HEADER = 123467589;
+/*
+ * Used to check data file consistency
+ * When changing data structures, PGAQO_FILE_HEADER should also be changed.
+ * In this case, all AQO file storages will be reset.
+ */
+static const uint32 PGAQO_FILE_HEADER = 0x20230330;
 static const uint32 PGAQO_PG_MAJOR_VERSION = PG_VERSION_NUM / 100;
 
 /*
@@ -374,7 +378,7 @@ aqo_query_stat(PG_FUNCTION_ARGS)
 	Datum				values[TOTAL_NCOLS + 1];
 	bool				nulls[TOTAL_NCOLS + 1];
 	HASH_SEQ_STATUS		hash_seq;
-	StatEntry	   *entry;
+	StatEntry		   *entry;
 
 	/* check to see if caller supports us returning a tuplestore */
 	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
@@ -393,7 +397,9 @@ aqo_query_stat(PG_FUNCTION_ARGS)
 	/* Build a tuple descriptor for our result type */
 	if (get_call_result_type(fcinfo, NULL, &tupDesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
-	Assert(tupDesc->natts == TOTAL_NCOLS);
+
+	if (tupDesc->natts != TOTAL_NCOLS)
+		elog(ERROR, "[AQO] Incorrect number of output arguments");
 
 	tupstore = tuplestore_begin_heap(true, false, work_mem);
 	rsinfo->returnMode = SFRM_Materialize;
@@ -1160,7 +1166,9 @@ aqo_query_texts(PG_FUNCTION_ARGS)
 	/* Build a tuple descriptor for our result type */
 	if (get_call_result_type(fcinfo, NULL, &tupDesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
-	Assert(tupDesc->natts == QT_TOTAL_NCOLS);
+
+	if (tupDesc->natts != QT_TOTAL_NCOLS)
+		elog(ERROR, "[AQO] Incorrect number of output arguments");
 
 	tupstore = tuplestore_begin_heap(true, false, work_mem);
 	rsinfo->returnMode = SFRM_Materialize;
@@ -1754,7 +1762,9 @@ aqo_data(PG_FUNCTION_ARGS)
 	/* Build a tuple descriptor for our result type */
 	if (get_call_result_type(fcinfo, NULL, &tupDesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
-	Assert(tupDesc->natts == AD_TOTAL_NCOLS);
+
+	if (tupDesc->natts != AD_TOTAL_NCOLS)
+		elog(ERROR, "[AQO] Incorrect number of output arguments");
 
 	tupstore = tuplestore_begin_heap(true, false, work_mem);
 	rsinfo->returnMode = SFRM_Materialize;
@@ -1914,7 +1924,9 @@ aqo_queries(PG_FUNCTION_ARGS)
 	/* Build a tuple descriptor for our result type */
 	if (get_call_result_type(fcinfo, NULL, &tupDesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
-	Assert(tupDesc->natts == AQ_TOTAL_NCOLS);
+
+	if (tupDesc->natts != AQ_TOTAL_NCOLS)
+		elog(ERROR, "[AQO] Incorrect number of output arguments");
 
 	tupstore = tuplestore_begin_heap(true, false, work_mem);
 	rsinfo->returnMode = SFRM_Materialize;
@@ -2377,7 +2389,8 @@ aqo_cleanup(PG_FUNCTION_ARGS)
 	if (get_call_result_type(fcinfo, NULL, &tupDesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
 
-	Assert(tupDesc->natts == 2);
+	if (tupDesc->natts != 2)
+		elog(ERROR, "[AQO] Incorrect number of output arguments");
 
 	/*
 	 * Make forced cleanup: if at least one fss isn't actual, remove parent FS
@@ -2488,7 +2501,9 @@ aqo_cardinality_error(PG_FUNCTION_ARGS)
 	/* Build a tuple descriptor for our result type */
 	if (get_call_result_type(fcinfo, NULL, &tupDesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
-	Assert(tupDesc->natts == AQE_TOTAL_NCOLS);
+
+	if (tupDesc->natts != AQE_TOTAL_NCOLS)
+		elog(ERROR, "[AQO] Incorrect number of output arguments");
 
 	tupstore = tuplestore_begin_heap(true, false, work_mem);
 	rsinfo->returnMode = SFRM_Materialize;
@@ -2556,8 +2571,8 @@ aqo_execution_time(PG_FUNCTION_ARGS)
 	MemoryContext		per_query_ctx;
 	MemoryContext		oldcontext;
 	Tuplestorestate	   *tupstore;
-	Datum				values[AQE_TOTAL_NCOLS];
-	bool				nulls[AQE_TOTAL_NCOLS];
+	Datum				values[ET_TOTAL_NCOLS];
+	bool				nulls[ET_TOTAL_NCOLS];
 	HASH_SEQ_STATUS		hash_seq;
 	QueriesEntry	   *qentry;
 	StatEntry		   *sentry;
@@ -2580,7 +2595,9 @@ aqo_execution_time(PG_FUNCTION_ARGS)
 	/* Build a tuple descriptor for our result type */
 	if (get_call_result_type(fcinfo, NULL, &tupDesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
-	Assert(tupDesc->natts == ET_TOTAL_NCOLS);
+
+	if (tupDesc->natts != ET_TOTAL_NCOLS)
+		elog(ERROR, "[AQO] Incorrect number of output arguments");
 
 	tupstore = tuplestore_begin_heap(true, false, work_mem);
 	rsinfo->returnMode = SFRM_Materialize;
@@ -2713,7 +2730,7 @@ aqo_query_stat_update(PG_FUNCTION_ARGS)
 		PG_ARGISNULL(EST_ERROR))
 		PG_RETURN_BOOL(false);
 
-	queryid = PG_GETARG_INT64(AQ_QUERYID);
+	queryid = PG_GETARG_INT64(QUERYID);
 	stat_arg.execs_with_aqo = PG_GETARG_INT64(NEXECS_AQO);
 	stat_arg.execs_without_aqo = PG_GETARG_INT64(NEXECS);
 	if (queryid == 0 || stat_arg.execs_with_aqo < 0 ||
