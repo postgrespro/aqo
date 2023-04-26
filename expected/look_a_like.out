@@ -19,7 +19,7 @@ NOTICE:  table "a" does not exist, skipping
 NOTICE:  table "b" does not exist, skipping
 -- Create tables with correlated datas in columns
 CREATE TABLE a (x1 int, x2 int, x3 int);
-INSERT INTO a (x1, x2, x3) SELECT mod(ival,10), mod(ival,10), mod(ival,10) FROM generate_series(1,1000) As ival;
+INSERT INTO a (x1, x2, x3) SELECT mod(ival,10), mod(ival,10), mod(ival,10) FROM generate_series(1,100) As ival;
 CREATE TABLE b (y1 int, y2 int, y3 int);
 INSERT INTO b (y1, y2, y3) SELECT mod(ival + 1,10), mod(ival + 1,10), mod(ival + 1,10) FROM generate_series(1,1000) As ival;
 --
@@ -39,17 +39,17 @@ SELECT str AS result
 FROM expln('
 SELECT x1,y1 FROM A,B WHERE x1 = 5 AND x2 = 5 AND A.x1 = B.y1;') AS str
 WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
-                         result                         
---------------------------------------------------------
- Nested Loop (actual rows=10000 loops=1)
+                        result                         
+-------------------------------------------------------
+ Nested Loop (actual rows=1000 loops=1)
    AQO not used
    Output: a.x1, b.y1
-   ->  Seq Scan on public.a (actual rows=100 loops=1)
+   ->  Seq Scan on public.a (actual rows=10 loops=1)
          AQO not used
          Output: a.x1, a.x2, a.x3
          Filter: ((a.x1 = 5) AND (a.x2 = 5))
-         Rows Removed by Filter: 900
-   ->  Seq Scan on public.b (actual rows=100 loops=100)
+         Rows Removed by Filter: 90
+   ->  Seq Scan on public.b (actual rows=100 loops=10)
          AQO not used
          Output: b.y1, b.y2, b.y3
          Filter: (b.y1 = 5)
@@ -63,24 +63,24 @@ SELECT str AS result
 FROM expln('
 SELECT x1,y1 FROM A LEFT JOIN b ON A.x1 = B.y1 WHERE x1 = 5 AND x2 = 5;') AS str
 WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
-                           result                           
-------------------------------------------------------------
- Hash Left Join (actual rows=10000 loops=1)
+                          result                           
+-----------------------------------------------------------
+ Hash Right Join (actual rows=1000 loops=1)
    AQO not used
    Output: a.x1, b.y1
-   Hash Cond: (a.x1 = b.y1)
-   ->  Seq Scan on public.a (actual rows=100 loops=1)
+   Hash Cond: (b.y1 = a.x1)
+   ->  Seq Scan on public.b (actual rows=100 loops=1)
          AQO: rows=100, error=0%
-         Output: a.x1, a.x2, a.x3
-         Filter: ((a.x1 = 5) AND (a.x2 = 5))
+         Output: b.y1, b.y2, b.y3
+         Filter: (b.y1 = 5)
          Rows Removed by Filter: 900
-   ->  Hash (actual rows=100 loops=1)
-         Output: b.y1
-         ->  Seq Scan on public.b (actual rows=100 loops=1)
-               AQO: rows=100, error=0%
-               Output: b.y1
-               Filter: (b.y1 = 5)
-               Rows Removed by Filter: 900
+   ->  Hash (actual rows=10 loops=1)
+         Output: a.x1
+         ->  Seq Scan on public.a (actual rows=10 loops=1)
+               AQO: rows=10, error=0%
+               Output: a.x1
+               Filter: ((a.x1 = 5) AND (a.x2 = 5))
+               Rows Removed by Filter: 90
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1
@@ -90,22 +90,22 @@ SELECT str AS result
 FROM expln('
 SELECT x1,y1 FROM A,B WHERE x1 < 5 AND x2 < 5 AND A.x1 = B.y1;') AS str
 WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
-                           result                           
-------------------------------------------------------------
- Hash Join (actual rows=50000 loops=1)
+                          result                           
+-----------------------------------------------------------
+ Hash Join (actual rows=5000 loops=1)
    AQO not used
    Output: a.x1, b.y1
    Hash Cond: (b.y1 = a.x1)
    ->  Seq Scan on public.b (actual rows=1000 loops=1)
          AQO not used
          Output: b.y1, b.y2, b.y3
-   ->  Hash (actual rows=500 loops=1)
+   ->  Hash (actual rows=50 loops=1)
          Output: a.x1
-         ->  Seq Scan on public.a (actual rows=500 loops=1)
+         ->  Seq Scan on public.a (actual rows=50 loops=1)
                AQO not used
                Output: a.x1
                Filter: ((a.x1 < 5) AND (a.x2 < 5))
-               Rows Removed by Filter: 500
+               Rows Removed by Filter: 50
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1
@@ -116,22 +116,22 @@ SELECT str AS result
 FROM expln('
 SELECT x1,y1 FROM A,B WHERE x1 < 10 AND x2 < 5 AND A.x1 = B.y1;') AS str
 WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
-                           result                           
-------------------------------------------------------------
- Hash Join (actual rows=50000 loops=1)
-   AQO: rows=50000, error=0%
+                          result                           
+-----------------------------------------------------------
+ Hash Join (actual rows=5000 loops=1)
+   AQO: rows=5000, error=0%
    Output: a.x1, b.y1
    Hash Cond: (b.y1 = a.x1)
    ->  Seq Scan on public.b (actual rows=1000 loops=1)
          AQO: rows=1000, error=0%
          Output: b.y1, b.y2, b.y3
-   ->  Hash (actual rows=500 loops=1)
+   ->  Hash (actual rows=50 loops=1)
          Output: a.x1
-         ->  Seq Scan on public.a (actual rows=500 loops=1)
-               AQO: rows=500, error=0%
+         ->  Seq Scan on public.a (actual rows=50 loops=1)
+               AQO: rows=50, error=0%
                Output: a.x1
                Filter: ((a.x1 < 10) AND (a.x2 < 5))
-               Rows Removed by Filter: 500
+               Rows Removed by Filter: 50
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1
@@ -141,22 +141,22 @@ SELECT str AS result
 FROM expln('
 SELECT x1,y1 FROM A,B WHERE x1 > 2 AND x2 > 2 AND A.x1 = B.y1;') AS str
 WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
-                           result                           
-------------------------------------------------------------
- Hash Join (actual rows=70000 loops=1)
+                          result                           
+-----------------------------------------------------------
+ Hash Join (actual rows=7000 loops=1)
    AQO not used
    Output: a.x1, b.y1
    Hash Cond: (b.y1 = a.x1)
    ->  Seq Scan on public.b (actual rows=1000 loops=1)
          AQO: rows=1000, error=0%
          Output: b.y1, b.y2, b.y3
-   ->  Hash (actual rows=700 loops=1)
+   ->  Hash (actual rows=70 loops=1)
          Output: a.x1
-         ->  Seq Scan on public.a (actual rows=700 loops=1)
+         ->  Seq Scan on public.a (actual rows=70 loops=1)
                AQO not used
                Output: a.x1
                Filter: ((a.x1 > 2) AND (a.x2 > 2))
-               Rows Removed by Filter: 300
+               Rows Removed by Filter: 30
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1
@@ -168,20 +168,20 @@ SELECT x1,y1 FROM A,B WHERE x1 > 5 AND x2 > 5 AND x3 < 10 AND A.x1 = B.y1;') AS 
 WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
                               result                               
 -------------------------------------------------------------------
- Hash Join (actual rows=40000 loops=1)
+ Hash Join (actual rows=4000 loops=1)
    AQO not used
    Output: a.x1, b.y1
    Hash Cond: (b.y1 = a.x1)
    ->  Seq Scan on public.b (actual rows=1000 loops=1)
          AQO: rows=1000, error=0%
          Output: b.y1, b.y2, b.y3
-   ->  Hash (actual rows=400 loops=1)
+   ->  Hash (actual rows=40 loops=1)
          Output: a.x1
-         ->  Seq Scan on public.a (actual rows=400 loops=1)
+         ->  Seq Scan on public.a (actual rows=40 loops=1)
                AQO not used
                Output: a.x1
                Filter: ((a.x1 > 5) AND (a.x2 > 5) AND (a.x3 < 10))
-               Rows Removed by Filter: 600
+               Rows Removed by Filter: 60
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1
@@ -193,20 +193,20 @@ SELECT x1,y1 FROM A,B WHERE x1 < 5 AND x2 < 5 AND x3 < 10 AND A.x1 = B.y1;') AS 
 WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
                               result                               
 -------------------------------------------------------------------
- Hash Join (actual rows=50000 loops=1)
+ Hash Join (actual rows=5000 loops=1)
    AQO not used
    Output: a.x1, b.y1
    Hash Cond: (b.y1 = a.x1)
    ->  Seq Scan on public.b (actual rows=1000 loops=1)
          AQO: rows=1000, error=0%
          Output: b.y1, b.y2, b.y3
-   ->  Hash (actual rows=500 loops=1)
+   ->  Hash (actual rows=50 loops=1)
          Output: a.x1
-         ->  Seq Scan on public.a (actual rows=500 loops=1)
+         ->  Seq Scan on public.a (actual rows=50 loops=1)
                AQO not used
                Output: a.x1
                Filter: ((a.x1 < 5) AND (a.x2 < 5) AND (a.x3 < 10))
-               Rows Removed by Filter: 500
+               Rows Removed by Filter: 50
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1
@@ -219,20 +219,20 @@ SELECT x1,y1 FROM A,B WHERE x1 < 5 AND x2 < 4 AND x3 < 5 AND A.x1 = B.y1;') AS s
 WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
                               result                              
 ------------------------------------------------------------------
- Hash Join (actual rows=40000 loops=1)
-   AQO: rows=50000, error=20%
+ Hash Join (actual rows=4000 loops=1)
+   AQO: rows=5000, error=20%
    Output: a.x1, b.y1
    Hash Cond: (b.y1 = a.x1)
    ->  Seq Scan on public.b (actual rows=1000 loops=1)
          AQO: rows=1000, error=0%
          Output: b.y1, b.y2, b.y3
-   ->  Hash (actual rows=400 loops=1)
+   ->  Hash (actual rows=40 loops=1)
          Output: a.x1
-         ->  Seq Scan on public.a (actual rows=400 loops=1)
-               AQO: rows=500, error=20%
+         ->  Seq Scan on public.a (actual rows=40 loops=1)
+               AQO: rows=50, error=20%
                Output: a.x1
                Filter: ((a.x1 < 5) AND (a.x2 < 4) AND (a.x3 < 5))
-               Rows Removed by Filter: 600
+               Rows Removed by Filter: 60
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1
@@ -242,25 +242,25 @@ SELECT str AS result
 FROM expln('
 SELECT x1 FROM A,B WHERE x1 < 4 AND x3 > 1 GROUP BY(x1);') AS str
 WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
-                               result                                
----------------------------------------------------------------------
+                               result                               
+--------------------------------------------------------------------
  Group (actual rows=2 loops=1)
    AQO not used
    Output: a.x1
    Group Key: a.x1
-   ->  Sort (actual rows=200000 loops=1)
+   ->  Sort (actual rows=20000 loops=1)
          AQO not used
          Output: a.x1
          Sort Key: a.x1
-         ->  Nested Loop (actual rows=200000 loops=1)
+         ->  Nested Loop (actual rows=20000 loops=1)
                AQO not used
                Output: a.x1
-               ->  Seq Scan on public.a (actual rows=200 loops=1)
+               ->  Seq Scan on public.a (actual rows=20 loops=1)
                      AQO not used
                      Output: a.x1, a.x2, a.x3
                      Filter: ((a.x1 < 4) AND (a.x3 > 1))
-                     Rows Removed by Filter: 800
-               ->  Seq Scan on public.b (actual rows=1000 loops=200)
+                     Rows Removed by Filter: 80
+               ->  Seq Scan on public.b (actual rows=1000 loops=20)
                      AQO: rows=1000, error=0%
                      Output: b.y1, b.y2, b.y3
  Using aqo: true
@@ -273,25 +273,25 @@ SELECT str AS result
 FROM expln('
 SELECT x1 FROM A,B WHERE x1 < 4 AND x3 > 1 GROUP BY(x1);') AS str
 WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
-                               result                                
----------------------------------------------------------------------
+                               result                               
+--------------------------------------------------------------------
  Group (actual rows=2 loops=1)
    AQO not used
    Output: a.x1
    Group Key: a.x1
-   ->  Sort (actual rows=200000 loops=1)
+   ->  Sort (actual rows=20000 loops=1)
          AQO not used
          Output: a.x1
          Sort Key: a.x1
-         ->  Nested Loop (actual rows=200000 loops=1)
-               AQO: rows=200000, error=0%
+         ->  Nested Loop (actual rows=20000 loops=1)
+               AQO: rows=20000, error=0%
                Output: a.x1
-               ->  Seq Scan on public.a (actual rows=200 loops=1)
-                     AQO: rows=200, error=0%
+               ->  Seq Scan on public.a (actual rows=20 loops=1)
+                     AQO: rows=20, error=0%
                      Output: a.x1, a.x2, a.x3
                      Filter: ((a.x1 < 4) AND (a.x3 > 1))
-                     Rows Removed by Filter: 800
-               ->  Seq Scan on public.b (actual rows=1000 loops=200)
+                     Rows Removed by Filter: 80
+               ->  Seq Scan on public.b (actual rows=1000 loops=20)
                      AQO: rows=1000, error=0%
                      Output: b.y1, b.y2, b.y3
  Using aqo: true
@@ -303,25 +303,25 @@ SELECT str AS result
 FROM expln('
 SELECT x1 FROM A,B WHERE x1 < 4 AND x3 > 2 GROUP BY(x1);') AS str
 WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
-                               result                                
----------------------------------------------------------------------
+                               result                               
+--------------------------------------------------------------------
  Group (actual rows=1 loops=1)
    AQO not used
    Output: a.x1
    Group Key: a.x1
-   ->  Sort (actual rows=100000 loops=1)
+   ->  Sort (actual rows=10000 loops=1)
          AQO not used
          Output: a.x1
          Sort Key: a.x1
-         ->  Nested Loop (actual rows=100000 loops=1)
-               AQO: rows=200000, error=50%
+         ->  Nested Loop (actual rows=10000 loops=1)
+               AQO: rows=20000, error=50%
                Output: a.x1
-               ->  Seq Scan on public.a (actual rows=100 loops=1)
-                     AQO: rows=200, error=50%
+               ->  Seq Scan on public.a (actual rows=10 loops=1)
+                     AQO: rows=20, error=50%
                      Output: a.x1, a.x2, a.x3
                      Filter: ((a.x1 < 4) AND (a.x3 > 2))
-                     Rows Removed by Filter: 900
-               ->  Seq Scan on public.b (actual rows=1000 loops=100)
+                     Rows Removed by Filter: 90
+               ->  Seq Scan on public.b (actual rows=1000 loops=10)
                      AQO: rows=1000, error=0%
                      Output: b.y1, b.y2, b.y3
  Using aqo: true
@@ -339,19 +339,19 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
    AQO not used
    Output: a.x1
    Group Key: a.x1
-   ->  Sort (actual rows=100000 loops=1)
+   ->  Sort (actual rows=10000 loops=1)
          AQO not used
          Output: a.x1
          Sort Key: a.x1
-         ->  Nested Loop (actual rows=100000 loops=1)
+         ->  Nested Loop (actual rows=10000 loops=1)
                AQO not used
                Output: a.x1
-               ->  Seq Scan on public.a (actual rows=100 loops=1)
+               ->  Seq Scan on public.a (actual rows=10 loops=1)
                      AQO not used
                      Output: a.x1, a.x2, a.x3
                      Filter: ((a.x1 < 3) AND (a.x2 < 5) AND (a.x3 > 1))
-                     Rows Removed by Filter: 900
-               ->  Seq Scan on public.b (actual rows=1000 loops=100)
+                     Rows Removed by Filter: 90
+               ->  Seq Scan on public.b (actual rows=1000 loops=10)
                      AQO: rows=1000, error=0%
                      Output: b.y1, b.y2, b.y3
  Using aqo: true
@@ -369,19 +369,19 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
    AQO not used
    Output: a.x1
    Group Key: a.x1
-   ->  Sort (actual rows=200000 loops=1)
+   ->  Sort (actual rows=20000 loops=1)
          AQO not used
          Output: a.x1
          Sort Key: a.x1
-         ->  Nested Loop (actual rows=200000 loops=1)
+         ->  Nested Loop (actual rows=20000 loops=1)
                AQO not used
                Output: a.x1
-               ->  Seq Scan on public.a (actual rows=200 loops=1)
+               ->  Seq Scan on public.a (actual rows=20 loops=1)
                      AQO not used
                      Output: a.x1, a.x2, a.x3
                      Filter: ((a.x1 > 1) AND (a.x2 < 4) AND (a.x3 > 1))
-                     Rows Removed by Filter: 800
-               ->  Seq Scan on public.b (actual rows=1000 loops=200)
+                     Rows Removed by Filter: 80
+               ->  Seq Scan on public.b (actual rows=1000 loops=20)
                      AQO: rows=1000, error=0%
                      Output: b.y1, b.y2, b.y3
  Using aqo: true
@@ -399,19 +399,19 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
    AQO not used
    Output: a.x1
    Group Key: a.x1
-   ->  Sort (actual rows=200000 loops=1)
+   ->  Sort (actual rows=20000 loops=1)
          AQO not used
          Output: a.x1
          Sort Key: a.x1
-         ->  Nested Loop (actual rows=200000 loops=1)
+         ->  Nested Loop (actual rows=20000 loops=1)
                AQO not used
                Output: a.x1
-               ->  Seq Scan on public.a (actual rows=200 loops=1)
+               ->  Seq Scan on public.a (actual rows=20 loops=1)
                      AQO not used
                      Output: a.x1, a.x2, a.x3
                      Filter: ((a.x1 > 1) AND (a.x2 < 4) AND (a.x3 < 5))
-                     Rows Removed by Filter: 800
-               ->  Seq Scan on public.b (actual rows=1000 loops=200)
+                     Rows Removed by Filter: 80
+               ->  Seq Scan on public.b (actual rows=1000 loops=20)
                      AQO: rows=1000, error=0%
                      Output: b.y1, b.y2, b.y3
  Using aqo: true
@@ -429,19 +429,19 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
    AQO not used
    Output: a.x1
    Group Key: a.x1
-   ->  Sort (actual rows=140000 loops=1)
+   ->  Sort (actual rows=14000 loops=1)
          AQO not used
          Output: a.x1
          Sort Key: a.x1
-         ->  Nested Loop (actual rows=140000 loops=1)
+         ->  Nested Loop (actual rows=14000 loops=1)
                AQO not used
                Output: a.x1
-               ->  Seq Scan on public.a (actual rows=200 loops=1)
-                     AQO: rows=100, error=-100%
+               ->  Seq Scan on public.a (actual rows=20 loops=1)
+                     AQO: rows=10, error=-100%
                      Output: a.x1, a.x2, a.x3
                      Filter: ((a.x1 < 4) AND (a.x2 < 5) AND (a.x3 > 1))
-                     Rows Removed by Filter: 800
-               ->  Seq Scan on public.b (actual rows=700 loops=200)
+                     Rows Removed by Filter: 80
+               ->  Seq Scan on public.b (actual rows=700 loops=20)
                      AQO not used
                      Output: b.y1, b.y2, b.y3
                      Filter: (b.y1 > 2)
@@ -462,19 +462,19 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
    AQO not used
    Output: a.x1
    Group Key: a.x1
-   ->  Sort (actual rows=70000 loops=1)
+   ->  Sort (actual rows=7000 loops=1)
          AQO not used
          Output: a.x1
          Sort Key: a.x1
-         ->  Nested Loop (actual rows=70000 loops=1)
-               AQO: rows=140000, error=50%
+         ->  Nested Loop (actual rows=7000 loops=1)
+               AQO: rows=14000, error=50%
                Output: a.x1
-               ->  Seq Scan on public.a (actual rows=100 loops=1)
-                     AQO: rows=200, error=50%
+               ->  Seq Scan on public.a (actual rows=10 loops=1)
+                     AQO: rows=20, error=50%
                      Output: a.x1, a.x2, a.x3
                      Filter: ((a.x1 < 3) AND (a.x2 < 4) AND (a.x3 > 1))
-                     Rows Removed by Filter: 900
-               ->  Seq Scan on public.b (actual rows=700 loops=100)
+                     Rows Removed by Filter: 90
+               ->  Seq Scan on public.b (actual rows=700 loops=10)
                      AQO: rows=700, error=0%
                      Output: b.y1, b.y2, b.y3
                      Filter: (b.y1 > 2)
@@ -501,7 +501,7 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
          AQO not used
          Output: a.x1, a.x2, a.x3
          Hash Cond: (a.x1 = c.z1)
-         ->  Seq Scan on public.a (actual rows=1000 loops=1)
+         ->  Seq Scan on public.a (actual rows=100 loops=1)
                AQO not used
                Output: a.x1, a.x2, a.x3
          ->  Hash (actual rows=1000 loops=1)
@@ -523,29 +523,29 @@ SELECT str AS result
 FROM expln('
 SELECT * FROM (A LEFT JOIN B ON A.x1 = B.y1) sc left join C on sc.x1=C.z1;') AS str
 WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
-                                 result                                  
--------------------------------------------------------------------------
- Hash Right Join (actual rows=10000000 loops=1)
-   AQO: rows=1, error=-999999900%
+                                 result                                 
+------------------------------------------------------------------------
+ Hash Right Join (actual rows=1000000 loops=1)
+   AQO: rows=1, error=-99999900%
    Output: a.x1, a.x2, a.x3, b.y1, b.y2, b.y3, c.z1, c.z2, c.z3
    Hash Cond: (b.y1 = a.x1)
    ->  Seq Scan on public.b (actual rows=1000 loops=1)
          AQO: rows=1000, error=0%
          Output: b.y1, b.y2, b.y3
-   ->  Hash (actual rows=100000 loops=1)
+   ->  Hash (actual rows=10000 loops=1)
          Output: a.x1, a.x2, a.x3, c.z1, c.z2, c.z3
-         ->  Hash Left Join (actual rows=100000 loops=1)
-               AQO: rows=1, error=-9999900%
+         ->  Hash Right Join (actual rows=10000 loops=1)
+               AQO: rows=1, error=-999900%
                Output: a.x1, a.x2, a.x3, c.z1, c.z2, c.z3
-               Hash Cond: (a.x1 = c.z1)
-               ->  Seq Scan on public.a (actual rows=1000 loops=1)
+               Hash Cond: (c.z1 = a.x1)
+               ->  Seq Scan on public.c (actual rows=1000 loops=1)
                      AQO: rows=1000, error=0%
-                     Output: a.x1, a.x2, a.x3
-               ->  Hash (actual rows=1000 loops=1)
                      Output: c.z1, c.z2, c.z3
-                     ->  Seq Scan on public.c (actual rows=1000 loops=1)
-                           AQO: rows=1000, error=0%
-                           Output: c.z1, c.z2, c.z3
+               ->  Hash (actual rows=100 loops=1)
+                     Output: a.x1, a.x2, a.x3
+                     ->  Seq Scan on public.a (actual rows=100 loops=1)
+                           AQO: rows=100, error=0%
+                           Output: a.x1, a.x2, a.x3
  Using aqo: true
  AQO mode: LEARN
  JOINS: 2
