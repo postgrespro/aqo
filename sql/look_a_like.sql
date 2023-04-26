@@ -16,7 +16,7 @@ DROP TABLE IF EXISTS a,b CASCADE;
 
 -- Create tables with correlated datas in columns
 CREATE TABLE a (x1 int, x2 int, x3 int);
-INSERT INTO a (x1, x2, x3) SELECT mod(ival,10), mod(ival,10), mod(ival,10) FROM generate_series(1,1000) As ival;
+INSERT INTO a (x1, x2, x3) SELECT mod(ival,10), mod(ival,10), mod(ival,10) FROM generate_series(1,100) As ival;
 
 CREATE TABLE b (y1 int, y2 int, y3 int);
 INSERT INTO b (y1, y2, y3) SELECT mod(ival + 1,10), mod(ival + 1,10), mod(ival + 1,10) FROM generate_series(1,1000) As ival;
