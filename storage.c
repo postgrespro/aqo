@@ -1111,7 +1111,7 @@ aqo_qtext_store(uint64 queryid, const char *query_string)
 
 		entry->queryid = queryid;
 		size = size > querytext_max_size ? querytext_max_size : size;
-		entry->qtext_dp = dsa_allocate0(qtext_dsa, size);
+		entry->qtext_dp = dsa_allocate(qtext_dsa, size);
 
 		if (!_check_dsa_validity(entry->qtext_dp))
 		{
