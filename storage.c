@@ -507,7 +507,7 @@ _form_qtext_record_cb(void *ctx, size_t *size)
 {
 	HASH_SEQ_STATUS *hash_seq = (HASH_SEQ_STATUS *) ctx;
 	QueryTextEntry	*entry;
-	void		    *data;
+	void			*data;
 	char			*query_string;
 	char			*ptr;
 
@@ -784,7 +784,7 @@ _deform_qtexts_record_cb(void *data, size_t size)
 										   HASH_ENTER, &found);
 	Assert(!found);
 
-	entry->qtext_dp = dsa_allocate(qtext_dsa, len);
+	entry->qtext_dp = dsa_allocate_extended(qtext_dsa, len, DSA_ALLOC_NO_OOM | DSA_ALLOC_ZERO);
 	if (!_check_dsa_validity(entry->qtext_dp))
 	{
 		/*
@@ -829,7 +829,7 @@ aqo_qtexts_load(void)
 
 	if (!found)
 	{
-		if (!aqo_qtext_store(0, "COMMON feature space (do not delete!)"))
+		if (!aqo_qtext_store(0, "COMMON feature space (do not delete!)", NULL))
 			elog(PANIC, "[AQO] DSA Initialization was unsuccessful");
 	}
 }
@@ -941,6 +941,48 @@ aqo_queries_load(void)
 	{
 		if (!aqo_queries_store(0, 0, 0, 0, 0, &aqo_queries_nulls))
 			elog(PANIC, "[AQO] aqo_queries initialization was unsuccessful");
+	}
+}
+
+static long
+aqo_get_file_size(const char *filename) 
+{
+	FILE   *file;
+	long	size = 0;
+
+	file = AllocateFile(filename, PG_BINARY_R);
+	if (file == NULL)
+	{
+		if (errno != ENOENT)
+			goto read_error;
+		return size;
+	}
+
+	fseek(file, 0L, SEEK_END);
+	size = ftell(file);
+
+	FreeFile(file);
+	return size;
+
+read_error:
+	ereport(LOG,
+			(errcode_for_file_access(),
+			 errmsg("could not read file \"%s\": %m", filename)));
+	if (file)
+		FreeFile(file);
+	unlink(filename);
+	return -1;
+}
+
+void
+check_dsa_file_size(void)
+{
+	long qtext_size = aqo_get_file_size(PGAQO_TEXT_FILE);
+	long data_size = aqo_get_file_size(PGAQO_DATA_FILE);
+
+	if (qtext_size == -1 || data_size == -1 || qtext_size + data_size >= dsm_size_max * 1024 * 1024)
+	{
+		elog(ERROR, "aqo.dsm_size_max is too small");
 	}
 }
 
@@ -1090,12 +1132,15 @@ dsa_init()
  * XXX: Maybe merge with aqo_queries ?
  */
 bool
-aqo_qtext_store(uint64 queryid, const char *query_string)
+aqo_qtext_store(uint64 queryid, const char *query_string, bool *dsa_valid)
 {
 	QueryTextEntry *entry;
 	bool			found;
 	bool			tblOverflow;
 	HASHACTION		action;
+
+	if (dsa_valid)
+		*dsa_valid = true;
 
 	Assert(!LWLockHeldByMe(&aqo_state->qtexts_lock));
 
@@ -1135,7 +1180,7 @@ aqo_qtext_store(uint64 queryid, const char *query_string)
 
 		entry->queryid = queryid;
 		size = size > querytext_max_size ? querytext_max_size : size;
-		entry->qtext_dp = dsa_allocate0(qtext_dsa, size);
+		entry->qtext_dp = dsa_allocate_extended(qtext_dsa, size, DSA_ALLOC_NO_OOM | DSA_ALLOC_ZERO);
 
 		if (!_check_dsa_validity(entry->qtext_dp))
 		{
@@ -1144,7 +1189,10 @@ aqo_qtext_store(uint64 queryid, const char *query_string)
 			 * that caller recognize it and don't try to call us more.
 			 */
 			(void) hash_search(qtexts_htab, &queryid, HASH_REMOVE, NULL);
+			_aqo_queries_remove(queryid);
 			LWLockRelease(&aqo_state->qtexts_lock);
+			if (dsa_valid)
+				*dsa_valid = false;
 			return false;
 		}
 
@@ -1423,7 +1471,7 @@ aqo_data_store(uint64 fs, int fss, AqoDataArgs *data, List *reloids)
 		entry->nrels = nrels;
 
 		size = _compute_data_dsa(entry);
-		entry->data_dp = dsa_allocate0(data_dsa, size);
+		entry->data_dp = dsa_allocate_extended(data_dsa, size, DSA_ALLOC_NO_OOM | DSA_ALLOC_ZERO);
 
 		if (!_check_dsa_validity(entry->data_dp))
 		{
@@ -1455,7 +1503,7 @@ aqo_data_store(uint64 fs, int fss, AqoDataArgs *data, List *reloids)
 
 		/* Need to re-allocate DSA chunk */
 		dsa_free(data_dsa, entry->data_dp);
-		entry->data_dp = dsa_allocate0(data_dsa, size);
+		entry->data_dp = dsa_allocate_extended(data_dsa, size, DSA_ALLOC_NO_OOM | DSA_ALLOC_ZERO);
 
 		if (!_check_dsa_validity(entry->data_dp))
 		{
@@ -2713,7 +2761,7 @@ aqo_query_texts_update(PG_FUNCTION_ARGS)
 
 	str_buff = (char*) palloc(str_len);
 	text_to_cstring_buffer(str, str_buff, str_len);
-	res = aqo_qtext_store(queryid, str_buff);
+	res = aqo_qtext_store(queryid, str_buff, NULL);
 	pfree(str_buff);
 
 	PG_RETURN_BOOL(res);

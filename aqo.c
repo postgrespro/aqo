@@ -120,6 +120,18 @@ aqo_free_callback(ResourceReleasePhase phase,
 	}
 }
 
+
+/* Validation function for dsm_size_max GUC*/
+static bool check_dsm_size_hook(int *newval, void **extra, GucSource source)
+{
+	if (*newval < 0)
+	{
+		GUC_check_errdetail("dsm_size_max can't be smaller than zero");
+		return false;
+	}
+	return true;
+}
+
 void
 _PG_init(void)
 {
@@ -275,9 +287,9 @@ _PG_init(void)
 							&dsm_size_max,
 							100,
 							0, INT_MAX,
-							PGC_SUSET,
+							PGC_POSTMASTER,
 							0,
-							NULL,
+							check_dsm_size_hook,
 							NULL,
 							NULL
 	);
@@ -388,5 +400,5 @@ PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
 Datum
 invalidate_deactivated_queries_cache(PG_FUNCTION_ARGS)
 {
-       PG_RETURN_POINTER(NULL);
+	   PG_RETURN_POINTER(NULL);
 }

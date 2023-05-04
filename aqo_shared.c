@@ -98,6 +98,8 @@ aqo_init_shmem(void)
 		 /* Doesn't use DSA, so can be loaded in postmaster */
 		aqo_stat_load();
 		aqo_queries_load();
+
+		check_dsa_file_size();
 	}
 }
 
