@@ -342,7 +342,27 @@ should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
 	}
 	else if (ctx->learn)
 	{
-		*rfactor = RELIABILITY_MAX;
+		bool early_term = false;
+		if (ps->worker_instrument)
+		{
+			int i;
+
+			for (i = 0; i < ps->worker_instrument->num_workers; i++)
+			{
+				if (ps->worker_instrument->instrument[i].finished == TS_IN_ACTION)
+				{
+					early_term = true;
+					break;
+				}
+			}
+		}
+		else if (ps->instrument->finished == TS_IN_ACTION)
+		{
+			early_term = true;
+		}
+		if (early_term)
+			elog(NOTICE, "Early termination");
+		*rfactor = early_term ? RELIABILITY_MIN : RELIABILITY_MAX;
 		return true;
 	}
 
