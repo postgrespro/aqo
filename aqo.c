@@ -2,7 +2,7 @@
  * aqo.c
  *		Adaptive query optimization extension
  *
- * Copyright (c) 2016-2022, Postgres Professional
+ * Copyright (c) 2016-2023, Postgres Professional
  *
  * IDENTIFICATION
  *	  aqo/aqo.c
@@ -91,6 +91,9 @@ MemoryContext 		AQOPredictMemCtx = NULL;
 
 /* Is released at the end of learning */
 MemoryContext 		AQOLearnMemCtx = NULL;
+
+/* Is released at the end of load/store routines */
+MemoryContext 		AQOStorageMemCtx = NULL;
 
 /* Additional plan info */
 int njoins;
@@ -347,6 +350,12 @@ _PG_init(void)
 	 */
 	AQOLearnMemCtx = AllocSetContextCreate(AQOTopMemCtx,
 											 "AQOLearnMemoryContext",
+											 ALLOCSET_DEFAULT_SIZES);
+	/*
+	 * AQOStorageMemoryContext containe data for load/store routines.
+	 */
+	AQOStorageMemCtx = AllocSetContextCreate(AQOTopMemCtx,
+											 "AQOStorageMemoryContext",
 											 ALLOCSET_DEFAULT_SIZES);
 	RegisterResourceReleaseCallback(aqo_free_callback, NULL);
 	RegisterAQOPlanNodeMethods();
