@@ -12,7 +12,7 @@
  *
  *******************************************************************************
  *
- * Copyright (c) 2016-2022, Postgres Professional
+ * Copyright (c) 2016-2023, Postgres Professional
  *
  * IDENTIFICATION
  *	  aqo/machine_learning.c
