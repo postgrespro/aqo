@@ -5,7 +5,7 @@
  *
  *******************************************************************************
  *
- * Copyright (c) 2016-2022, Postgres Professional
+ * Copyright (c) 2016-2023, Postgres Professional
  *
  * IDENTIFICATION
  *	  aqo/path_utils.c
@@ -56,7 +56,7 @@ static AQOPlanNode DefaultAQOPlanNode =
  */
 static create_plan_hook_type			aqo_create_plan_next					= NULL;
 
-static create_upper_paths_hook_type	aqo_create_upper_paths_next				= NULL;
+/*static create_upper_paths_hook_type	aqo_create_upper_paths_next				= NULL;*/
 
 
 static AQOPlanNode *
@@ -265,7 +265,7 @@ get_list_of_relids(PlannerInfo *root, Relids relids, RelSortOut *rels)
 
 /*
  * Search for any subplans or initplans.
- * if subplan is found, replace it by the feature space value of this subplan.
+ * if subplan is found, replace it by zero Const.
  */
 static Node *
 subplan_hunter(Node *node, void *context)
@@ -276,21 +276,13 @@ subplan_hunter(Node *node, void *context)
 
 	if (IsA(node, SubPlan))
 	{
-		SubPlan		*splan = (SubPlan *) node;
-		PlannerInfo	*root = (PlannerInfo *) context;
-		PlannerInfo	*subroot;
-		RelOptInfo	*upper_rel;
-		A_Const		*fss;
+		A_Const	*fss = makeNode(A_Const);
 
-		subroot = (PlannerInfo *) list_nth(root->glob->subroots,
-										   splan->plan_id - 1);
-		upper_rel = fetch_upper_rel(subroot, UPPERREL_FINAL, NULL);
+		fss->val.type = T_Integer;
+		fss->location = -1;
+		fss->val.val.ival = 0;
+		return (Node *) fss;
 
-		Assert(list_length(upper_rel->ext_nodes) == 1);
-		Assert(IsA((Node *) linitial(upper_rel->ext_nodes), A_Const));
-
-		fss = (A_Const *) linitial(upper_rel->ext_nodes);
-		return (Node *) copyObject(fss);
 	}
 	return expression_tree_mutator(node, subplan_hunter, context);
 }
@@ -783,11 +775,14 @@ RegisterAQOPlanNodeMethods(void)
 }
 
 /*
+ * Warning! This function does not word properly.
+ * Because value of Const nodes removed by hash routine.
+ *
  * Hook for create_upper_paths_hook
  *
  * Assume, that we are last in the chain of path creators.
  */
-static void
+/*static void
 aqo_store_upper_signature(PlannerInfo *root,
 						  UpperRelationKind stage,
 						  RelOptInfo *input_rel,
@@ -803,7 +798,7 @@ aqo_store_upper_signature(PlannerInfo *root,
 		(*aqo_create_upper_paths_next)(root, stage, input_rel, output_rel, extra);
 
 	if (!query_context.use_aqo && !query_context.learn_aqo && !force_collect_stat)
-		/* Includes 'disabled query' state. */
+		/ * Includes 'disabled query' state. * /
 		return;
 
 	if (stage != UPPERREL_FINAL)
@@ -818,7 +813,7 @@ aqo_store_upper_signature(PlannerInfo *root,
 	fss_node->val.val.ival = get_fss_for_object(rels.signatures, clauses, NIL,
 												NULL, NULL);
 	output_rel->ext_nodes = lappend(output_rel->ext_nodes, (void *) fss_node);
-}
+}*/
 
 void
 aqo_path_utils_init(void)
@@ -826,6 +821,6 @@ aqo_path_utils_init(void)
 	aqo_create_plan_next				= create_plan_hook;
 	create_plan_hook					= aqo_create_plan;
 
-	aqo_create_upper_paths_next			= create_upper_paths_hook;
-	create_upper_paths_hook				= aqo_store_upper_signature;
+	/*aqo_create_upper_paths_next			= create_upper_paths_hook;
+	create_upper_paths_hook				= aqo_store_upper_signature;*/
 }

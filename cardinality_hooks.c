@@ -18,7 +18,7 @@
  *
  *******************************************************************************
  *
- * Copyright (c) 2016-2022, Postgres Professional
+ * Copyright (c) 2016-2023, Postgres Professional
  *
  * IDENTIFICATION
  *	  aqo/cardinality_hooks.c
@@ -81,6 +81,7 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 	if (!query_context.use_aqo)
 	{
 		MemoryContextSwitchTo(old_ctx_m);
+		MemoryContextReset(AQOPredictMemCtx);
 		goto default_estimator;
 	}
 
@@ -99,6 +100,7 @@ aqo_set_baserel_rows_estimate(PlannerInfo *root, RelOptInfo *rel)
 
 	/* Return to the caller's memory context. */
 	MemoryContextSwitchTo(old_ctx_m);
+	MemoryContextReset(AQOPredictMemCtx);
 
 	if (predicted < 0)
 		goto default_estimator;
@@ -190,12 +192,15 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 			cache_selectivity(current_hash, rel->relid, rte->relid,
 							  *((double *) lfirst(l2)));
 		}
+
+		pfree(args_hash);
+		pfree(eclass_hash);
 	}
 
 	if (!query_context.use_aqo)
 	{
 		MemoryContextSwitchTo(oldctx);
-
+		MemoryContextReset(AQOPredictMemCtx);
 		goto default_estimator;
 	}
 
@@ -210,6 +215,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 
 	/* Return to the caller's memory context */
 	MemoryContextSwitchTo(oldctx);
+	MemoryContextReset(AQOPredictMemCtx);
 
 	predicted_ppi_rows = predicted;
 	fss_ppi_hash = fss;
@@ -264,6 +270,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	if (!query_context.use_aqo)
 	{
 		MemoryContextSwitchTo(old_ctx_m);
+		MemoryContextReset(AQOPredictMemCtx);
 		goto default_estimator;
 	}
 
@@ -283,6 +290,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 
 	/* Return to the caller's memory context */
 	MemoryContextSwitchTo(old_ctx_m);
+	MemoryContextReset(AQOPredictMemCtx);
 
 	rel->fss_hash = fss;
 
@@ -342,6 +350,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	if (!query_context.use_aqo)
 	{
 		MemoryContextSwitchTo(old_ctx_m);
+		MemoryContextReset(AQOPredictMemCtx);
 		goto default_estimator;
 	}
 
@@ -358,6 +367,7 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 									 &fss);
 	/* Return to the caller's memory context */
 	MemoryContextSwitchTo(old_ctx_m);
+	MemoryContextReset(AQOPredictMemCtx);
 
 	predicted_ppi_rows = predicted;
 	fss_ppi_hash = fss;
@@ -445,6 +455,7 @@ aqo_estimate_num_groups(PlannerInfo *root, List *groupExprs,
 		grouped_rel->rows = predicted;
 		grouped_rel->fss_hash = fss;
 		MemoryContextSwitchTo(old_ctx_m);
+		MemoryContextReset(AQOPredictMemCtx);
 		return predicted;
 	}
 	else
@@ -455,6 +466,7 @@ aqo_estimate_num_groups(PlannerInfo *root, List *groupExprs,
 		grouped_rel->predicted_cardinality = -1;
 
 	MemoryContextSwitchTo(old_ctx_m);
+	MemoryContextReset(AQOPredictMemCtx);
 
 default_estimator:
 	if (aqo_estimate_num_groups_next)

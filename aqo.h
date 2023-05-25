@@ -105,7 +105,7 @@
  * Module storage.c is responsible for storage query settings and models
  * (i. e. all information which is used in extension).
  *
- * Copyright (c) 2016-2022, Postgres Professional
+ * Copyright (c) 2016-2023, Postgres Professional
  *
  * IDENTIFICATION
  *	  aqo/aqo.h
@@ -232,6 +232,7 @@ extern MemoryContext AQOTopMemCtx;
 extern MemoryContext AQOCacheMemCtx;
 extern MemoryContext AQOPredictMemCtx;
 extern MemoryContext AQOLearnMemCtx;
+extern MemoryContext AQOStorageMemCtx;
 
 extern int aqo_statement_timeout;
 
