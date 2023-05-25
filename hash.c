@@ -12,7 +12,7 @@
  *
  *******************************************************************************
  *
- * Copyright (c) 2016-2022, Postgres Professional
+ * Copyright (c) 2016-2023, Postgres Professional
  *
  * IDENTIFICATION
  *	  aqo/hash.c
@@ -175,6 +175,8 @@ get_grouped_exprs_hash(int child_fss, List *group_exprs)
 	final_hashes[0] = child_fss;
 	final_hashes[1] = get_int_array_hash(hashes, i);
 
+	pfree(hashes);
+
 	return get_int_array_hash(final_hashes, 2);
 }
 
@@ -242,6 +244,7 @@ get_fss_for_object(List *relsigns, List *clauselist,
 		clause_has_consts[i] = (args != NULL && has_consts(*args));
 		i++;
 	}
+	pfree(args_hash);
 
 	idx = argsort(clause_hashes, n, sizeof(*clause_hashes), int_cmp);
 	inverse_idx = inverse_permutation(idx, n);
@@ -252,6 +255,7 @@ get_fss_for_object(List *relsigns, List *clauselist,
 		sorted_clauses[inverse_idx[i]] = clause_hashes[i];
 		i++;
 	}
+	pfree(clause_hashes);
 
 	i = 0;
 	foreach(lc, selectivities)
@@ -267,6 +271,7 @@ get_fss_for_object(List *relsigns, List *clauselist,
 		}
 		i++;
 	}
+	pfree(inverse_idx);
 
 	for (i = 0; i < n;)
 	{
@@ -290,6 +295,8 @@ get_fss_for_object(List *relsigns, List *clauselist,
 				  sizeof(**features), double_cmp);
 		i = j;
 	}
+	pfree(idx);
+	pfree(clause_has_consts);
 
 	/*
 	 * Generate feature subspace hash.
@@ -299,6 +306,8 @@ get_fss_for_object(List *relsigns, List *clauselist,
 	eclasses_hash = get_int_array_hash(eclass_hash, nargs);
 	relations_hash = get_relations_hash(relsigns);
 	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relations_hash);
+	pfree(sorted_clauses);
+	pfree(eclass_hash);
 
 	if (nfeatures != NULL)
 	{
@@ -358,11 +367,17 @@ static int
 get_node_hash(Node *node)
 {
 	char	   *str;
+	char	   *no_consts;
+	char	   *no_locations;
 	int			hash;
 
-	str = remove_locations(remove_consts(nodeToString(node)));
-	hash = get_str_hash(str);
+	str = nodeToString(node);
+	no_consts = remove_consts(str);
 	pfree(str);
+	no_locations = remove_locations(no_consts);
+	pfree(no_consts);
+	hash = get_str_hash(no_locations);
+	pfree(no_locations);
 	return hash;
 }
 
@@ -485,6 +500,7 @@ get_relations_hash(List *relsigns)
 
 	result = DatumGetInt32(hash_any((const unsigned char *) hashes,
 									nhashes * sizeof(uint32)));
+	pfree(hashes);
 
 	return result;
 }
@@ -497,9 +513,11 @@ static char *
 remove_consts(const char *str)
 {
 	char *res;
+	char *tmp;
 
-	res = replace_patterns(str, "{CONST", is_brace);
-	res = replace_patterns(res, ":stmt_len", is_brace);
+	tmp = replace_patterns(str, "{CONST", is_brace);
+	res = replace_patterns(tmp, ":stmt_len", is_brace);
+	pfree(tmp);
 	return res;
 }
 
@@ -701,6 +719,8 @@ get_eclasses(List *clauselist, int *nargs, int **args_hash, int **eclass_hash)
 
 	for (i = 0; i < *nargs; ++i)
 		(*eclass_hash)[i] = e_hashes[disjoint_set_get_parent(p, i)];
+
+	pfree(e_hashes);
 }
 
 /*

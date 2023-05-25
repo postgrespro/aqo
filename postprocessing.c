@@ -9,7 +9,7 @@
  *
  *******************************************************************************
  *
- * Copyright (c) 2016-2022, Postgres Professional
+ * Copyright (c) 2016-2023, Postgres Professional
  *
  * IDENTIFICATION
  *	  aqo/postprocessing.c
@@ -222,6 +222,12 @@ restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 		Assert(*cur_sel >= 0);
 
 		lst = lappend(lst, cur_sel);
+	}
+
+	if (parametrized_sel)
+	{
+		pfree(args_hash);
+		pfree(eclass_hash);
 	}
 
 	return lst;
@@ -833,11 +839,11 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		}
 	}
 
-	selectivity_cache_clear();
 	cur_classes = ldelete_uint64(cur_classes, query_context.query_hash);
 
 end:
 	/* Release all AQO-specific memory, allocated during learning procedure */
+	selectivity_cache_clear();
 	MemoryContextSwitchTo(oldctx);
 	MemoryContextReset(AQOLearnMemCtx);
 
