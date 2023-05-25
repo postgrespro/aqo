@@ -8,7 +8,7 @@
  *
  *******************************************************************************
  *
- * Copyright (c) 2016-2022, Postgres Professional
+ * Copyright (c) 2016-2023, Postgres Professional
  *
  * IDENTIFICATION
  *	  aqo/storage.c
@@ -666,11 +666,12 @@ static int
 data_store(const char *filename, form_record_t callback,
 		   long nrecs, void *ctx)
 {
-	FILE   *file;
-	size_t	size;
-	uint32	counter = 0;
-	void   *data;
-	char   *tmpfile;
+	FILE		   *file;
+	size_t			size;
+	uint32			counter = 0;
+	void		   *data;
+	char		   *tmpfile;
+	MemoryContext	old_context = MemoryContextSwitchTo(AQOStorageMemCtx);
 
 	tmpfile = psprintf("%s.tmp", filename);
 	file = AllocateFile(tmpfile, PG_BINARY_W);
@@ -687,7 +688,11 @@ data_store(const char *filename, form_record_t callback,
 		/* TODO: Add CRC code ? */
 		if (fwrite(&size, sizeof(size), 1, file) != 1 ||
 			fwrite(data, size, 1, file) != 1)
+		{
+			pfree(data);
 			goto error;
+		}
+		pfree(data);
 		counter++;
 	}
 
@@ -701,6 +706,9 @@ data_store(const char *filename, form_record_t callback,
 	/* Parallel (re)writing into a file haven't happen. */
 	(void) durable_rename(tmpfile, filename, PANIC);
 	elog(LOG, "[AQO] %d records stored in file %s.", counter, filename);
+
+	MemoryContextSwitchTo(old_context);
+	MemoryContextReset(AQOStorageMemCtx);
 	return 0;
 
 error:
@@ -712,6 +720,9 @@ error:
 		FreeFile(file);
 	unlink(tmpfile);
 	pfree(tmpfile);
+
+	MemoryContextSwitchTo(old_context);
+	MemoryContextReset(AQOStorageMemCtx);
 	return -1;
 }
 
@@ -936,17 +947,20 @@ aqo_queries_load(void)
 static void
 data_load(const char *filename, deform_record_t callback, void *ctx)
 {
-	FILE   *file;
-	long	i;
-	uint32	header;
-	int32	pgver;
-	long	num;
+	FILE		   *file;
+	long			i;
+	uint32			header;
+	int32			pgver;
+	long			num;
+	MemoryContext	old_context = MemoryContextSwitchTo(AQOStorageMemCtx);
 
 	file = AllocateFile(filename, PG_BINARY_R);
 	if (file == NULL)
 	{
 		if (errno != ENOENT)
 			goto read_error;
+
+		MemoryContextSwitchTo(old_context);
 		return;
 	}
 
@@ -968,8 +982,12 @@ data_load(const char *filename, deform_record_t callback, void *ctx)
 			goto read_error;
 		data = palloc(size);
 		if (fread(data, size, 1, file) != 1)
+		{
+			pfree(data);
 			goto read_error;
+		}
 		res = callback(data, size);
+		pfree(data);
 
 		if (!res)
 		{
@@ -983,6 +1001,9 @@ data_load(const char *filename, deform_record_t callback, void *ctx)
 	FreeFile(file);
 
 	elog(LOG, "[AQO] %ld records loaded from file %s.", num, filename);
+
+	MemoryContextSwitchTo(old_context);
+	MemoryContextReset(AQOStorageMemCtx);
 	return;
 
 read_error:
@@ -998,6 +1019,9 @@ fail:
 	if (file)
 		FreeFile(file);
 	unlink(filename);
+
+	MemoryContextSwitchTo(old_context);
+	MemoryContextReset(AQOStorageMemCtx);
 }
 
 static void
