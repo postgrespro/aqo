@@ -360,8 +360,7 @@ should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
 		{
 			early_term = true;
 		}
-		if (early_term)
-			elog(NOTICE, "Early termination");
+
 		*rfactor = early_term ? RELIABILITY_MIN : RELIABILITY_MAX;
 		return true;
 	}
