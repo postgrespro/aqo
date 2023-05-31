@@ -2,6 +2,7 @@
 -- previous pass (repeated installcheck as an example).
 CREATE EXTENSION IF NOT EXISTS aqo;
 SELECT true AS success FROM aqo_reset();
+SET compute_query_id = on;
 
 CREATE TABLE aqo_test0(a int, b int, c int, d int);
 WITH RECURSIVE t(a, b, c, d)

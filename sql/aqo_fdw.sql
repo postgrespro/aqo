@@ -7,6 +7,7 @@
 CREATE EXTENSION IF NOT EXISTS aqo;
 CREATE EXTENSION IF NOT EXISTS postgres_fdw;
 SELECT true AS success FROM aqo_reset();
+SET compute_query_id = on;
 
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'true'; -- show AQO info for each node and entire query.

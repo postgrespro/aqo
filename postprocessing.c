@@ -314,7 +314,7 @@ should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
 		if (ctx->learn && nrows > predicted * 1.2)
 		{
 			/* This node s*/
-			if (aqo_show_details)
+			if (aqo_show_details && compute_query_id != COMPUTE_QUERY_ID_REGRESS)
 				elog(NOTICE,
 					 "[AQO] Learn on a plan node ("UINT64_FORMAT", %d), "
 					"predicted rows: %.0lf, updated prediction: %.0lf",
@@ -330,7 +330,8 @@ should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
 		{
 			/* This is much more reliable data. So we can correct our prediction. */
 			if (ctx->learn && aqo_show_details &&
-				fabs(nrows - predicted) / predicted > 0.2)
+				fabs(nrows - predicted) / predicted > 0.2 &&
+				compute_query_id != COMPUTE_QUERY_ID_REGRESS)
 				elog(NOTICE,
 					 "[AQO] Learn on a finished plan node ("UINT64_FORMAT", %d), "
 					 "predicted rows: %.0lf, updated prediction: %.0lf",
@@ -985,7 +986,7 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 		(*aqo_ExplainOnePlan_next)(plannedstmt, into, es, queryString,
 									 params, planduration, queryEnv);
 
-	if (IsQueryDisabled() || !aqo_show_details)
+	if (IsQueryDisabled() || !aqo_show_details || compute_query_id == COMPUTE_QUERY_ID_REGRESS)
 		return;
 
 	/* Report to user about aqo state only in verbose mode */
@@ -1022,7 +1023,7 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 	 */
 	if (aqo_mode != AQO_MODE_DISABLED || force_collect_stat)
 	{
-		if (aqo_show_hash)
+		if (aqo_show_hash && compute_query_id != COMPUTE_QUERY_ID_REGRESS)
 			ExplainPropertyInteger("Query hash", NULL,
 									query_context.query_hash, es);
 		ExplainPropertyInteger("JOINS", NULL, njoins, es);
@@ -1046,7 +1047,7 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan)
 	if ((aqo_node = get_aqo_plan_node(plan, false)) == NULL)
 		return;
 
-	if (!aqo_show_details || !ps)
+	if (!aqo_show_details || !ps || compute_query_id == COMPUTE_QUERY_ID_REGRESS)
 		goto explain_end;
 
 	if (!ps->instrument)
@@ -1092,7 +1093,7 @@ explain_print:
 
 explain_end:
 	/* XXX: Do we really have situations when the plan is a NULL pointer? */
-	if (plan && aqo_show_hash)
+	if (plan && aqo_show_hash && compute_query_id != COMPUTE_QUERY_ID_REGRESS)
 		appendStringInfo(es->str, ", fss=%d", aqo_node->fss);
 }
 
