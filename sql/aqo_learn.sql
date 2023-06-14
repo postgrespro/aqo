@@ -1,5 +1,8 @@
 CREATE EXTENSION IF NOT EXISTS aqo;
 SELECT true AS success FROM aqo_reset();
+SET compute_query_id = auto;
+SET aqo.show_hash = 'off';
+SET aqo.show_details = 'off';
 
 -- The function just copied from stats_ext.sql
 create function check_estimated_rows(text) returns table (estimated int, actual int)

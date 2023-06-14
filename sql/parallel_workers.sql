@@ -3,6 +3,9 @@
 
 CREATE EXTENSION IF NOT EXISTS aqo;
 SELECT true AS success FROM aqo_reset();
+SET compute_query_id = auto;
+SET aqo.show_hash = 'off';
+SET aqo.show_details = 'off';
 
 -- Utility tool. Allow to filter system-dependent strings from explain output.
 CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
@@ -14,7 +17,6 @@ END;
 $$ LANGUAGE PLPGSQL;
 
 SET aqo.mode = 'learn';
-SET aqo.show_details = true;
 
 -- Be generous with a number parallel workers to test the machinery
 SET max_parallel_workers = 64;

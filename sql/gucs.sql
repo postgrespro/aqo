@@ -2,6 +2,7 @@
 CREATE EXTENSION IF NOT EXISTS aqo;
 SELECT true AS success FROM aqo_reset();
 
+
 -- Utility tool. Allow to filter system-dependent strings from an explain output.
 CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
 BEGIN
@@ -12,8 +13,8 @@ END;
 $$ LANGUAGE PLPGSQL;
 
 SET aqo.mode = 'learn';
-SET aqo.show_details = true;
 SET compute_query_id = 'auto';
+SET aqo.show_details = 'off';
 
 CREATE TABLE t(x int);
 INSERT INTO t (x) (SELECT * FROM generate_series(1, 100) AS gs);

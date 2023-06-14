@@ -21,12 +21,15 @@ END; $$;
 -- Preliminaries
 CREATE EXTENSION IF NOT EXISTS aqo;
 SELECT true AS success FROM aqo_reset();
+SET compute_query_id = auto;
+SET aqo.show_hash = 'off';
 
 CREATE TABLE t AS SELECT * FROM generate_series(1,50) AS x;
 ANALYZE t;
 DELETE FROM t WHERE x > 5; -- Force optimizer to make overestimated prediction.
 
 SET aqo.mode = 'learn';
+SET aqo.show_details = 'off';
 SET aqo.show_details = 'off';
 SET aqo.learn_statement_timeout = 'on';
 

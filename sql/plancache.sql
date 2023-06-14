@@ -2,10 +2,11 @@
 
 CREATE EXTENSION IF NOT EXISTS aqo;
 SELECT true AS success FROM aqo_reset();
+SET compute_query_id = auto;
+SET aqo.show_hash = 'off';
+SET aqo.show_details = 'off';
 
 SET aqo.mode = 'intelligent';
-SET aqo.show_details = 'on';
-SET aqo.show_hash = 'off';
 
 CREATE TABLE test AS SELECT x FROM generate_series(1,10) AS x;
 ANALYZE test;

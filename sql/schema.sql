@@ -12,6 +12,9 @@ SET search_path TO test1, public;
 CREATE EXTENSION aqo;
 SELECT true AS success FROM aqo_reset();
 SET aqo.mode = 'intelligent';
+SET compute_query_id = auto;
+SET aqo.show_hash = 'off';
+SET aqo.show_details = 'off';
 
 CREATE TABLE test (id SERIAL, data TEXT);
 INSERT INTO test (data) VALUES ('string');

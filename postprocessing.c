@@ -314,7 +314,7 @@ should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
 		if (ctx->learn && nrows > predicted * 1.2)
 		{
 			/* This node s*/
-			if (aqo_show_details && compute_query_id != COMPUTE_QUERY_ID_REGRESS)
+			if (aqo_show_details && aqo_debug_print)
 				elog(NOTICE,
 					 "[AQO] Learn on a plan node ("UINT64_FORMAT", %d), "
 					"predicted rows: %.0lf, updated prediction: %.0lf",
@@ -331,7 +331,7 @@ should_learn(PlanState *ps, AQOPlanNode *node, aqo_obj_stat *ctx,
 			/* This is much more reliable data. So we can correct our prediction. */
 			if (ctx->learn && aqo_show_details &&
 				fabs(nrows - predicted) / predicted > 0.2 &&
-				compute_query_id != COMPUTE_QUERY_ID_REGRESS)
+				aqo_debug_print)
 				elog(NOTICE,
 					 "[AQO] Learn on a finished plan node ("UINT64_FORMAT", %d), "
 					 "predicted rows: %.0lf, updated prediction: %.0lf",
@@ -631,11 +631,13 @@ aqo_timeout_handler(void)
 	ctx.learn = query_context.learn_aqo;
 	ctx.isTimedOut = true;
 
-	if (aqo_statement_timeout == 0)
-		elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data.");
-	else
-		elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data. Timeout is "INT64_FORMAT, max_timeout_value);
-
+	if(aqo_debug_print)
+	{
+		if (aqo_statement_timeout == 0)
+			elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data.");
+		else
+			elog(NOTICE, "[AQO] Time limit for execution of the statement was expired. AQO tried to learn on partial data. Timeout is "INT64_FORMAT, max_timeout_value);
+	}
 	learnOnPlanState(timeoutCtl.queryDesc->planstate, (void *) &ctx);
 	MemoryContextSwitchTo(oldctx);
 }
@@ -648,7 +650,7 @@ increase_smart_timeout()
 {
 	int64 smart_timeout_fin_time = (query_context.smart_timeout + 1) * pow(growth_rate, query_context.count_increase_timeout);
 
-	if (query_context.smart_timeout == max_timeout_value && !update_query_timeout(query_context.query_hash, smart_timeout_fin_time))
+	if (query_context.smart_timeout == max_timeout_value && !update_query_timeout(query_context.query_hash, smart_timeout_fin_time) && aqo_debug_print)
 		elog(NOTICE, "[AQO] Timeout is not updated!");
 
 	return smart_timeout_fin_time;
@@ -827,7 +829,8 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 			if ( aqo_learn_statement_timeout && aqo_statement_timeout > 0 && error >= 0.1)
 			{
 				int64 fintime = increase_smart_timeout();
-				elog(NOTICE, "[AQO] Time limit for execution of the statement was increased. Current timeout is "UINT64_FORMAT, fintime);
+				if (aqo_debug_print)
+					elog(NOTICE, "[AQO] Time limit for execution of the statement was increased. Current timeout is "UINT64_FORMAT, fintime);
 			}
 
 			pfree(stat);

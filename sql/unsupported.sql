@@ -1,5 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS aqo;
 SELECT true AS success FROM aqo_reset();
+SET compute_query_id = auto;
+SET aqo.show_hash = 'off';
 
 -- Utility tool. Allow to filter system-dependent strings from an explain output.
 CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
@@ -11,7 +13,6 @@ END;
 $$ LANGUAGE PLPGSQL;
 
 SET aqo.mode = 'learn';
-SET aqo.show_details = 'on';
 
 DROP TABLE IF EXISTS t;
 CREATE TABLE t AS SELECT (gs.* / 50) AS x FROM generate_series(1,1000) AS gs;

@@ -48,6 +48,7 @@ int 	aqo_statement_timeout;
 bool	aqo_show_hash;
 bool	aqo_show_details;
 bool	change_flex_timeout;
+bool	aqo_debug_print;
 
 /* GUC variables */
 static const struct config_enum_entry format_options[] = {
@@ -307,6 +308,17 @@ _PG_init(void)
 							 NULL,
 							 &aqo_predict_with_few_neighbors,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("aqo.debug_print",
+							"Print NOTICE level warnings to logfile",
+							 NULL,
+							 &aqo_debug_print,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,
