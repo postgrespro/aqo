@@ -6,6 +6,7 @@ SELECT true AS success FROM aqo_reset();
  t
 (1 row)
 
+SET aqo.show_details = on;
 CREATE TABLE aqo_test0(a int, b int, c int, d int);
 WITH RECURSIVE t(a, b, c, d)
 AS (
@@ -70,9 +71,13 @@ WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
                   QUERY PLAN                   
 -----------------------------------------------
  Index Scan using aqo_test0_idx_a on aqo_test0
+   AQO: rows=3
    Index Cond: (a < 3)
    Filter: ((b < 3) AND (c < 3) AND (d < 3))
-(3 rows)
+ Using aqo: true
+ AQO mode: FORCED
+ JOINS: 0
+(7 rows)
 
 EXPLAIN (COSTS FALSE)
 SELECT * FROM aqo_test0
@@ -80,12 +85,103 @@ WHERE a < 5 AND b < 5 AND c < 5 AND d < 5;
                   QUERY PLAN                   
 -----------------------------------------------
  Index Scan using aqo_test0_idx_a on aqo_test0
+   AQO: rows=5
    Index Cond: (a < 5)
    Filter: ((b < 5) AND (c < 5) AND (d < 5))
-(3 rows)
+ Using aqo: true
+ AQO mode: FORCED
+ JOINS: 0
+(7 rows)
+
+SET aqo.mode = 'forced_controlled';
+CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
+WHERE a < 10 AND b < 10 AND c < 10;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+    10
+(1 row)
+
+DROP TABLE tmp1;
+-- Not predict
+EXPLAIN (COSTS FALSE)
+SELECT * FROM aqo_test0
+WHERE a < 10 AND b < 10 AND c < 10;
+                  QUERY PLAN                   
+-----------------------------------------------
+ Index Scan using aqo_test0_idx_a on aqo_test0
+   AQO not used
+   Index Cond: (a < 10)
+   Filter: ((b < 10) AND (c < 10))
+ Using aqo: true
+ AQO mode: FORCED_CONTROLLED
+ JOINS: 0
+(7 rows)
+
+SET aqo.mode = 'forced';
+CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
+WHERE a < 0 AND b < 0 AND c < 0;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+     0
+(1 row)
+
+DROP TABLE tmp1;
+SET aqo.mode = 'forced_controlled';
+CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
+WHERE a < 10 AND b < 10 AND c < 10;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+    10
+(1 row)
+
+DROP TABLE tmp1;
+-- Predict
+EXPLAIN (COSTS FALSE)
+SELECT * FROM aqo_test0
+WHERE a < 10 AND b < 10 AND c < 10;
+                  QUERY PLAN                   
+-----------------------------------------------
+ Index Scan using aqo_test0_idx_a on aqo_test0
+   AQO: rows=10
+   Index Cond: (a < 10)
+   Filter: ((b < 10) AND (c < 10))
+ Using aqo: true
+ AQO mode: FORCED_CONTROLLED
+ JOINS: 0
+(7 rows)
+
+SET aqo.mode = 'forced_frozen';
+-- Not learn
+CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
+WHERE a < 20 AND b < 20 AND c < 20;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+    20
+(1 row)
+
+DROP TABLE tmp1;
+-- Predict approximately 9 (interpolation between 1 and 10)
+EXPLAIN (COSTS FALSE)
+SELECT * FROM aqo_test0
+WHERE a < 20 AND b < 20 AND c < 20;
+                  QUERY PLAN                   
+-----------------------------------------------
+ Index Scan using aqo_test0_idx_a on aqo_test0
+   AQO: rows=9
+   Index Cond: (a < 20)
+   Filter: ((b < 20) AND (c < 20))
+ Using aqo: true
+ AQO mode: FORCED_FROZEN
+ JOINS: 0
+(7 rows)
 
 DROP INDEX aqo_test0_idx_a;
 DROP TABLE aqo_test0;
 DROP INDEX aqo_test1_idx_a;
 DROP TABLE aqo_test1;
+RESET aqo.show_details;
 DROP EXTENSION aqo;

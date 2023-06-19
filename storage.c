@@ -1631,6 +1631,25 @@ _fill_knn_data(const DataEntry *entry, List **reloids)
 }
 
 /*
+ * Return TRUE when aqo_data contains a row
+ * for the given feature space and subspace.
+ */
+bool
+aqo_data_exist(uint64 fs, int fss)
+{
+	bool		found;
+	data_key	key = {.fs = fs, .fss = fss};
+
+	dsa_init();
+
+	LWLockAcquire(&aqo_state->data_lock, LW_SHARED);
+	hash_search(data_htab, &key, HASH_FIND, &found);
+	LWLockRelease(&aqo_state->data_lock);
+
+	return found;
+}
+
+/*
  * By given feature space and subspace, build kNN data structure.
  *
  * If wideSearch is true - make seqscan on the hash table to see for relevant

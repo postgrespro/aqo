@@ -465,6 +465,14 @@ learnOnPlanState(PlanState *p, void *context)
 	else if (!ctx->learn)
 		return true;
 
+	if (!query_context.adding_fss &&
+		!aqo_data_exist(query_context.fspace_hash, aqo_node->fss))
+		/*
+		 * Skip the node if it does not exist in aqo_data
+		 * and do not need to be added.
+		 */
+		goto end;
+
 	/*
 	 * Need learn.
 	 */
@@ -998,6 +1006,12 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 		break;
 	case AQO_MODE_FORCED:
 		ExplainPropertyText("AQO mode", "FORCED", es);
+		break;
+	case AQO_MODE_FORCED_CONTROLLED:
+		ExplainPropertyText("AQO mode", "FORCED_CONTROLLED", es);
+		break;
+	case AQO_MODE_FORCED_FROZEN:
+		ExplainPropertyText("AQO mode", "FORCED_FROZEN", es);
 		break;
 	case AQO_MODE_CONTROLLED:
 		ExplainPropertyText("AQO mode", "CONTROLLED", es);

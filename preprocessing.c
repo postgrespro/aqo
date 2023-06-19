@@ -176,6 +176,7 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 		{
 			case AQO_MODE_INTELLIGENT:
 				query_context.adding_query = true;
+				query_context.adding_fss = true;
 				query_context.learn_aqo = true;
 				query_context.use_aqo = false;
 				query_context.auto_tuning = true;
@@ -183,7 +184,26 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 				break;
 			case AQO_MODE_FORCED:
 				query_context.adding_query = false;
+				query_context.adding_fss = true;
 				query_context.learn_aqo = true;
+				query_context.use_aqo = true;
+				query_context.auto_tuning = false;
+				query_context.fspace_hash = 0; /* Use common feature space */
+				query_context.collect_stat = false;
+				break;
+			case AQO_MODE_FORCED_CONTROLLED:
+				query_context.adding_query = false;
+				query_context.adding_fss = false;
+				query_context.learn_aqo = true;
+				query_context.use_aqo = true;
+				query_context.auto_tuning = false;
+				query_context.fspace_hash = 0; /* Use common feature space */
+				query_context.collect_stat = false;
+				break;
+			case AQO_MODE_FORCED_FROZEN:
+				query_context.adding_query = false;
+				query_context.adding_fss = false;
+				query_context.learn_aqo = false;
 				query_context.use_aqo = true;
 				query_context.auto_tuning = false;
 				query_context.fspace_hash = 0; /* Use common feature space */
@@ -196,6 +216,7 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 				 * for this query.
 				 */
 				query_context.adding_query = false;
+				query_context.adding_fss = true;
 				query_context.learn_aqo = false;
 				query_context.use_aqo = false;
 				query_context.auto_tuning = false;
@@ -203,6 +224,7 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 				break;
 			case AQO_MODE_LEARN:
 				query_context.adding_query = true;
+				query_context.adding_fss = true;
 				query_context.learn_aqo = true;
 				query_context.use_aqo = true;
 				query_context.auto_tuning = false;
@@ -222,6 +244,7 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 	else /* Query class exists in a ML knowledge base. */
 	{
 		query_context.adding_query = false;
+		query_context.adding_fss = true;
 
 		/* Other query_context fields filled in the find_query() routine. */
 
@@ -243,6 +266,7 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 			 * In this mode we will suppress all writings to the knowledge base.
 			 * AQO will be used for all known queries, if it is not suppressed.
 			 */
+			query_context.adding_fss = false;
 			query_context.learn_aqo = false;
 			query_context.auto_tuning = false;
 			query_context.collect_stat = false;
@@ -254,6 +278,22 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 			 * suppressed manually) and collect stats.
 			 */
 			query_context.collect_stat = true;
+			break;
+
+		case AQO_MODE_FORCED_CONTROLLED:
+			/*
+			 * AQO will be learned for all known feature sub spaces.
+			 */
+			query_context.adding_fss = false;
+			break;
+
+		case AQO_MODE_FORCED_FROZEN:
+			/*
+			 * In this mode we will suppress all writings to the knowledge base.
+			 * AQO will be used for all known feature sub spaces.
+			 */
+			query_context.adding_fss = false;
+			query_context.learn_aqo = false;
 			break;
 
 		case AQO_MODE_INTELLIGENT:

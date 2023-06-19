@@ -142,6 +142,7 @@ extern bool aqo_qtext_store(uint64 queryid, const char *query_string);
 extern void aqo_qtexts_flush(void);
 extern void aqo_qtexts_load(void);
 
+extern bool aqo_data_exist(uint64 fs, int fss);
 extern bool aqo_data_store(uint64 fs, int fss, AqoDataArgs *data,
 						   List *reloids);
 extern bool load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,

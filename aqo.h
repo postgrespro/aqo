@@ -155,6 +155,10 @@ typedef enum
 	AQO_MODE_INTELLIGENT,
 	/* Treats new query types as linked to the common feature space */
 	AQO_MODE_FORCED,
+	/* Like FORCED, but learn only on old feature sub spaces */
+	AQO_MODE_FORCED_CONTROLLED,
+	/* Like FORCED, but use old knowledge without learning */
+	AQO_MODE_FORCED_FROZEN,
 	/* New query types are not linked with any feature space */
 	AQO_MODE_CONTROLLED,
 	/* Creates new feature space for each query type without auto-tuning */
@@ -183,6 +187,8 @@ typedef struct QueryContextData
 	bool		auto_tuning;
 	bool		collect_stat;
 	bool		adding_query;
+	/* Add new fss in learn phase, otherwise learn only on existing fss */
+	bool		adding_fss;
 	bool		explain_only;
 
 	/*

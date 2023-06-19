@@ -53,6 +53,8 @@ bool	change_flex_timeout;
 static const struct config_enum_entry format_options[] = {
 	{"intelligent", AQO_MODE_INTELLIGENT, false},
 	{"forced", AQO_MODE_FORCED, false},
+	{"forced_controlled", AQO_MODE_FORCED_CONTROLLED, false},
+	{"forced_frozen", AQO_MODE_FORCED_FROZEN, false},
 	{"controlled", AQO_MODE_CONTROLLED, false},
 	{"learn", AQO_MODE_LEARN, false},
 	{"frozen", AQO_MODE_FROZEN, false},
