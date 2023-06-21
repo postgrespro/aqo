@@ -71,7 +71,10 @@ List *cur_classes = NIL;
 
 int aqo_join_threshold = 3;
 
+bool aqo_learn_statement_timeout_enable = false;
+
 static planner_hook_type	aqo_planner_next = NULL;
+static post_parse_analyze_hook_type	aqo_post_parse_analyze_hook = NULL;
 
 static void disable_aqo_for_query(void);
 static bool isQueryUsingSystemRelation(Query *query);
@@ -481,9 +484,26 @@ isQueryUsingSystemRelation_walker(Node *node, void *context)
 								  context);
 }
 
+static void
+aqo_post_parse_analyze(ParseState *pstate, Query *query)
+{
+	aqo_learn_statement_timeout_enable = false;
+	/*
+	 * Enable learn_statement_timeout for
+	 * the top level SELECT statement only.
+	 */
+	if (query->commandType == CMD_SELECT)
+		aqo_learn_statement_timeout_enable = aqo_learn_statement_timeout;
+
+	if (aqo_post_parse_analyze_hook)
+		aqo_post_parse_analyze_hook(pstate, query);
+}
+
 void
 aqo_preprocessing_init(void)
 {
 	aqo_planner_next	= planner_hook ? planner_hook : standard_planner;
 	planner_hook		= aqo_planner;
+	aqo_post_parse_analyze_hook = post_parse_analyze_hook;
+	post_parse_analyze_hook = aqo_post_parse_analyze;
 }
