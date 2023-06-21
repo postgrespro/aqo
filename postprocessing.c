@@ -22,6 +22,7 @@
 #include "optimizer/optimizer.h"
 #include "postgres_fdw.h"
 #include "utils/queryenvironment.h"
+#include "miscadmin.h"
 
 #include "aqo.h"
 #include "hash.h"
@@ -628,8 +629,12 @@ aqo_timeout_handler(void)
 	MemoryContext oldctx = MemoryContextSwitchTo(AQOLearnMemCtx);
 	aqo_obj_stat ctx = {NIL, NIL, NIL, false, false};
 
-	if (!timeoutCtl.queryDesc || !ExtractFromQueryEnv(timeoutCtl.queryDesc))
+	if (CritSectionCount > 0 || !timeoutCtl.queryDesc ||
+		!ExtractFromQueryEnv(timeoutCtl.queryDesc))
+	{
+		MemoryContextSwitchTo(oldctx);
 		return;
+	}
 
 	/* Now we can analyze execution state of the query. */
 
@@ -664,7 +669,7 @@ set_timeout_if_need(QueryDesc *queryDesc)
 {
 	int64 fintime = (int64) get_timeout_finish_time(STATEMENT_TIMEOUT)-1;
 
-	if (aqo_learn_statement_timeout && aqo_statement_timeout > 0)
+	if (aqo_learn_statement_timeout_enable && aqo_statement_timeout > 0)
 	{
 		max_timeout_value = Min(query_context.smart_timeout, (int64) aqo_statement_timeout);
 		if (max_timeout_value > fintime)
@@ -684,7 +689,7 @@ set_timeout_if_need(QueryDesc *queryDesc)
 		*/
 		return false;
 
-	if (!get_timeout_active(STATEMENT_TIMEOUT) || !aqo_learn_statement_timeout)
+	if (!get_timeout_active(STATEMENT_TIMEOUT) || !aqo_learn_statement_timeout_enable)
 		return false;
 
 	if (!ExtractFromQueryEnv(queryDesc))
@@ -829,7 +834,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 
 			error = stat->est_error_aqo[stat->cur_stat_slot_aqo-1] - cardinality_sum_errors/(1 + cardinality_num_objects);
 
-			if ( aqo_learn_statement_timeout && aqo_statement_timeout > 0 && error >= 0.1)
+			if ( aqo_learn_statement_timeout_enable && aqo_statement_timeout > 0 && error >= 0.1)
 			{
 				int64 fintime = increase_smart_timeout();
 				elog(NOTICE, "[AQO] Time limit for execution of the statement was increased. Current timeout is "UINT64_FORMAT, fintime);
