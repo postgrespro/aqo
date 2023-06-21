@@ -172,6 +172,7 @@ extern bool aqo_show_details;
 extern int aqo_join_threshold;
 extern bool use_wide_search;
 extern bool aqo_learn_statement_timeout;
+extern bool aqo_learn_statement_timeout_enable;
 
 /* Parameters for current query */
 typedef struct QueryContextData
