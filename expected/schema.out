@@ -16,6 +16,7 @@ SELECT true AS success FROM aqo_reset();
  t
 (1 row)
 
+SET aqo.use = 'advanced';
 SET aqo.mode = 'intelligent';
 CREATE TABLE test (id SERIAL, data TEXT);
 INSERT INTO test (data) VALUES ('string');

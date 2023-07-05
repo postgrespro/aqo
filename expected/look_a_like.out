@@ -7,6 +7,7 @@ SELECT true AS success FROM aqo_reset();
 (1 row)
 
 SET aqo.wide_search = 'on';
+SET aqo.use = 'advanced';
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
 set aqo.show_hash = 'off';
@@ -55,9 +56,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
          Filter: (b.y1 = 5)
          Rows Removed by Filter: 900
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(16 rows)
+(17 rows)
 
 SELECT str AS result
 FROM expln('
@@ -82,9 +84,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                Filter: ((a.x1 = 5) AND (a.x2 = 5))
                Rows Removed by Filter: 90
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(19 rows)
+(20 rows)
 
 SELECT str AS result
 FROM expln('
@@ -107,9 +110,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                Filter: ((a.x1 < 5) AND (a.x2 < 5))
                Rows Removed by Filter: 50
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(17 rows)
+(18 rows)
 
 --query contains nodes that have already been predicted
 SELECT str AS result
@@ -133,9 +137,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                Filter: ((a.x1 < 10) AND (a.x2 < 5))
                Rows Removed by Filter: 50
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(17 rows)
+(18 rows)
 
 SELECT str AS result
 FROM expln('
@@ -158,9 +163,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                Filter: ((a.x1 > 2) AND (a.x2 > 2))
                Rows Removed by Filter: 30
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(17 rows)
+(18 rows)
 
 SELECT str AS result
 FROM expln('
@@ -183,9 +189,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                Filter: ((a.x1 > 5) AND (a.x2 > 5) AND (a.x3 < 10))
                Rows Removed by Filter: 60
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(17 rows)
+(18 rows)
 
 SELECT str AS result
 FROM expln('
@@ -208,9 +215,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                Filter: ((a.x1 < 5) AND (a.x2 < 5) AND (a.x3 < 10))
                Rows Removed by Filter: 50
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(17 rows)
+(18 rows)
 
 --query contains nodes that have already been predicted
 SELECT str AS result
@@ -234,9 +242,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                Filter: ((a.x1 < 5) AND (a.x2 < 4) AND (a.x3 < 5))
                Rows Removed by Filter: 60
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(17 rows)
+(18 rows)
 
 SELECT str AS result
 FROM expln('
@@ -264,9 +273,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                      AQO: rows=1000, error=0%
                      Output: b.y1, b.y2, b.y3
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(22 rows)
+(23 rows)
 
 --query contains nodes that have already been predicted
 SELECT str AS result
@@ -295,9 +305,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                      AQO: rows=1000, error=0%
                      Output: b.y1, b.y2, b.y3
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(22 rows)
+(23 rows)
 
 SELECT str AS result
 FROM expln('
@@ -325,9 +336,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                      AQO: rows=1000, error=0%
                      Output: b.y1, b.y2, b.y3
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(22 rows)
+(23 rows)
 
 SELECT str AS result
 FROM expln('
@@ -355,9 +367,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                      AQO: rows=1000, error=0%
                      Output: b.y1, b.y2, b.y3
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(22 rows)
+(23 rows)
 
 SELECT str AS result
 FROM expln('
@@ -385,9 +398,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                      AQO: rows=1000, error=0%
                      Output: b.y1, b.y2, b.y3
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(22 rows)
+(23 rows)
 
 SELECT str AS result
 FROM expln('
@@ -415,9 +429,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                      AQO: rows=1000, error=0%
                      Output: b.y1, b.y2, b.y3
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(22 rows)
+(23 rows)
 
 SELECT str AS result
 FROM expln('
@@ -447,9 +462,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                      Filter: (b.y1 > 2)
                      Rows Removed by Filter: 300
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(24 rows)
+(25 rows)
 
 --query contains nodes that have already been predicted
 SELECT str AS result
@@ -480,9 +496,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                      Filter: (b.y1 > 2)
                      Rows Removed by Filter: 300
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(24 rows)
+(25 rows)
 
 CREATE TABLE c (z1 int, z2 int, z3 int);
 INSERT INTO c (z1, z2, z3) SELECT mod(ival + 1,10), mod(ival + 1,10), mod(ival + 1,10) FROM generate_series(1,1000) As ival;
@@ -515,9 +532,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                AQO: rows=1000
                Output: b.y1, b.y2, b.y3
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 2
-(24 rows)
+(25 rows)
 
 SELECT str AS result
 FROM expln('
@@ -547,9 +565,10 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
                            AQO: rows=100, error=0%
                            Output: a.x1, a.x2, a.x3
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 2
-(24 rows)
+(25 rows)
 
 RESET aqo.wide_search;
 DROP EXTENSION aqo CASCADE;

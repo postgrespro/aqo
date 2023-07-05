@@ -25,6 +25,7 @@ AS (
 ) INSERT INTO aqo_test1 (SELECT * FROM t);
 CREATE INDEX aqo_test1_idx_a ON aqo_test1 (a);
 ANALYZE aqo_test1;
+SET aqo.use = 'advanced';
 SET aqo.mode = 'controlled';
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -77,7 +78,7 @@ SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
      0
 (1 row)
 
-SET aqo.mode = 'disabled';
+SET aqo.use = 'off';
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
 SELECT count(*) FROM tmp1;
@@ -129,6 +130,7 @@ SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
      0
 (1 row)
 
+SET aqo.use = 'advanced';
 SET aqo.mode = 'intelligent';
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -198,7 +200,7 @@ SELECT count(*) FROM aqo_queries WHERE queryid <> fs; -- Should be zero
      0
 (1 row)
 
-SET aqo.mode = 'disabled';
+SET aqo.use = 'off';
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
                                     QUERY PLAN                                    

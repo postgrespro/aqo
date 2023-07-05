@@ -2,7 +2,7 @@
 CREATE EXTENSION IF NOT EXISTS aqo;
 SELECT true AS success FROM aqo_reset();
 
-SET aqo.mode = 'disabled';
+SET aqo.use = 'off';
 SET aqo.force_collect_stat = 'on';
 
 --

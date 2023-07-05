@@ -5,6 +5,7 @@ SELECT true AS success FROM aqo_reset();
  t
 (1 row)
 
+SET aqo.use = 'advanced';
 SET aqo.mode = 'learn';
 DROP TABLE IF EXISTS a;
 NOTICE:  table "a" does not exist, skipping

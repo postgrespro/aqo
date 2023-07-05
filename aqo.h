@@ -148,27 +148,46 @@
 	#error "Cannot build aqo with PostgreSQL version lower than 9.6.0"
 #endif
 
-/* Strategy of determining feature space for new queries. */
+/* Strategy of determining feature space for queries. */
 typedef enum
 {
-	/* Creates new feature space for each query type with auto-tuning enabled */
-	AQO_MODE_INTELLIGENT,
-	/* Treats new query types as linked to the common feature space */
-	AQO_MODE_FORCED,
-	/* Like FORCED, but learn only on old feature sub spaces */
-	AQO_MODE_FORCED_CONTROLLED,
-	/* Like FORCED, but use old knowledge without learning */
-	AQO_MODE_FORCED_FROZEN,
-	/* New query types are not linked with any feature space */
-	AQO_MODE_CONTROLLED,
-	/* Creates new feature space for each query type without auto-tuning */
-	AQO_MODE_LEARN,
-	/* Use only current AQO estimations, without learning or tuning */
-	AQO_MODE_FROZEN,
 	/* Aqo is disabled for all queries */
-	AQO_MODE_DISABLED,
+	AQO_USE_OFF,
+
+	/* Treats query types as linked to the common feature space (FORCED) */
+	AQO_USE_ON,
+
+	/* Creates new feature space for each query type (LEARN) */
+	AQO_USE_ADVANCED,
+}	AQO_USE;
+
+/* Strategy of determining learn/predict routines. */
+typedef enum
+{
+	/*
+	 * When AQO_USE_ADVANCED, creates new feature space for each query type
+	 * with auto-tuning enabled.
+	 * When AQO_USE_ON, it works as LEARN mode.
+	 */
+	AQO_MODE_INTELLIGENT,
+
+	/*
+	 * Learn only on old feature sub space for AQO_USE_ON or
+	 * only on old feature space for AQO_USE_ADVANCED
+	 */
+	AQO_MODE_CONTROLLED,
+
+	/*
+	 * Creates new feature sub space and if AQO_USE_ON feature space too
+	 * for each query type without auto-tuning
+	 */
+	AQO_MODE_LEARN,
+
+	/* Use only current AQO estimations, without learning or tuning */
+	AQO_MODE_FROZEN
 }	AQO_MODE;
 
+extern int	aqo_use;
 extern int	aqo_mode;
 extern bool	force_collect_stat;
 extern bool aqo_show_hash;
@@ -176,6 +195,10 @@ extern bool aqo_show_details;
 extern int aqo_join_threshold;
 extern bool use_wide_search;
 extern bool aqo_learn_statement_timeout;
+
+#define AQO_MODE() \
+	(aqo_mode == AQO_MODE_INTELLIGENT && aqo_use != AQO_USE_ADVANCED ? \
+	 AQO_MODE_LEARN : aqo_mode)
 
 /* Parameters for current query */
 typedef struct QueryContextData

@@ -84,7 +84,7 @@ static bool
 aqoIsEnabled(Query *parse)
 {
 	if (creating_extension || !IsQueryIdEnabled() ||
-		(aqo_mode == AQO_MODE_DISABLED && !force_collect_stat) ||
+		(aqo_use == AQO_USE_OFF && !force_collect_stat) ||
 		(parse->commandType != CMD_SELECT && parse->commandType != CMD_INSERT &&
 		parse->commandType != CMD_UPDATE && parse->commandType != CMD_DELETE))
 		return false;
@@ -105,6 +105,7 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 			ParamListInfo boundParams)
 {
 	bool			query_is_stored = false;
+	bool			is_advanced = (aqo_use == AQO_USE_ADVANCED);
 	MemoryContext	oldctx;
 
 	 /*
@@ -161,7 +162,7 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 	cur_classes = lappend_uint64(cur_classes, query_context.query_hash);
 	MemoryContextSwitchTo(oldctx);
 
-	if (aqo_mode == AQO_MODE_DISABLED)
+	if (aqo_use == AQO_USE_OFF)
 	{
 		/* Skip access to a database in this mode. */
 		disable_aqo_for_query();
@@ -172,8 +173,15 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 
 	if (!query_is_stored)
 	{
-		switch (aqo_mode)
+		if (!is_advanced)
 		{
+			query_context.fspace_hash = 0; /* Use common feature space */
+			query_context.adding_query = false;
+			query_context.collect_stat = false;
+		}
+		switch (AQO_MODE())
+		{
+			/* This mode only work if aqo_set is ADVANCED */
 			case AQO_MODE_INTELLIGENT:
 				query_context.adding_query = true;
 				query_context.adding_fss = true;
@@ -182,57 +190,29 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 				query_context.auto_tuning = true;
 				query_context.collect_stat = true;
 				break;
-			case AQO_MODE_FORCED:
-				query_context.adding_query = false;
-				query_context.adding_fss = true;
-				query_context.learn_aqo = true;
-				query_context.use_aqo = true;
-				query_context.auto_tuning = false;
-				query_context.fspace_hash = 0; /* Use common feature space */
-				query_context.collect_stat = false;
-				break;
-			case AQO_MODE_FORCED_CONTROLLED:
-				query_context.adding_query = false;
-				query_context.adding_fss = false;
-				query_context.learn_aqo = true;
-				query_context.use_aqo = true;
-				query_context.auto_tuning = false;
-				query_context.fspace_hash = 0; /* Use common feature space */
-				query_context.collect_stat = false;
-				break;
-			case AQO_MODE_FORCED_FROZEN:
-				query_context.adding_query = false;
-				query_context.adding_fss = false;
-				query_context.learn_aqo = false;
-				query_context.use_aqo = true;
-				query_context.auto_tuning = false;
-				query_context.fspace_hash = 0; /* Use common feature space */
-				query_context.collect_stat = false;
-				break;
 			case AQO_MODE_CONTROLLED:
-			case AQO_MODE_FROZEN:
-				/*
-				 * if query is not in the AQO knowledge base than disable AQO
-				 * for this query.
-				 */
 				query_context.adding_query = false;
-				query_context.adding_fss = true;
+				query_context.adding_fss = is_advanced;
+				query_context.learn_aqo = !is_advanced;
+				query_context.use_aqo = !is_advanced;
+				query_context.auto_tuning = false;
+				query_context.collect_stat = false;
+				break;
+			case AQO_MODE_FROZEN:
+				query_context.adding_query = false;
+				query_context.adding_fss = false;
 				query_context.learn_aqo = false;
-				query_context.use_aqo = false;
+				query_context.use_aqo = !is_advanced;
 				query_context.auto_tuning = false;
 				query_context.collect_stat = false;
 				break;
 			case AQO_MODE_LEARN:
-				query_context.adding_query = true;
+				query_context.adding_query = is_advanced;
 				query_context.adding_fss = true;
 				query_context.learn_aqo = true;
 				query_context.use_aqo = true;
 				query_context.auto_tuning = false;
 				query_context.collect_stat = true;
-				break;
-			case AQO_MODE_DISABLED:
-				/* Should never happen */
-				Assert(0);
 				break;
 			default:
 				elog(ERROR, "unrecognized mode in AQO: %d", aqo_mode);
@@ -244,9 +224,8 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 	else /* Query class exists in a ML knowledge base. */
 	{
 		query_context.adding_query = false;
-		query_context.adding_fss = true;
 
-		/* Other query_context fields filled in the find_query() routine. */
+		/* Other query_context fields filled in the aqo_queries_find() routine. */
 
 		/*
 		 * Deactivate query if no one reason exists for usage of an AQO machinery.
@@ -259,7 +238,7 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 		 * That we can do if query exists in database.
 		 * Additional preference changes, based on AQO mode.
 		 */
-		switch (aqo_mode)
+		switch (AQO_MODE())
 		{
 		case AQO_MODE_FROZEN:
 			/*
@@ -268,39 +247,35 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 			 */
 			query_context.adding_fss = false;
 			query_context.learn_aqo = false;
-			query_context.auto_tuning = false;
-			query_context.collect_stat = false;
+			if (!is_advanced)
+			{
+				query_context.auto_tuning = false;
+				query_context.collect_stat = false;
+			}
 			break;
 
 		case AQO_MODE_LEARN:
 			/*
 			 * In this mode we want to learn with incoming query (if it is not
-			 * suppressed manually) and collect stats.
+			 * suppressed manually) and collect stats in advanced mode.
 			 */
-			query_context.collect_stat = true;
+			if (is_advanced)
+				query_context.collect_stat = true;
 			break;
 
-		case AQO_MODE_FORCED_CONTROLLED:
+		case AQO_MODE_CONTROLLED:
 			/*
 			 * AQO will be learned for all known feature sub spaces.
 			 */
-			query_context.adding_fss = false;
-			break;
-
-		case AQO_MODE_FORCED_FROZEN:
-			/*
-			 * In this mode we will suppress all writings to the knowledge base.
-			 * AQO will be used for all known feature sub spaces.
-			 */
-			query_context.adding_fss = false;
-			query_context.learn_aqo = false;
+			/* TODO: Add some tests for this situation */
+			if (!is_advanced)
+			{
+				Assert(0);
+				query_context.adding_fss = false;
+			}
 			break;
 
 		case AQO_MODE_INTELLIGENT:
-		case AQO_MODE_FORCED:
-		case AQO_MODE_CONTROLLED:
-		case AQO_MODE_DISABLED:
-			/* Use preferences as set early. */
 			break;
 
 		default:

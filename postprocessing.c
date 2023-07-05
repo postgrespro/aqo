@@ -999,19 +999,29 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 	/* Report to user about aqo state only in verbose mode */
 	ExplainPropertyBool("Using aqo", query_context.use_aqo, es);
 
+	switch (aqo_use)
+	{
+	case AQO_USE_OFF:
+		ExplainPropertyText("AQO use", "OFF", es);
+		break;
+	case AQO_USE_ON:
+		ExplainPropertyText("AQO use", "ON", es);
+		break;
+	case AQO_USE_ADVANCED:
+		ExplainPropertyText("AQO use", "ADVANCED", es);
+		break;
+	default:
+		elog(ERROR, "Bad AQO use state");
+		break;
+	}
+
 	switch (aqo_mode)
 	{
 	case AQO_MODE_INTELLIGENT:
-		ExplainPropertyText("AQO mode", "INTELLIGENT", es);
-		break;
-	case AQO_MODE_FORCED:
-		ExplainPropertyText("AQO mode", "FORCED", es);
-		break;
-	case AQO_MODE_FORCED_CONTROLLED:
-		ExplainPropertyText("AQO mode", "FORCED_CONTROLLED", es);
-		break;
-	case AQO_MODE_FORCED_FROZEN:
-		ExplainPropertyText("AQO mode", "FORCED_FROZEN", es);
+		if (AQO_MODE() == AQO_MODE_LEARN)
+			ExplainPropertyText("AQO mode", "INTELLIGENT (used like LEARN because aqo.use is not 'ADVANCED')", es);
+		else
+			ExplainPropertyText("AQO mode", "INTELLIGENT", es);
 		break;
 	case AQO_MODE_CONTROLLED:
 		ExplainPropertyText("AQO mode", "CONTROLLED", es);
@@ -1022,11 +1032,8 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 	case AQO_MODE_FROZEN:
 		ExplainPropertyText("AQO mode", "FROZEN", es);
 		break;
-	case AQO_MODE_DISABLED:
-		ExplainPropertyText("AQO mode", "DISABLED", es);
-		break;
 	default:
-		elog(ERROR, "Bad AQO state");
+		elog(ERROR, "Bad AQO mode");
 		break;
 	}
 
@@ -1034,7 +1041,7 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 	 * Query class provides an user the conveniently use of the AQO
 	 * auxiliary functions.
 	 */
-	if (aqo_mode != AQO_MODE_DISABLED || force_collect_stat)
+	if (aqo_use != AQO_USE_OFF || force_collect_stat)
 	{
 		if (aqo_show_hash)
 			ExplainPropertyInteger("Query hash", NULL,

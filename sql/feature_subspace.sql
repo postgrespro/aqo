@@ -3,6 +3,7 @@
 CREATE EXTENSION IF NOT EXISTS aqo;
 SELECT true AS success FROM aqo_reset();
 
+SET aqo.use = 'advanced';
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
 

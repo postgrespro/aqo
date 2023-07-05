@@ -25,6 +25,7 @@ AS (
 ) INSERT INTO aqo_test1 (SELECT * FROM t);
 CREATE INDEX aqo_test1_idx_a ON aqo_test1 (a);
 ANALYZE aqo_test1;
+SET aqo.use = 'advanced';
 SET aqo.mode = 'controlled';
 EXPLAIN (COSTS FALSE)
 SELECT * FROM aqo_test0
@@ -46,7 +47,8 @@ WHERE a < 5 AND b < 5 AND c < 5 AND d < 5;
    Filter: ((b < 5) AND (c < 5) AND (d < 5))
 (3 rows)
 
-SET aqo.mode = 'forced';
+SET aqo.use = 'on';
+SET aqo.mode = 'learn';
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
 SELECT count(*) FROM tmp1;
@@ -75,9 +77,10 @@ WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
    Index Cond: (a < 3)
    Filter: ((b < 3) AND (c < 3) AND (d < 3))
  Using aqo: true
- AQO mode: FORCED
+ AQO use: ON
+ AQO mode: LEARN
  JOINS: 0
-(7 rows)
+(8 rows)
 
 EXPLAIN (COSTS FALSE)
 SELECT * FROM aqo_test0
@@ -89,11 +92,12 @@ WHERE a < 5 AND b < 5 AND c < 5 AND d < 5;
    Index Cond: (a < 5)
    Filter: ((b < 5) AND (c < 5) AND (d < 5))
  Using aqo: true
- AQO mode: FORCED
+ AQO use: ON
+ AQO mode: LEARN
  JOINS: 0
-(7 rows)
+(8 rows)
 
-SET aqo.mode = 'forced_controlled';
+SET aqo.mode = 'controlled';
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
 WHERE a < 10 AND b < 10 AND c < 10;
 SELECT count(*) FROM tmp1;
@@ -114,11 +118,12 @@ WHERE a < 10 AND b < 10 AND c < 10;
    Index Cond: (a < 10)
    Filter: ((b < 10) AND (c < 10))
  Using aqo: true
- AQO mode: FORCED_CONTROLLED
+ AQO use: ON
+ AQO mode: CONTROLLED
  JOINS: 0
-(7 rows)
+(8 rows)
 
-SET aqo.mode = 'forced';
+SET aqo.mode = 'learn';
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
 WHERE a < 0 AND b < 0 AND c < 0;
 SELECT count(*) FROM tmp1;
@@ -128,7 +133,7 @@ SELECT count(*) FROM tmp1;
 (1 row)
 
 DROP TABLE tmp1;
-SET aqo.mode = 'forced_controlled';
+SET aqo.mode = 'controlled';
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
 WHERE a < 10 AND b < 10 AND c < 10;
 SELECT count(*) FROM tmp1;
@@ -149,11 +154,55 @@ WHERE a < 10 AND b < 10 AND c < 10;
    Index Cond: (a < 10)
    Filter: ((b < 10) AND (c < 10))
  Using aqo: true
- AQO mode: FORCED_CONTROLLED
+ AQO use: ON
+ AQO mode: CONTROLLED
  JOINS: 0
-(7 rows)
+(8 rows)
 
-SET aqo.mode = 'forced_frozen';
+SELECT * FROM aqo_reset();
+ aqo_reset 
+-----------
+         9
+(1 row)
+
+-- Forced intelligent mode works as learn
+SET aqo.use = 'on';
+SET aqo.mode = 'intelligent';
+CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
+WHERE a < 0 AND b < 0 AND c < 0;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+     0
+(1 row)
+
+DROP TABLE tmp1;
+CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
+WHERE a < 10 AND b < 10 AND c < 10;
+SELECT count(*) FROM tmp1;
+ count 
+-------
+    10
+(1 row)
+
+DROP TABLE tmp1;
+-- Predict
+EXPLAIN (COSTS FALSE)
+SELECT * FROM aqo_test0
+WHERE a < 10 AND b < 10 AND c < 10;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Index Scan using aqo_test0_idx_a on aqo_test0
+   AQO: rows=10
+   Index Cond: (a < 10)
+   Filter: ((b < 10) AND (c < 10))
+ Using aqo: true
+ AQO use: ON
+ AQO mode: INTELLIGENT (used like LEARN because aqo.use is not 'ADVANCED')
+ JOINS: 0
+(8 rows)
+
+SET aqo.mode = 'frozen';
 -- Not learn
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
 WHERE a < 20 AND b < 20 AND c < 20;
@@ -175,9 +224,10 @@ WHERE a < 20 AND b < 20 AND c < 20;
    Index Cond: (a < 20)
    Filter: ((b < 20) AND (c < 20))
  Using aqo: true
- AQO mode: FORCED_FROZEN
+ AQO use: ON
+ AQO mode: FROZEN
  JOINS: 0
-(7 rows)
+(8 rows)
 
 DROP INDEX aqo_test0_idx_a;
 DROP TABLE aqo_test0;

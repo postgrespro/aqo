@@ -2097,7 +2097,7 @@ aqo_enable_query(PG_FUNCTION_ARGS)
 	{
 		entry->learn_aqo = true;
 		entry->use_aqo = true;
-		if (aqo_mode == AQO_MODE_INTELLIGENT)
+		if (AQO_MODE() == AQO_MODE_INTELLIGENT)
 			entry->auto_tuning = true;
 	}
 	else

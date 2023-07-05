@@ -10,7 +10,7 @@ my $node = PostgreSQL::Test::Cluster->new('test');
 $node->init;
 
 $node->append_conf('postgresql.conf', qq{
-						aqo.mode = 'disabled'
+						aqo.use = 'off'
 						aqo.force_collect_stat = 'false'
 						log_statement = 'ddl' # reduce size of logs.
 						aqo.join_threshold = 0
@@ -30,7 +30,7 @@ $node->start();
 $node->psql('postgres', "CREATE EXTENSION aqo"); # Error
 $node->append_conf('postgresql.conf', qq{
 	shared_preload_libraries = 'aqo, pg_stat_statements'
-	aqo.mode = 'disabled' # disable AQO on schema creation
+	aqo.use = 'off' # disable AQO on schema creation
 });
 $node->restart();
 $node->safe_psql('postgres', "
@@ -80,6 +80,7 @@ $node->psql('postgres', "
 		('Robinson', 34), ('Smith', 34), ('Williams', NULL);
 ");
 $node->psql('postgres', "
+	ALTER SYSTEM SET aqo.use = 'advanced';
 	ALTER SYSTEM SET aqo.mode = 'learn';
 	ALTER SYSTEM SET pg_stat_statements.track = 'all';
 	SELECT pg_reload_conf();

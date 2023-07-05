@@ -1,6 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS aqo;
 SELECT true AS success FROM aqo_reset();
 
+SET aqo.use = 'advanced';
 SET aqo.mode = 'learn';
 
 DROP TABLE IF EXISTS a;

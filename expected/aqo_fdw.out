@@ -11,6 +11,7 @@ SELECT true AS success FROM aqo_reset();
  t
 (1 row)
 
+SET aqo.use = 'advanced';
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'true'; -- show AQO info for each node and entire query.
 SET aqo.show_hash = 'false'; -- a hash value is system-depended. Ignore it.
@@ -43,9 +44,10 @@ SELECT x FROM frgn;
  Foreign Scan on frgn (actual rows=1 loops=1)
    AQO not used
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 0
-(5 rows)
+(6 rows)
 
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT x FROM frgn;
@@ -54,9 +56,10 @@ SELECT x FROM frgn;
  Foreign Scan on frgn (actual rows=1 loops=1)
    AQO: rows=1, error=0%
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 0
-(5 rows)
+(6 rows)
 
 -- Push down base filters. Use verbose mode to see filters.
 SELECT str FROM expln('
@@ -70,9 +73,10 @@ SELECT str FROM expln('
    Output: x
    Remote SQL: SELECT x FROM public.local WHERE ((x < 10))
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 0
-(7 rows)
+(8 rows)
 
 SELECT str FROM expln('
   EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
@@ -85,9 +89,10 @@ SELECT str FROM expln('
    Output: x
    Remote SQL: SELECT x FROM public.local WHERE ((x < 10))
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 0
-(7 rows)
+(8 rows)
 
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT x FROM frgn WHERE x < -10; -- AQO ignores constants
@@ -96,9 +101,10 @@ SELECT x FROM frgn WHERE x < -10; -- AQO ignores constants
  Foreign Scan on frgn (actual rows=0 loops=1)
    AQO: rows=1, error=100%
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 0
-(5 rows)
+(6 rows)
 
 -- Trivial JOIN push-down.
 SELECT str FROM expln('
@@ -119,9 +125,10 @@ SELECT str FROM expln('
          ->  Foreign Scan on frgn b (actual rows=1 loops=1)
                AQO not used
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(14 rows)
+(15 rows)
 
 -- Should learn on postgres_fdw nodes
 SELECT str FROM expln('
@@ -136,9 +143,10 @@ SELECT str FROM expln('
    Relations: (public.frgn a) INNER JOIN (public.frgn b)
    Remote SQL: SELECT r1.x, r2.x FROM (public.local r1 INNER JOIN public.local r2 ON (((r1.x = r2.x))))
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 0
-(8 rows)
+(9 rows)
 
 CREATE TABLE local_a(aid int primary key, aval text);
 CREATE TABLE local_b(bid int primary key, aid int references local_a(aid), bval text);
@@ -156,9 +164,10 @@ WHERE a.aid = b.aid AND b.bval like 'val%';
    AQO not used
    Relations: (frgn_a a) INNER JOIN (frgn_b b)
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 0
-(6 rows)
+(7 rows)
 
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT * from frgn_a AS a, frgn_b AS b
@@ -169,9 +178,10 @@ WHERE a.aid = b.aid AND b.bval like 'val%';
    AQO: rows=1000, error=0%
    Relations: (frgn_a a) INNER JOIN (frgn_b b)
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 0
-(6 rows)
+(7 rows)
 
 -- Partitioned join over foreign tables
 set enable_partitionwise_join = on;
@@ -222,9 +232,10 @@ WHERE str NOT LIKE '%Memory%';
                ->  Seq Scan on main_p2 a_3 (actual rows=38 loops=1)
                      AQO not used
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(20 rows)
+(21 rows)
 
 SELECT str AS result
 FROM expln('
@@ -252,9 +263,10 @@ WHERE str NOT LIKE '%Memory%';
                ->  Seq Scan on main_p2 a_3 (actual rows=38 loops=1)
                      AQO: rows=38, error=0%
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(20 rows)
+(21 rows)
 
 DROP TABLE main, local_main_p0, local_main_p1;
 DROP TABLE ref, local_ref_p0, local_ref_p1;
@@ -269,9 +281,10 @@ SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
    AQO not used
    Relations: (frgn a) INNER JOIN (frgn b)
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 0
-(6 rows)
+(7 rows)
 
 SELECT str FROM expln('
   EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
@@ -285,9 +298,10 @@ SELECT str FROM expln('
    Relations: (public.frgn a) INNER JOIN (public.frgn b)
    Remote SQL: SELECT r1.x, r2.x FROM (public.local r1 INNER JOIN public.local r2 ON (((r1.x < r2.x))))
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 0
-(8 rows)
+(9 rows)
 
 DROP EXTENSION aqo CASCADE;
 DROP EXTENSION postgres_fdw CASCADE;

@@ -22,6 +22,7 @@ AS (
 CREATE INDEX aqo_test2_idx_a ON aqo_test2 (a);
 ANALYZE aqo_test2;
 
+SET aqo.use = 'advanced';
 SET aqo.mode='intelligent';
 
 SELECT count(*) FROM aqo_test1 a, aqo_test2 b WHERE a.a=b.a;
@@ -202,7 +203,7 @@ SELECT aqo_data_update(1, 1, 1, '{{1}}', '{1, 1}', '{1}', '{1, 2, 3}');
 SELECT aqo_data_update(1, 1, 1, '{{1}}', '{1}', '{1, 1}', '{1, 2, 3}');
 SELECT aqo_data_update(1, 1, 1, '{{1}, {2}}', '{1}', '{1}', '{1, 2, 3}');
 
-SET aqo.mode='disabled';
+SET aqo.use = 'off';
 
 DROP EXTENSION aqo CASCADE;
 

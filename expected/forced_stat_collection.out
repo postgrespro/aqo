@@ -6,7 +6,7 @@ SELECT true AS success FROM aqo_reset();
 (1 row)
 
 \set citizens	1000
-SET aqo.mode = 'disabled';
+SET aqo.use = 'off';
 SET aqo.force_collect_stat = 'off';
 CREATE TABLE person (
     id serial PRIMARY KEY,

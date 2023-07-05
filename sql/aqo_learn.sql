@@ -42,6 +42,7 @@ AS (
 CREATE INDEX aqo_test1_idx_a ON aqo_test1 (a);
 ANALYZE aqo_test1;
 
+SET aqo.use = 'advanced';
 SET aqo.mode = 'intelligent';
 
 EXPLAIN SELECT * FROM aqo_test0

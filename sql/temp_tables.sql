@@ -2,8 +2,9 @@
 CREATE EXTENSION IF NOT EXISTS aqo;
 SELECT true AS success FROM aqo_reset();
 
-SET aqo.wide_search = 'on';
+SET aqo.use = 'advanced';
 SET aqo.mode = 'learn';
+SET aqo.wide_search = 'on';
 
 CREATE TEMP TABLE tt();
 CREATE TABLE pt();
@@ -68,7 +69,8 @@ SELECT * FROM check_estimated_rows('
 	SELECT pt.x, avg(pt.y) FROM pt,ttd  WHERE pt.x = ttd.x GROUP BY (pt.x);
 '); -- Should use AQO estimation with another temp table of the same structure
 
-SET aqo.mode = 'forced'; -- Now we use all fss records for each query
+ -- Now we use all fss records for each query
+SET aqo.use = 'on';
 DROP TABLE pt;
 SELECT true AS success FROM aqo_cleanup();
 CREATE TABLE pt AS SELECT x AS x, (x % 10) AS y FROM generate_series(1,100) AS x;

@@ -30,6 +30,7 @@ void _PG_init(void);
 #define AQO_MODULE_MAGIC	(1234)
 
 /* Strategy of determining feature space for new queries. */
+int		aqo_use = AQO_USE_OFF;
 int		aqo_mode = AQO_MODE_CONTROLLED;
 bool	force_collect_stat;
 bool	aqo_predict_with_few_neighbors;
@@ -50,15 +51,18 @@ bool	aqo_show_details;
 bool	change_flex_timeout;
 
 /* GUC variables */
-static const struct config_enum_entry format_options[] = {
+static const struct config_enum_entry use_options[] = {
+	{"off", AQO_USE_OFF, false},
+	{"on", AQO_USE_ON, false},
+	{"advanced", AQO_USE_ADVANCED, false},
+	{NULL, 0, false}
+};
+
+static const struct config_enum_entry mode_options[] = {
 	{"intelligent", AQO_MODE_INTELLIGENT, false},
-	{"forced", AQO_MODE_FORCED, false},
-	{"forced_controlled", AQO_MODE_FORCED_CONTROLLED, false},
-	{"forced_frozen", AQO_MODE_FORCED_FROZEN, false},
 	{"controlled", AQO_MODE_CONTROLLED, false},
 	{"learn", AQO_MODE_LEARN, false},
 	{"frozen", AQO_MODE_FROZEN, false},
-	{"disabled", AQO_MODE_DISABLED, false},
 	{NULL, 0, false}
 };
 
@@ -138,12 +142,25 @@ _PG_init(void)
 	 */
 	EnableQueryId();
 
+	DefineCustomEnumVariable("aqo.use",
+							 "State of aqo",
+							 NULL,
+							 &aqo_use,
+							 AQO_USE_OFF,
+							 use_options,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL
+	);
+
 	DefineCustomEnumVariable("aqo.mode",
 							 "Mode of aqo usage.",
 							 NULL,
 							 &aqo_mode,
 							 AQO_MODE_CONTROLLED,
-							 format_options,
+							 mode_options,
 							 PGC_USERSET,
 							 0,
 							 NULL,

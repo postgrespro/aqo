@@ -6,8 +6,9 @@ SELECT true AS success FROM aqo_reset();
  t
 (1 row)
 
-SET aqo.wide_search = 'on';
+SET aqo.use = 'advanced';
 SET aqo.mode = 'learn';
+SET aqo.wide_search = 'on';
 CREATE TEMP TABLE tt();
 CREATE TABLE pt();
 -- Ignore queries with the only temp tables
@@ -138,7 +139,8 @@ SELECT * FROM check_estimated_rows('
          1 |      0
 (1 row)
 
-SET aqo.mode = 'forced'; -- Now we use all fss records for each query
+ -- Now we use all fss records for each query
+SET aqo.use = 'on';
 DROP TABLE pt;
 SELECT true AS success FROM aqo_cleanup();
  success 

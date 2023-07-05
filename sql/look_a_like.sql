@@ -4,6 +4,7 @@ SELECT true AS success FROM aqo_reset();
 
 SET aqo.wide_search = 'on';
 
+SET aqo.use = 'advanced';
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
 set aqo.show_hash = 'off';

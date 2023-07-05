@@ -3,7 +3,7 @@ SELECT true AS success FROM aqo_reset();
 
 \set citizens	1000
 
-SET aqo.mode = 'disabled';
+SET aqo.use = 'off';
 SET aqo.force_collect_stat = 'off';
 
 CREATE TABLE person (

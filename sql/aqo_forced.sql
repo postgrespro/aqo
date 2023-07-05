@@ -23,6 +23,7 @@ AS (
 CREATE INDEX aqo_test1_idx_a ON aqo_test1 (a);
 ANALYZE aqo_test1;
 
+SET aqo.use = 'advanced';
 SET aqo.mode = 'controlled';
 
 EXPLAIN (COSTS FALSE)
@@ -33,7 +34,8 @@ EXPLAIN (COSTS FALSE)
 SELECT * FROM aqo_test0
 WHERE a < 5 AND b < 5 AND c < 5 AND d < 5;
 
-SET aqo.mode = 'forced';
+SET aqo.use = 'on';
+SET aqo.mode = 'learn';
 
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
@@ -53,7 +55,7 @@ EXPLAIN (COSTS FALSE)
 SELECT * FROM aqo_test0
 WHERE a < 5 AND b < 5 AND c < 5 AND d < 5;
 
-SET aqo.mode = 'forced_controlled';
+SET aqo.mode = 'controlled';
 
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
 WHERE a < 10 AND b < 10 AND c < 10;
@@ -65,14 +67,14 @@ EXPLAIN (COSTS FALSE)
 SELECT * FROM aqo_test0
 WHERE a < 10 AND b < 10 AND c < 10;
 
-SET aqo.mode = 'forced';
+SET aqo.mode = 'learn';
 
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
 WHERE a < 0 AND b < 0 AND c < 0;
 SELECT count(*) FROM tmp1;
 DROP TABLE tmp1;
 
-SET aqo.mode = 'forced_controlled';
+SET aqo.mode = 'controlled';
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
 WHERE a < 10 AND b < 10 AND c < 10;
 SELECT count(*) FROM tmp1;
@@ -83,7 +85,28 @@ EXPLAIN (COSTS FALSE)
 SELECT * FROM aqo_test0
 WHERE a < 10 AND b < 10 AND c < 10;
 
-SET aqo.mode = 'forced_frozen';
+SELECT * FROM aqo_reset();
+
+-- Forced intelligent mode works as learn
+SET aqo.use = 'on';
+SET aqo.mode = 'intelligent';
+
+CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
+WHERE a < 0 AND b < 0 AND c < 0;
+SELECT count(*) FROM tmp1;
+DROP TABLE tmp1;
+
+CREATE TABLE tmp1 AS SELECT * FROM aqo_test0
+WHERE a < 10 AND b < 10 AND c < 10;
+SELECT count(*) FROM tmp1;
+DROP TABLE tmp1;
+
+-- Predict
+EXPLAIN (COSTS FALSE)
+SELECT * FROM aqo_test0
+WHERE a < 10 AND b < 10 AND c < 10;
+
+SET aqo.mode = 'frozen';
 
 -- Not learn
 CREATE TABLE tmp1 AS SELECT * FROM aqo_test0

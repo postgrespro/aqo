@@ -11,6 +11,7 @@ BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
 
+SET aqo.use = 'advanced';
 SET aqo.mode = 'learn';
 SET aqo.show_details = true;
 SET compute_query_id = 'auto';
@@ -31,7 +32,8 @@ SELECT regexp_replace(
   EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
     SELECT x FROM t;
 ') AS str;
-SET aqo.mode = 'disabled';
+
+SET aqo.use = 'off';
 
 -- Check existence of the interface functions.
 SELECT obj_description('aqo_cardinality_error'::regproc::oid);

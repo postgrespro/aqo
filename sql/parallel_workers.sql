@@ -13,6 +13,7 @@ BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
 
+SET aqo.use = 'advanced';
 SET aqo.mode = 'learn';
 SET aqo.show_details = true;
 

@@ -6,6 +6,7 @@ SELECT true AS success FROM aqo_reset();
  t
 (1 row)
 
+SET aqo.use = 'advanced';
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
 CREATE TABLE a AS (SELECT gs AS x FROM generate_series(1,10) AS gs);
@@ -42,9 +43,10 @@ WHERE str NOT LIKE '%Memory%';
          ->  Seq Scan on b (actual rows=100 loops=1)
                AQO not used
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(14 rows)
+(15 rows)
 
 -- TODO: Using method of other classes neighbours we get a bad estimation.
 SELECT str AS result
@@ -65,9 +67,10 @@ WHERE str NOT LIKE '%Memory%';
          ->  Seq Scan on a (actual rows=10 loops=1)
                AQO not used
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(14 rows)
+(15 rows)
 
 -- Look into the reason: two JOINs from different classes have the same FSS.
 SELECT to_char(d1.targets[1], 'FM999.00') AS target FROM aqo_data d1

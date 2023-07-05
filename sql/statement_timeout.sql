@@ -26,6 +26,7 @@ CREATE TABLE t AS SELECT * FROM generate_series(1,50) AS x;
 ANALYZE t;
 DELETE FROM t WHERE x > 5; -- Force optimizer to make overestimated prediction.
 
+SET aqo.use = 'advanced';
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'off';
 SET aqo.learn_statement_timeout = 'on';

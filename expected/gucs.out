@@ -14,6 +14,7 @@ BEGIN
     RETURN;
 END;
 $$ LANGUAGE PLPGSQL;
+SET aqo.use = 'advanced';
 SET aqo.mode = 'learn';
 SET aqo.show_details = true;
 SET compute_query_id = 'auto';
@@ -39,9 +40,10 @@ SELECT regexp_replace(
    Output: x
  Query Identifier: N
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 0
-(7 rows)
+(8 rows)
 
 SELECT regexp_replace(
         str,'Query Identifier: -?\m\d+\M','Query Identifier: N','g') as str FROM expln('
@@ -55,11 +57,12 @@ SELECT regexp_replace(
    Output: x
  Query Identifier: N
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 0
-(7 rows)
+(8 rows)
 
-SET aqo.mode = 'disabled';
+SET aqo.use = 'off';
 -- Check existence of the interface functions.
 SELECT obj_description('aqo_cardinality_error'::regproc::oid);
                                                 obj_description                                                

@@ -1,6 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS aqo;
 SELECT true AS success FROM aqo_reset();
 
+SET aqo.use = 'advanced';
 SET aqo.mode = 'learn'; -- use this mode for unconditional learning
 
 CREATE TABLE test AS (SELECT id, 'payload' || id FROM generate_series(1,100) id);

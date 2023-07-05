@@ -11,6 +11,7 @@ my $node = PostgreSQL::Test::Cluster->new('aqotest');
 $node->init;
 $node->append_conf('postgresql.conf', qq{
 						shared_preload_libraries = 'aqo'
+						aqo.use = 'advanced'
 						aqo.mode = 'intelligent'
 						log_statement = 'ddl'
 						aqo.join_threshold = 0
@@ -74,13 +75,13 @@ $node->command_ok([ 'pgbench', '-t',
 #
 # ##############################################################################
 
-# Cleanup of AQO kbowledge base. Also test correctness of DROP procedure.
+# Cleanup of AQO knowledge base. Also test correctness of DROP procedure.
 $node->safe_psql('postgres', "DROP EXTENSION aqo");
 $node->safe_psql('postgres', "CREATE EXTENSION aqo");
 
 # Check: no problems with concurrency in disabled mode.
 $node->safe_psql('postgres', "
-	ALTER SYSTEM SET aqo.mode = 'disabled';
+	ALTER SYSTEM SET aqo.use = 'off';
 	SELECT pg_reload_conf();
 	SELECT * FROM aqo_reset(); -- Remove old data
 ");
@@ -176,6 +177,7 @@ $node->safe_psql('postgres', "SELECT aqo_reset()");
 $node->safe_psql('postgres', "DROP EXTENSION aqo");
 $node->safe_psql('postgres', "CREATE EXTENSION aqo");
 
+$node->safe_psql('postgres', "ALTER SYSTEM SET aqo.use = 'advanced'");
 $node->safe_psql('postgres', "ALTER SYSTEM SET aqo.mode = 'learn'");
 $node->safe_psql('postgres', "ALTER SYSTEM SET aqo.force_collect_stat = 'off'");
 $node->safe_psql('postgres', "SELECT pg_reload_conf()");
@@ -220,11 +222,11 @@ $node->safe_psql('postgres', "
 ");
 
 # New queries won't add rows into AQO knowledge base.
-$node->safe_psql('postgres', "ALTER SYSTEM SET aqo.mode = 'disabled'");
+$node->safe_psql('postgres', "ALTER SYSTEM SET aqo.use = 'off'");
 $node->safe_psql('postgres', "SELECT pg_reload_conf()");
 $node->restart(); # AQO data storage should survive after a restart
-$res = $node->safe_psql('postgres', "SHOW aqo.mode");
-is($res, 'disabled');
+$res = $node->safe_psql('postgres', "SHOW aqo.use");
+is($res, 'off');
 
 # Number of rows in aqo_data: related to pgbench test and total value.
 my $pgb_fss_count = $node->safe_psql('postgres', "
@@ -327,6 +329,7 @@ is($res, 1, 'The extension data was reset');
 
 $node->command_ok([ 'pgbench', '-i', '-s', '1' ], 'init pgbench tables');
 $node->safe_psql('postgres', "
+	ALTER SYSTEM SET aqo.use = 'advanced';
 	ALTER SYSTEM SET aqo.mode = 'learn';
 	ALTER SYSTEM SET log_statement = 'ddl';
 	SELECT pg_reload_conf();
@@ -398,6 +401,7 @@ append_to_file($bank, q{
 
 $node->safe_psql('postgres', "
 	CREATE EXTENSION aqo;
+	ALTER SYSTEM SET aqo.use = 'advanced';
 	ALTER SYSTEM SET aqo.mode = 'intelligent';
 	ALTER SYSTEM SET log_statement = 'none';
 	SELECT pg_reload_conf();

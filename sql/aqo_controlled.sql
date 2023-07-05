@@ -31,6 +31,7 @@ AS (
 CREATE INDEX aqo_test2_idx_a ON aqo_test2 (a);
 ANALYZE aqo_test2;
 
+SET aqo.use = 'advanced';
 SET aqo.mode = 'controlled';
 
 EXPLAIN (COSTS FALSE)

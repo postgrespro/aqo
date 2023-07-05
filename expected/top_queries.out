@@ -6,7 +6,7 @@ SELECT true AS success FROM aqo_reset();
  t
 (1 row)
 
-SET aqo.mode = 'disabled';
+SET aqo.use = 'off';
 SET aqo.force_collect_stat = 'on';
 --
 -- Dummy test. CREATE TABLE shouldn't be found in the ML storage. But a simple

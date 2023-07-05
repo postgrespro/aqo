@@ -15,6 +15,7 @@ BEGIN
     RETURN;
 END;
 $$ LANGUAGE PLPGSQL;
+SET aqo.use = 'advanced';
 SET aqo.mode = 'learn';
 SET aqo.show_details = true;
 -- Be generous with a number parallel workers to test the machinery
@@ -51,9 +52,10 @@ WHERE str NOT LIKE '%Worker%';
                      Filter: ((id % '100'::numeric) = '0'::numeric)
                      Rows Removed by Filter: 33000
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 0
-(13 rows)
+(14 rows)
 
 -- More complex query just to provoke errors
 SELECT count(*) FROM
@@ -115,9 +117,10 @@ WHERE str NOT LIKE '%Workers%';
                                        AQO: rows=991
                                        Filter: ((id % '100'::numeric) = '0'::numeric)
  Using aqo: true
+ AQO use: ADVANCED
  AQO mode: LEARN
  JOINS: 1
-(40 rows)
+(41 rows)
 
 RESET parallel_tuple_cost;
 RESET parallel_setup_cost;
