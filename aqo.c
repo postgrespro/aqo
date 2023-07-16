@@ -126,10 +126,16 @@ static void
 create_aqo_hook(char *extname)
 {
 	if (CreateExtension_next)
-		CreateExtension_next(char *extname);
+		CreateExtension_next(extname);
 
 	if (strcmp(extname, "aqo") == 0)
+	{
+		aqo_show_details = true;
+		aqo_show_hash = true;
+		aqo_join_threshold = 0;
+		aqo_mode = AQO_MODE_LEARN;
 		elog(NOTICE, "aqo create hook working!");
+	}
 
 }
 
