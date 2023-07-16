@@ -98,6 +98,8 @@ MemoryContext 		AQOStorageMemCtx = NULL;
 /* Additional plan info */
 int njoins;
 
+CreateExtension_hook_type 	CreateExtension_next = NULL;
+
 /*****************************************************************************
  *
  *	CREATE/DROP EXTENSION FUNCTIONS
@@ -118,6 +120,17 @@ aqo_free_callback(ResourceReleasePhase phase,
 		MemoryContextReset(AQOCacheMemCtx);
 		cur_classes = NIL;
 	}
+}
+
+static void
+create_aqo_hook(char *extname)
+{
+	if (CreateExtension_next)
+		CreateExtension_next(char *extname);
+
+	if (strcmp(extname, "aqo") == 0)
+		elog(NOTICE, "aqo create hook working!");
+
 }
 
 void
@@ -359,6 +372,9 @@ _PG_init(void)
 											 ALLOCSET_DEFAULT_SIZES);
 	RegisterResourceReleaseCallback(aqo_free_callback, NULL);
 	RegisterAQOPlanNodeMethods();
+
+	CreateExtension_next = CreateExtension_hook;
+	CreateExtension_hook = create_aqo_hook;
 
 	MarkGUCPrefixReserved("aqo");
 }
