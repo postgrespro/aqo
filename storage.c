@@ -945,7 +945,7 @@ aqo_queries_load(void)
 }
 
 static long
-aqo_get_file_size(const char *filename) 
+aqo_get_file_size(const char *filename)
 {
 	FILE   *file;
 	long	size = 0;

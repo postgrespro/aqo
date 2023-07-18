@@ -120,18 +120,6 @@ aqo_free_callback(ResourceReleasePhase phase,
 	}
 }
 
-
-/* Validation function for dsm_size_max GUC*/
-static bool check_dsm_size_hook(int *newval, void **extra, GucSource source)
-{
-	if (*newval < 0)
-	{
-		GUC_check_errdetail("dsm_size_max can't be smaller than zero");
-		return false;
-	}
-	return true;
-}
-
 void
 _PG_init(void)
 {
@@ -288,8 +276,8 @@ _PG_init(void)
 							100,
 							0, INT_MAX,
 							PGC_POSTMASTER,
-							0,
-							check_dsm_size_hook,
+							GUC_UNIT_MB,
+							NULL,
 							NULL,
 							NULL
 	);
