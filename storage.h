@@ -138,7 +138,7 @@ extern StatEntry *aqo_stat_store(uint64 queryid, bool use_aqo,
 extern void aqo_stat_flush(void);
 extern void aqo_stat_load(void);
 
-extern bool aqo_qtext_store(uint64 queryid, const char *query_string);
+extern bool aqo_qtext_store(uint64 queryid, const char *query_string, bool *dsa_valid);
 extern void aqo_qtexts_flush(void);
 extern void aqo_qtexts_load(void);
 
@@ -156,6 +156,7 @@ extern bool aqo_queries_store(uint64 queryid, uint64 fs, bool learn_aqo,
 extern void aqo_queries_flush(void);
 extern void aqo_queries_load(void);
 
+extern void check_dsa_file_size(void);
 /*
  * Machinery for deactivated queries cache.
  * TODO: Should live in a custom memory context
