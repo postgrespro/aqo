@@ -388,5 +388,5 @@ PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
 Datum
 invalidate_deactivated_queries_cache(PG_FUNCTION_ARGS)
 {
-	   PG_RETURN_POINTER(NULL);
+	PG_RETURN_POINTER(NULL);
 }

@@ -980,7 +980,8 @@ check_dsa_file_size(void)
 	long qtext_size = aqo_get_file_size(PGAQO_TEXT_FILE);
 	long data_size = aqo_get_file_size(PGAQO_DATA_FILE);
 
-	if (qtext_size == -1 || data_size == -1 || qtext_size + data_size >= dsm_size_max * 1024 * 1024)
+	if (qtext_size == -1 || data_size == -1 ||
+		qtext_size + data_size >= dsm_size_max * 1024 * 1024)
 	{
 		elog(ERROR, "aqo.dsm_size_max is too small");
 	}

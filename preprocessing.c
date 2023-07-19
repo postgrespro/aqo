@@ -287,7 +287,7 @@ ignore_query_settings:
 			 */
 			if (!aqo_qtext_store(query_context.query_hash, query_string, &dsa_valid))
 			{
-				if (!dsa_valid) 
+				if (!dsa_valid)
 				{
 					disable_aqo_for_query();
 					elog(WARNING, "[AQO] Not enough DSA. AQO was disabled for this query");

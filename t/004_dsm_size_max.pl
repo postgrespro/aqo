@@ -66,8 +66,8 @@ $node->start();
 my ($stdout, $stderr);
 for my $i (1 .. 20) {
 	$node->psql('postgres', "create table a as select s, md5(random()::text) from generate_Series(1,100) s;");
-	$node->psql('postgres', 
-				"SELECT a.s FROM a CROSS JOIN ( SELECT '" . $long_string . "' as long_string) AS extra_rows;", 
+	$node->psql('postgres',
+				"SELECT a.s FROM a CROSS JOIN ( SELECT '" . $long_string . "' as long_string) AS extra_rows;",
 				stdout => \$stdout, stderr => \$stderr);
 	$node->psql('postgres', "drop table a");
 }
