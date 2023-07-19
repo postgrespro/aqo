@@ -283,14 +283,23 @@ ignore_query_settings:
 						  query_context.learn_aqo, query_context.use_aqo,
 						  query_context.auto_tuning, &aqo_queries_nulls))
 		{
+			bool dsa_valid = true;
 			/*
 			 * Add query text into the ML-knowledge base. Just for further
 			 * analysis. In the case of cached plans we may have NULL query text.
 			 */
-			if (!aqo_qtext_store(query_context.query_hash, query_string))
+			if (!aqo_qtext_store(query_context.query_hash, query_string, &dsa_valid))
 			{
-				Assert(0); /* panic only on debug installation */
-				elog(ERROR, "[AQO] Impossible situation was detected. Maybe not enough of shared memory?");
+				if (!dsa_valid)
+				{
+					disable_aqo_for_query();
+					elog(WARNING, "[AQO] Not enough DSA. AQO was disabled for this query");
+				}
+				else
+				{
+					Assert(0); /* panic only on debug installation */
+					elog(ERROR, "[AQO] Impossible situation was detected. Maybe not enough of shared memory?");
+				}
 			}
 		}
 		else
