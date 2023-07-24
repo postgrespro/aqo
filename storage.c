@@ -41,21 +41,21 @@
 
 
 typedef enum {
-	QUERYID = 0, EXEC_TIME_AQO, EXEC_TIME, PLAN_TIME_AQO, PLAN_TIME,
+	QUERYID = 0, DBID, EXEC_TIME_AQO, EXEC_TIME, PLAN_TIME_AQO, PLAN_TIME,
 	EST_ERROR_AQO, EST_ERROR, NEXECS_AQO, NEXECS, TOTAL_NCOLS
 } aqo_stat_cols;
 
 typedef enum {
-	QT_QUERYID = 0, QT_QUERY_STRING, QT_TOTAL_NCOLS
+	QT_QUERYID = 0, QT_DBID, QT_QUERY_STRING, QT_TOTAL_NCOLS
 } aqo_qtexts_cols;
 
 typedef enum {
-	AD_FS = 0, AD_FSS, AD_NFEATURES, AD_FEATURES, AD_TARGETS, AD_RELIABILITY,
+	AD_FS = 0, AD_FSS, AD_DBID, AD_NFEATURES, AD_FEATURES, AD_TARGETS, AD_RELIABILITY,
 	AD_OIDS, AD_TOTAL_NCOLS
 } aqo_data_cols;
 
 typedef enum {
-	AQ_QUERYID = 0, AQ_FS, AQ_LEARN_AQO, AQ_USE_AQO, AQ_AUTO_TUNING, AQ_SMART_TIMEOUT, AQ_COUNT_INCREASE_TIMEOUT,
+	AQ_QUERYID = 0, AQ_DBID, AQ_FS, AQ_LEARN_AQO, AQ_USE_AQO, AQ_AUTO_TUNING, AQ_SMART_TIMEOUT, AQ_COUNT_INCREASE_TIMEOUT,
 	AQ_TOTAL_NCOLS
 } aqo_queries_cols;
 
@@ -283,6 +283,7 @@ aqo_stat_store(uint64 queryid, bool use_aqo, AqoStatArgs *stat_arg,
 		qid = entry->queryid;
 		memset(entry, 0, sizeof(StatEntry));
 		entry->queryid = qid;
+		entry->dbid = MyDatabaseId;
 	}
 
 	if (!append_mode)
@@ -292,6 +293,7 @@ aqo_stat_store(uint64 queryid, bool use_aqo, AqoStatArgs *stat_arg,
 		{
 			memset(entry, 0, sizeof(StatEntry));
 			entry->queryid = queryid;
+			entry->dbid = MyDatabaseId;
 		}
 
 		sz = stat_arg->cur_stat_slot_aqo * sizeof(entry->est_error_aqo[0]);
@@ -414,6 +416,7 @@ aqo_query_stat(PG_FUNCTION_ARGS)
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
 		values[QUERYID] = Int64GetDatum(entry->queryid);
+		values[DBID] = ObjectIdGetDatum(entry->dbid);
 		values[NEXECS] = Int64GetDatum(entry->execs_without_aqo);
 		values[NEXECS_AQO] = Int64GetDatum(entry->execs_with_aqo);
 		values[EXEC_TIME_AQO] = PointerGetDatum(form_vector(entry->exec_time_aqo, entry->cur_stat_slot_aqo));
@@ -443,6 +446,8 @@ aqo_stat_reset(void)
 	hash_seq_init(&hash_seq, stat_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
+		if (entry->dbid != MyDatabaseId)
+			continue;
 		if (!hash_search(stat_htab, &entry->queryid, HASH_REMOVE, NULL))
 			elog(PANIC, "[AQO] hash table corrupted");
 		num_remove++;
@@ -1110,6 +1115,7 @@ aqo_qtext_store(uint64 queryid, const char *query_string)
 		}
 
 		entry->queryid = queryid;
+		entry->dbid = MyDatabaseId;
 		size = size > querytext_max_size ? querytext_max_size : size;
 		entry->qtext_dp = dsa_allocate0(qtext_dsa, size);
 
@@ -1186,6 +1192,7 @@ aqo_query_texts(PG_FUNCTION_ARGS)
 		Assert(DsaPointerIsValid(entry->qtext_dp));
 		ptr = dsa_get_address(qtext_dsa, entry->qtext_dp);
 		values[QT_QUERYID] = Int64GetDatum(entry->queryid);
+		values[QT_DBID] = ObjectIdGetDatum(entry->dbid);
 		values[QT_QUERY_STRING] = CStringGetTextDatum(ptr);
 		tuplestore_putvalues(tupstore, tupDesc, values, nulls);
 	}
@@ -1393,6 +1400,8 @@ aqo_data_store(uint64 fs, int fss, AqoDataArgs *data, List *reloids)
 				 errhint("Increase value of aqo.fss_max_items on restart of the instance")));
 			return false;
 		}
+		
+		entry->dbid = MyDatabaseId;
 
 		entry->cols = data->cols;
 		entry->rows = data->rows;
@@ -1803,6 +1812,7 @@ aqo_data(PG_FUNCTION_ARGS)
 
 		values[AD_FS] = Int64GetDatum(entry->key.fs);
 		values[AD_FSS] = Int32GetDatum((int) entry->key.fss);
+		values[AD_DBID] = ObjectIdGetDatum(entry->dbid);
 		values[AD_NFEATURES] = Int32GetDatum(entry->cols);
 
 		/* Fill values from the DSA data chunk */
@@ -1961,6 +1971,7 @@ aqo_queries(PG_FUNCTION_ARGS)
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
 		values[AQ_QUERYID] = Int64GetDatum(entry->queryid);
+		values[AQ_DBID] = ObjectIdGetDatum(entry->dbid);
 		values[AQ_FS] = Int64GetDatum(entry->fs);
 		values[AQ_LEARN_AQO] = BoolGetDatum(entry->learn_aqo);
 		values[AQ_USE_AQO] = BoolGetDatum(entry->use_aqo);
@@ -2006,19 +2017,24 @@ aqo_queries_store(uint64 queryid,
 										 &found);
 
 		/* Initialize entry on first usage */
-	if (!found && action == HASH_FIND)
+	if (!found)
 	{
-		/*
-		 * Hash table is full. To avoid possible problems - don't try to add
-		 * more, just exit
-		 */
-		LWLockRelease(&aqo_state->queries_lock);
-		ereport(LOG,
-			(errcode(ERRCODE_OUT_OF_MEMORY),
-			 errmsg("[AQO] Queries storage is full. No more feature spaces can be added."),
-			 errhint("Increase value of aqo.fs_max_items on restart of the instance")));
-		return false;
+		if (action == HASH_FIND)
+		{
+			/*
+			* Hash table is full. To avoid possible problems - don't try to add
+			* more, just exit
+			*/
+			LWLockRelease(&aqo_state->queries_lock);
+			ereport(LOG,
+				(errcode(ERRCODE_OUT_OF_MEMORY),
+				errmsg("[AQO] Queries storage is full. No more feature spaces can be added."),
+				errhint("Increase value of aqo.fs_max_items on restart of the instance")));
+			return false;
+		}
+		entry->dbid = MyDatabaseId;
 	}
+
 
 	if (!null_args->fs_is_null)
 		entry->fs = fs;
@@ -2146,6 +2162,7 @@ aqo_queries_find(uint64 queryid, QueryContextData *ctx)
 
 	LWLockAcquire(&aqo_state->queries_lock, LW_SHARED);
 	entry = (QueriesEntry *) hash_search(queries_htab, &queryid, HASH_FIND, &found);
+	assert(entry->dbid == MyDatabaseId);
 	if (found)
 	{
 		ctx->query_hash = entry->queryid;

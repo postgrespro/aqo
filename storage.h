@@ -21,6 +21,7 @@
 typedef struct StatEntry
 {
 	uint64	queryid; /* The key in the hash table, should be the first field ever */
+	Oid 	dbid;
 
 	int64	execs_with_aqo;
 	int64	execs_without_aqo;
@@ -64,6 +65,7 @@ typedef struct AqoStatArgs
 typedef struct QueryTextEntry
 {
 	uint64	queryid;
+	Oid 	dbid;
 
 	/* Link to DSA-allocated memory block. Can be shared across backends */
 	dsa_pointer qtext_dp;
@@ -78,6 +80,7 @@ typedef struct data_key
 typedef struct DataEntry
 {
 	data_key key;
+	Oid 	dbid;
 
 	/* defines a size and data placement in the DSA memory block */
 	int cols; /* aka nfeatures */
@@ -95,6 +98,7 @@ typedef struct DataEntry
 typedef struct QueriesEntry
 {
 	uint64	queryid;
+	Oid 	dbid;
 
 	uint64	fs;
 	bool	learn_aqo;
