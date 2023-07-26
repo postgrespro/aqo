@@ -10,6 +10,12 @@
 
 #define STAT_SAMPLE_SIZE	(20)
 
+typedef struct stat_key
+{
+	uint64	queryid;
+	Oid 	dbid;
+} stat_key;
+
 /*
  * Storage struct for AQO statistics
  * It is mostly needed for auto tuning feature. With auto tuning mode aqo
@@ -20,21 +26,20 @@
  */
 typedef struct StatEntry
 {
-	uint64	queryid; /* The key in the hash table, should be the first field ever */
-	Oid 	dbid;
+	stat_key	key; /* The key in the hash table, should be the first field ever */
 
-	int64	execs_with_aqo;
-	int64	execs_without_aqo;
+	int64		execs_with_aqo;
+	int64		execs_without_aqo;
 
-	int		cur_stat_slot;
-	double	exec_time[STAT_SAMPLE_SIZE];
-	double	plan_time[STAT_SAMPLE_SIZE];
-	double	est_error[STAT_SAMPLE_SIZE];
+	int			cur_stat_slot;
+	double		exec_time[STAT_SAMPLE_SIZE];
+	double		plan_time[STAT_SAMPLE_SIZE];
+	double		est_error[STAT_SAMPLE_SIZE];
 
-	int		cur_stat_slot_aqo;
-	double	exec_time_aqo[STAT_SAMPLE_SIZE];
-	double	plan_time_aqo[STAT_SAMPLE_SIZE];
-	double	est_error_aqo[STAT_SAMPLE_SIZE];
+	int			cur_stat_slot_aqo;
+	double		exec_time_aqo[STAT_SAMPLE_SIZE];
+	double		plan_time_aqo[STAT_SAMPLE_SIZE];
+	double		est_error_aqo[STAT_SAMPLE_SIZE];
 } StatEntry;
 
 /*
@@ -57,15 +62,20 @@ typedef struct AqoStatArgs
 	double	*est_error_aqo;
 } AqoStatArgs;
 
-/*
+typedef struct qtext_key
+{
+	uint64	queryid;
+	Oid 	dbid;
+} qtext_key;
+
+/*aqo_qtexts_reset
  * Storage entry for query texts.
  * Query strings may have very different sizes. So, in hash table we store only
  * link to DSA-allocated memory.
  */
 typedef struct QueryTextEntry
 {
-	uint64	queryid;
-	Oid 	dbid;
+	qtext_key key;
 
 	/* Link to DSA-allocated memory block. Can be shared across backends */
 	dsa_pointer qtext_dp;
@@ -75,12 +85,12 @@ typedef struct data_key
 {
 	uint64	fs;
 	int64	fss; /* just for alignment */
+	Oid		dbid;
 } data_key;
 
 typedef struct DataEntry
 {
 	data_key key;
-	Oid 	dbid;
 
 	/* defines a size and data placement in the DSA memory block */
 	int cols; /* aka nfeatures */
@@ -95,10 +105,15 @@ typedef struct DataEntry
 	dsa_pointer data_dp;
 } DataEntry;
 
-typedef struct QueriesEntry
+typedef struct queries_key
 {
 	uint64	queryid;
 	Oid 	dbid;
+} queries_key;
+
+typedef struct QueriesEntry
+{
+	queries_key	key;
 
 	uint64	fs;
 	bool	learn_aqo;

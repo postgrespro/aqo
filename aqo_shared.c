@@ -60,13 +60,14 @@ aqo_init_shmem(void)
 		LWLockInitialize(&aqo_state->queries_lock, LWLockNewTrancheId());
 	}
 
-	info.keysize = sizeof(((StatEntry *) 0)->queryid);
+	info.keysize = sizeof(stat_key);
+	elog(LOG, "keysize %ld", info.keysize);
 	info.entrysize = sizeof(StatEntry);
 	stat_htab = ShmemInitHash("AQO Stat HTAB", fs_max_items, fs_max_items,
 							  &info, HASH_ELEM | HASH_BLOBS);
 
 	/* Init shared memory table for query texts */
-	info.keysize = sizeof(((QueryTextEntry *) 0)->queryid);
+	info.keysize = sizeof(qtext_key);
 	info.entrysize = sizeof(QueryTextEntry);
 	qtexts_htab = ShmemInitHash("AQO Query Texts HTAB", fs_max_items, fs_max_items,
 								&info, HASH_ELEM | HASH_BLOBS);
@@ -78,7 +79,7 @@ aqo_init_shmem(void)
 							  &info, HASH_ELEM | HASH_BLOBS);
 
 	/* Shared memory hash table for queries */
-	info.keysize = sizeof(((QueriesEntry *) 0)->queryid);
+	info.keysize = sizeof(queries_key);
 	info.entrysize = sizeof(QueriesEntry);
 	queries_htab = ShmemInitHash("AQO Queries HTAB", fs_max_items, fs_max_items,
 								 &info, HASH_ELEM | HASH_BLOBS);
