@@ -61,7 +61,6 @@ aqo_init_shmem(void)
 	}
 
 	info.keysize = sizeof(stat_key);
-	elog(LOG, "keysize %ld", info.keysize);
 	info.entrysize = sizeof(StatEntry);
 	stat_htab = ShmemInitHash("AQO Stat HTAB", fs_max_items, fs_max_items,
 							  &info, HASH_ELEM | HASH_BLOBS);

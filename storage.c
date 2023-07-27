@@ -210,7 +210,7 @@ bool
 query_is_deactivated(uint64 queryid)
 {
 	bool		found;
-	queries_key key = {.queryid = queryid, .dbid = MyDatabaseId};
+	queries_key key = {.queryid = queryid, .dbid = (uint64) MyDatabaseId};
 
 
 	(void) hash_search(deactivated_queries, &key, HASH_FIND, &found);
@@ -221,7 +221,7 @@ query_is_deactivated(uint64 queryid)
 void
 add_deactivated_query(uint64 queryid)
 {
-	queries_key key = {.queryid = queryid, .dbid = MyDatabaseId};
+	queries_key key = {.queryid = queryid, .dbid = (uint64) MyDatabaseId};
 	(void) hash_search(deactivated_queries, &key, HASH_ENTER, NULL);
 }
 
@@ -255,7 +255,7 @@ aqo_stat_store(uint64 queryid, bool use_aqo, AqoStatArgs *stat_arg,
 			   bool append_mode)
 {
 	StatEntry  *entry;
-	queries_key key = {.queryid = queryid, .dbid = MyDatabaseId};
+	queries_key key = {.queryid = queryid, .dbid = (uint64) MyDatabaseId};
 	bool		found;
 	int			pos;
 	bool		tblOverflow;
@@ -290,7 +290,7 @@ aqo_stat_store(uint64 queryid, bool use_aqo, AqoStatArgs *stat_arg,
 		qid = entry->key.queryid;
 		memset(entry, 0, sizeof(StatEntry));
 		entry->key.queryid = qid;
-		entry->key.dbid = MyDatabaseId;
+		entry->key.dbid = (uint64) MyDatabaseId;
 	}
 
 	if (!append_mode)
@@ -300,7 +300,7 @@ aqo_stat_store(uint64 queryid, bool use_aqo, AqoStatArgs *stat_arg,
 		{
 			memset(entry, 0, sizeof(StatEntry));
 			entry->key.queryid = queryid;
-			entry->key.dbid = MyDatabaseId;
+			entry->key.dbid = (uint64) MyDatabaseId;
 		}
 
 		sz = stat_arg->cur_stat_slot_aqo * sizeof(entry->est_error_aqo[0]);
@@ -369,7 +369,6 @@ aqo_stat_store(uint64 queryid, bool use_aqo, AqoStatArgs *stat_arg,
 
 	entry = memcpy(palloc(sizeof(StatEntry)), entry, sizeof(StatEntry));
 	aqo_state->stat_changed = true;
-	elog(NOTICE, "aqo stat store queryid %lu dbid %d", key.queryid, key.dbid);
 
 	LWLockRelease(&aqo_state->stat_lock);
 	return entry;
@@ -424,7 +423,7 @@ aqo_query_stat(PG_FUNCTION_ARGS)
 	hash_seq_init(&hash_seq, stat_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
-		if (entry->key.dbid != MyDatabaseId)
+		if (entry->key.dbid != (uint64) MyDatabaseId)
 			continue;
 
 		values[QUERYID] = Int64GetDatum(entry->key.queryid);
@@ -459,10 +458,6 @@ aqo_stat_reset(Oid dbid)
 	{
 		if (dbid != InvalidOid && entry->key.dbid != dbid)
 			continue;
-
-		bool found;
-		hash_search(stat_htab, &entry->key, HASH_FIND, &found);
-		elog(NOTICE, "%d size %ld", found, sizeof(entry->key)); 
 
 		if (!hash_search(stat_htab, &entry->key, HASH_REMOVE, NULL))
 			elog(PANIC, "[AQO] hash table corrupted");
@@ -813,7 +808,7 @@ _deform_qtexts_record_cb(void *data, size_t size)
 void
 aqo_qtexts_load(void)
 {
-	qtext_key key = {.queryid = 0, .dbid = MyDatabaseId};
+	qtext_key key = {.queryid = 0, .dbid = (uint64) MyDatabaseId};
 	bool	found;
 
 	Assert(!LWLockHeldByMe(&aqo_state->qtexts_lock));
@@ -932,7 +927,7 @@ void
 aqo_queries_load(void)
 {
 	bool	found;
-	queries_key key = {.queryid = 0, .dbid = MyDatabaseId};
+	queries_key key = {.queryid = 0, .dbid = (uint64) MyDatabaseId};
 
 	Assert(!LWLockHeldByMe(&aqo_state->queries_lock));
 
@@ -1093,7 +1088,7 @@ aqo_qtext_store(uint64 queryid, const char *query_string)
 	bool			found;
 	bool			tblOverflow;
 	HASHACTION		action;
-	qtext_key key = {.queryid = queryid, .dbid = MyDatabaseId};
+	qtext_key key = {.queryid = queryid, .dbid = (uint64) MyDatabaseId};
 
 	Assert(!LWLockHeldByMe(&aqo_state->qtexts_lock));
 
@@ -1132,7 +1127,7 @@ aqo_qtext_store(uint64 queryid, const char *query_string)
 		}
 
 		entry->key.queryid = queryid;
-		entry->key.dbid = MyDatabaseId;
+		entry->key.dbid = (uint64) MyDatabaseId;
 		size = size > querytext_max_size ? querytext_max_size : size;
 		entry->qtext_dp = dsa_allocate0(qtext_dsa, size);
 
@@ -1206,7 +1201,7 @@ aqo_query_texts(PG_FUNCTION_ARGS)
 	{
 		char *ptr;
 
-		if (entry->key.dbid != MyDatabaseId)
+		if (entry->key.dbid != (uint64) (uint64) MyDatabaseId)
 			continue;
 
 		Assert(DsaPointerIsValid(entry->qtext_dp));
@@ -1225,7 +1220,7 @@ static bool
 _aqo_stat_remove(uint64 queryid)
 {
 	bool		found;
-	stat_key	key = {.queryid = queryid, .dbid = MyDatabaseId};
+	stat_key	key = {.queryid = queryid, .dbid = (uint64) (uint64) MyDatabaseId};
 
 	Assert(!LWLockHeldByMe(&aqo_state->stat_lock));
 	LWLockAcquire(&aqo_state->stat_lock, LW_EXCLUSIVE);
@@ -1245,7 +1240,7 @@ static bool
 _aqo_queries_remove(uint64 queryid)
 {
 	bool		found;
-	queries_key	key = {.queryid = queryid, .dbid = MyDatabaseId};
+	queries_key	key = {.queryid = queryid, .dbid = (uint64) (uint64) MyDatabaseId};
 
 
 	Assert(!LWLockHeldByMe(&aqo_state->queries_lock));
@@ -1267,7 +1262,7 @@ _aqo_qtexts_remove(uint64 queryid)
 {
 	bool			found = false;
 	QueryTextEntry *entry;
-	qtext_key		key = {.queryid = queryid, .dbid = MyDatabaseId};
+	qtext_key		key = {.queryid = queryid, .dbid = (uint64) (uint64) MyDatabaseId};
 
 	dsa_init();
 
@@ -1381,7 +1376,7 @@ aqo_data_store(uint64 fs, int fss, AqoDataArgs *data, List *reloids)
 {
 	DataEntry  *entry;
 	bool		found;
-	data_key	key = {.fs = fs, .fss = fss, .dbid = MyDatabaseId};
+	data_key	key = {.fs = fs, .fss = fss, .dbid = (uint64) (uint64) MyDatabaseId};
 	int			i;
 	char	   *ptr;
 	ListCell   *lc;
@@ -1400,7 +1395,6 @@ aqo_data_store(uint64 fs, int fss, AqoDataArgs *data, List *reloids)
 	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
 	Assert(data->rows > 0);
 
-	elog(NOTICE, "aqo data store fs %lu fss %lu dbid %d", key.fs, key.fss, key.dbid);
 	dsa_init();
 
 	LWLockAcquire(&aqo_state->data_lock, LW_EXCLUSIVE);
@@ -1672,7 +1666,7 @@ bool
 aqo_data_exist(uint64 fs, int fss)
 {
 	bool		found;
-	data_key	key = {.fs = fs, .fss = fss, .dbid = MyDatabaseId};
+	data_key	key = {.fs = fs, .fss = fss, .dbid = (uint64) MyDatabaseId};
 
 	dsa_init();
 
@@ -1698,7 +1692,7 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 {
 	DataEntry  *entry;
 	bool		found;
-	data_key	key = {.fs = fs, .fss = fss, .dbid = MyDatabaseId};
+	data_key	key = {.fs = fs, .fss = fss, .dbid = (uint64) MyDatabaseId};
 	OkNNrdata  *temp_data;
 
 	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
@@ -1833,7 +1827,7 @@ aqo_data(PG_FUNCTION_ARGS)
 	{
 		char *ptr;
 
-		if (entry->key.dbid != MyDatabaseId)
+		if (entry->key.dbid != (uint64) MyDatabaseId)
 			continue;
 
 		memset(nulls, 0, AD_TOTAL_NCOLS);
@@ -1901,7 +1895,7 @@ _aqo_data_clean(uint64 fs)
 	hash_seq_init(&hash_seq, data_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
-		if (entry->key.fs != fs || entry->key.dbid != MyDatabaseId)
+		if (entry->key.fs != fs || entry->key.dbid != (uint64) MyDatabaseId)
 			continue;
 
 		Assert(DsaPointerIsValid(entry->data_dp));
@@ -2000,7 +1994,7 @@ aqo_queries(PG_FUNCTION_ARGS)
 	hash_seq_init(&hash_seq, queries_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
-		if (entry->key.dbid != MyDatabaseId)
+		if (entry->key.dbid != (uint64) MyDatabaseId)
 			continue;
 
 		values[AQ_QUERYID] = Int64GetDatum(entry->key.queryid);
@@ -2027,7 +2021,7 @@ aqo_queries_store(uint64 queryid,
 	bool			found;
 	bool		tblOverflow;
 	HASHACTION	action;
-	queries_key key = {.queryid = queryid, .dbid = MyDatabaseId};
+	queries_key key = {.queryid = queryid, .dbid = (uint64) MyDatabaseId};
 
 	/* Insert is allowed if no args are NULL. */
 	bool safe_insert =
@@ -2135,7 +2129,7 @@ aqo_enable_query(PG_FUNCTION_ARGS)
 	uint64			queryid = (uint64) PG_GETARG_INT64(0);
 	QueriesEntry   *entry;
 	bool			found;
-	queries_key 	key = {.queryid = queryid, .dbid = MyDatabaseId};
+	queries_key 	key = {.queryid = queryid, .dbid = (uint64) MyDatabaseId};
 
 	Assert(queries_htab);
 
@@ -2167,7 +2161,7 @@ aqo_disable_query(PG_FUNCTION_ARGS)
 	uint64			queryid = (uint64) PG_GETARG_INT64(0);
 	QueriesEntry   *entry;
 	bool			found;
-	queries_key 	key = {.queryid = queryid, .dbid = MyDatabaseId};
+	queries_key 	key = {.queryid = queryid, .dbid = (uint64) MyDatabaseId};
 
 	Assert(queries_htab);
 
@@ -2194,7 +2188,7 @@ aqo_queries_find(uint64 queryid, QueryContextData *ctx)
 {
 	bool			found;
 	QueriesEntry   *entry;
-	queries_key 	key = {.queryid = queryid, .dbid = MyDatabaseId};
+	queries_key 	key = {.queryid = queryid, .dbid = (uint64) MyDatabaseId};
 
 	Assert(queries_htab);
 
@@ -2224,7 +2218,7 @@ update_query_timeout(uint64 queryid, int64 smart_timeout)
 	bool			found;
 	bool		tblOverflow;
 	HASHACTION	action;
-	queries_key key = {.queryid = queryid, .dbid = MyDatabaseId};
+	queries_key key = {.queryid = queryid, .dbid = (uint64) MyDatabaseId};
 
 	Assert(queries_htab);
 
@@ -2304,7 +2298,7 @@ aqo_reset(PG_FUNCTION_ARGS)
 {
 	long counter = 0;
 
-	Oid dbid = MyDatabaseId;
+	Oid dbid = (uint64) MyDatabaseId;
 	if (PG_NARGS() > 0)
 		dbid = PG_GETARG_OID(0);
 
@@ -2357,7 +2351,7 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 		List		   *actual_fss = NIL;
 		ListCell	   *lc;
 
-		if (entry->key.dbid != MyDatabaseId)
+		if (entry->key.dbid != (uint64) MyDatabaseId)
 			continue;
 
 		/* Scan aqo_data for any junk records related to this FS */
@@ -2502,7 +2496,7 @@ aqo_drop_class(PG_FUNCTION_ARGS)
 	QueriesEntry   *entry;
 	uint64			fs;
 	long			cnt;
-	queries_key 	key = {.queryid = queryid, .dbid = MyDatabaseId};
+	queries_key 	key = {.queryid = queryid, .dbid = (uint64) MyDatabaseId};
 
 	if (queryid == 0)
 		elog(ERROR, "[AQO] Cannot remove basic class "INT64_FORMAT".",

@@ -13,7 +13,7 @@
 typedef struct stat_key
 {
 	uint64	queryid;
-	Oid 	dbid;
+	uint64 	dbid;
 } stat_key;
 
 /*
@@ -65,7 +65,7 @@ typedef struct AqoStatArgs
 typedef struct qtext_key
 {
 	uint64	queryid;
-	Oid 	dbid;
+	uint64 	dbid;
 } qtext_key;
 
 /*aqo_qtexts_reset
@@ -85,7 +85,7 @@ typedef struct data_key
 {
 	uint64	fs;
 	int64	fss; /* just for alignment */
-	Oid		dbid;
+	uint64		dbid;
 } data_key;
 
 typedef struct DataEntry
@@ -108,7 +108,7 @@ typedef struct DataEntry
 typedef struct queries_key
 {
 	uint64	queryid;
-	Oid 	dbid;
+	uint64 	dbid;
 } queries_key;
 
 typedef struct QueriesEntry
