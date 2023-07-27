@@ -41,21 +41,21 @@
 
 
 typedef enum {
-	QUERYID = 0, EXEC_TIME_AQO, EXEC_TIME, PLAN_TIME_AQO, PLAN_TIME,
+	QUERYID = 0, DBID, EXEC_TIME_AQO, EXEC_TIME, PLAN_TIME_AQO, PLAN_TIME,
 	EST_ERROR_AQO, EST_ERROR, NEXECS_AQO, NEXECS, TOTAL_NCOLS
 } aqo_stat_cols;
 
 typedef enum {
-	QT_QUERYID = 0, QT_QUERY_STRING, QT_TOTAL_NCOLS
+	QT_QUERYID = 0, QT_DBID, QT_QUERY_STRING, QT_TOTAL_NCOLS
 } aqo_qtexts_cols;
 
 typedef enum {
-	AD_FS = 0, AD_FSS, AD_NFEATURES, AD_FEATURES, AD_TARGETS, AD_RELIABILITY,
+	AD_FS = 0, AD_FSS, AD_DBID, AD_NFEATURES, AD_FEATURES, AD_TARGETS, AD_RELIABILITY,
 	AD_OIDS, AD_TOTAL_NCOLS
 } aqo_data_cols;
 
 typedef enum {
-	AQ_QUERYID = 0, AQ_FS, AQ_LEARN_AQO, AQ_USE_AQO, AQ_AUTO_TUNING, AQ_SMART_TIMEOUT, AQ_COUNT_INCREASE_TIMEOUT,
+	AQ_QUERYID = 0, AQ_DBID, AQ_FS, AQ_LEARN_AQO, AQ_USE_AQO, AQ_AUTO_TUNING, AQ_SMART_TIMEOUT, AQ_COUNT_INCREASE_TIMEOUT,
 	AQ_TOTAL_NCOLS
 } aqo_queries_cols;
 
@@ -423,10 +423,8 @@ aqo_query_stat(PG_FUNCTION_ARGS)
 	hash_seq_init(&hash_seq, stat_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
-		if (entry->key.dbid != (uint64) MyDatabaseId)
-			continue;
-
 		values[QUERYID] = Int64GetDatum(entry->key.queryid);
+		values[DBID] = ObjectIdGetDatum(entry->key.dbid);
 		values[NEXECS] = Int64GetDatum(entry->execs_without_aqo);
 		values[NEXECS_AQO] = Int64GetDatum(entry->execs_with_aqo);
 		values[EXEC_TIME_AQO] = PointerGetDatum(form_vector(entry->exec_time_aqo, entry->cur_stat_slot_aqo));
@@ -1201,12 +1199,10 @@ aqo_query_texts(PG_FUNCTION_ARGS)
 	{
 		char *ptr;
 
-		if (entry->key.dbid != (uint64) (uint64) MyDatabaseId)
-			continue;
-
 		Assert(DsaPointerIsValid(entry->qtext_dp));
 		ptr = dsa_get_address(qtext_dsa, entry->qtext_dp);
 		values[QT_QUERYID] = Int64GetDatum(entry->key.queryid);
+		values[QT_DBID] = ObjectIdGetDatum(entry->key.dbid);
 		values[QT_QUERY_STRING] = CStringGetTextDatum(ptr);
 		tuplestore_putvalues(tupstore, tupDesc, values, nulls);
 	}
@@ -1220,13 +1216,14 @@ static bool
 _aqo_stat_remove(uint64 queryid)
 {
 	bool		found;
-	stat_key	key = {.queryid = queryid, .dbid = (uint64) (uint64) MyDatabaseId};
+	stat_key	key = {.queryid = queryid, .dbid =(uint64) MyDatabaseId};
+	StatEntry  *entry;
 
 	Assert(!LWLockHeldByMe(&aqo_state->stat_lock));
 	LWLockAcquire(&aqo_state->stat_lock, LW_EXCLUSIVE);
-	(void) hash_search(stat_htab, &key, HASH_FIND, &found);
+	entry = (StatEntry *) hash_search(stat_htab, &key, HASH_FIND, &found);
 
-	if (found)
+	if (found && entry->key.dbid == (uint64) MyDatabaseId)
 	{
 		(void) hash_search(stat_htab, &key, HASH_REMOVE, NULL);
 		aqo_state->stat_changed = true;
@@ -1239,15 +1236,16 @@ _aqo_stat_remove(uint64 queryid)
 static bool
 _aqo_queries_remove(uint64 queryid)
 {
-	bool		found;
-	queries_key	key = {.queryid = queryid, .dbid = (uint64) (uint64) MyDatabaseId};
+	bool			found;
+	queries_key		key = {.queryid = queryid, .dbid = (uint64) MyDatabaseId};
+	QueriesEntry   *entry;
 
 
 	Assert(!LWLockHeldByMe(&aqo_state->queries_lock));
 	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
-	(void) hash_search(queries_htab, &key, HASH_FIND, &found);
+	entry = (QueriesEntry *) hash_search(queries_htab, &key, HASH_FIND, &found);
 
-	if (found)
+	if (found && entry->key.dbid == (uint64) MyDatabaseId)
 	{
 		(void) hash_search(queries_htab, &key, HASH_REMOVE, NULL);
 		aqo_state->queries_changed = true;
@@ -1262,7 +1260,7 @@ _aqo_qtexts_remove(uint64 queryid)
 {
 	bool			found = false;
 	QueryTextEntry *entry;
-	qtext_key		key = {.queryid = queryid, .dbid = (uint64) (uint64) MyDatabaseId};
+	qtext_key		key = {.queryid = queryid, .dbid = (uint64) MyDatabaseId};
 
 	dsa_init();
 
@@ -1275,7 +1273,7 @@ _aqo_qtexts_remove(uint64 queryid)
 	 */
 	entry = (QueryTextEntry *) hash_search(qtexts_htab, &key, HASH_FIND,
 										   &found);
-	if (found)
+	if (found && entry->key.dbid == (uint64) MyDatabaseId)
 	{
 		/* Free DSA memory, allocated for this record */
 		Assert(DsaPointerIsValid(entry->qtext_dp));
@@ -1299,7 +1297,7 @@ _aqo_data_remove(data_key *key)
 	LWLockAcquire(&aqo_state->data_lock, LW_EXCLUSIVE);
 
 	entry = (DataEntry *) hash_search(data_htab, key, HASH_FIND, &found);
-	if (found)
+	if (found && entry->key.dbid == (uint64) MyDatabaseId)
 	{
 		/* Free DSA memory, allocated for this record */
 		Assert(DsaPointerIsValid(entry->data_dp));
@@ -1376,7 +1374,7 @@ aqo_data_store(uint64 fs, int fss, AqoDataArgs *data, List *reloids)
 {
 	DataEntry  *entry;
 	bool		found;
-	data_key	key = {.fs = fs, .fss = fss, .dbid = (uint64) (uint64) MyDatabaseId};
+	data_key	key = {.fs = fs, .fss = fss, .dbid = (uint64) MyDatabaseId};
 	int			i;
 	char	   *ptr;
 	ListCell   *lc;
@@ -1827,13 +1825,11 @@ aqo_data(PG_FUNCTION_ARGS)
 	{
 		char *ptr;
 
-		if (entry->key.dbid != (uint64) MyDatabaseId)
-			continue;
-
 		memset(nulls, 0, AD_TOTAL_NCOLS);
 
 		values[AD_FS] = Int64GetDatum(entry->key.fs);
 		values[AD_FSS] = Int32GetDatum((int) entry->key.fss);
+		values[AD_DBID] = ObjectIdGetDatum(entry->key.dbid);
 		values[AD_NFEATURES] = Int32GetDatum(entry->cols);
 
 		/* Fill values from the DSA data chunk */
@@ -1994,10 +1990,8 @@ aqo_queries(PG_FUNCTION_ARGS)
 	hash_seq_init(&hash_seq, queries_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
-		if (entry->key.dbid != (uint64) MyDatabaseId)
-			continue;
-
 		values[AQ_QUERYID] = Int64GetDatum(entry->key.queryid);
+		values[AQ_DBID] = ObjectIdGetDatum(entry->key.dbid);
 		values[AQ_FS] = Int64GetDatum(entry->fs);
 		values[AQ_LEARN_AQO] = BoolGetDatum(entry->learn_aqo);
 		values[AQ_USE_AQO] = BoolGetDatum(entry->use_aqo);
@@ -2351,7 +2345,7 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 		List		   *actual_fss = NIL;
 		ListCell	   *lc;
 
-		if (entry->key.dbid != (uint64) MyDatabaseId)
+		if (entry->key.dbid != (uint64) MyDatabaseId && entry->key.queryid != 0)
 			continue;
 
 		/* Scan aqo_data for any junk records related to this FS */
@@ -2601,6 +2595,9 @@ aqo_cardinality_error(PG_FUNCTION_ARGS)
 		int64	nexecs;
 		int		nvals;
 
+		if (qentry->key.dbid != (uint64) MyDatabaseId && qentry->key.queryid != 0)
+			continue;
+
 		sentry = (StatEntry *) hash_search(stat_htab, &qentry->key,
 										   HASH_FIND, &found);
 		if (!found)
@@ -2695,6 +2692,9 @@ aqo_execution_time(PG_FUNCTION_ARGS)
 		int64	nexecs;
 		int		nvals;
 		double	tm = 0;
+
+		if (qentry->key.dbid != (uint64) MyDatabaseId && qentry->key.queryid != 0)
+			continue;
 
 		sentry = (StatEntry *) hash_search(stat_htab, &qentry->key,
 										   HASH_FIND, &found);

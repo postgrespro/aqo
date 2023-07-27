@@ -167,6 +167,7 @@ COMMENT ON FUNCTION aqo_reset(oid) IS
 CREATE FUNCTION aqo_data (
   OUT fs			bigint,
   OUT fss			integer,
+  OUT dbid    Oid,
   OUT nfeatures		integer,
   OUT features		double precision[][],
   OUT targets		double precision[],
@@ -179,6 +180,7 @@ LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
 
 CREATE FUNCTION aqo_queries (
   OUT queryid                bigint,
+  OUT dbid                   Oid,
   OUT fs                     bigint,
   OUT learn_aqo              boolean,
   OUT use_aqo                boolean,
@@ -192,6 +194,7 @@ LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
 
 CREATE FUNCTION aqo_query_stat (
   OUT queryid						bigint,
+  OUT dbid              oid,
   OUT execution_time_with_aqo		double precision[],
   OUT execution_time_without_aqo	double precision[],
   OUT planning_time_with_aqo		double precision[],
@@ -205,7 +208,7 @@ RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'aqo_query_stat'
 LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
 
-CREATE FUNCTION aqo_query_texts(OUT queryid bigint, OUT query_text text)
+CREATE FUNCTION aqo_query_texts(OUT queryid bigint, OUT dbid Oid, OUT query_text text)
 RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'aqo_query_texts'
 LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
