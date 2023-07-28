@@ -255,7 +255,7 @@ aqo_stat_store(uint64 queryid, bool use_aqo, AqoStatArgs *stat_arg,
 			   bool append_mode)
 {
 	StatEntry  *entry;
-	queries_key key = {.queryid = queryid, .dbid = (uint64) MyDatabaseId};
+	stat_key key = {.queryid = queryid, .dbid = (uint64) MyDatabaseId};
 	bool		found;
 	int			pos;
 	bool		tblOverflow;
@@ -271,8 +271,6 @@ aqo_stat_store(uint64 queryid, bool use_aqo, AqoStatArgs *stat_arg,
 	/* Initialize entry on first usage */
 	if (!found)
 	{
-		uint64 qid;
-
 		if (action == HASH_FIND)
 		{
 			/*
@@ -287,10 +285,8 @@ aqo_stat_store(uint64 queryid, bool use_aqo, AqoStatArgs *stat_arg,
 			return NULL;
 		}
 
-		qid = entry->key.queryid;
 		memset(entry, 0, sizeof(StatEntry));
-		entry->key.queryid = qid;
-		entry->key.dbid = (uint64) MyDatabaseId;
+		entry->key = key;
 	}
 
 	if (!append_mode)
@@ -299,8 +295,7 @@ aqo_stat_store(uint64 queryid, bool use_aqo, AqoStatArgs *stat_arg,
 		if (found)
 		{
 			memset(entry, 0, sizeof(StatEntry));
-			entry->key.queryid = queryid;
-			entry->key.dbid = (uint64) MyDatabaseId;
+			entry->key = key;
 		}
 
 		sz = stat_arg->cur_stat_slot_aqo * sizeof(entry->est_error_aqo[0]);
@@ -1124,8 +1119,7 @@ aqo_qtext_store(uint64 queryid, const char *query_string)
 			return false;
 		}
 
-		entry->key.queryid = queryid;
-		entry->key.dbid = (uint64) MyDatabaseId;
+		entry->key = key;
 		size = size > querytext_max_size ? querytext_max_size : size;
 		entry->qtext_dp = dsa_allocate0(qtext_dsa, size);
 
@@ -1203,6 +1197,7 @@ aqo_query_texts(PG_FUNCTION_ARGS)
 		ptr = dsa_get_address(qtext_dsa, entry->qtext_dp);
 		values[QT_QUERYID] = Int64GetDatum(entry->key.queryid);
 		values[QT_QUERY_STRING] = CStringGetTextDatum(ptr);
+		values[QT_DBID] = UInt64GetDatum(entry->key.dbid);
 		tuplestore_putvalues(tupstore, tupDesc, values, nulls);
 	}
 
@@ -1418,7 +1413,8 @@ aqo_data_store(uint64 fs, int fss, AqoDataArgs *data, List *reloids)
 				 errhint("Increase value of aqo.fss_max_items on restart of the instance")));
 			return false;
 		}
-		
+
+		entry->key = key;
 		entry->cols = data->cols;
 		entry->rows = data->rows;
 		entry->nrels = nrels;
@@ -2052,6 +2048,7 @@ aqo_queries_store(uint64 queryid,
 				errhint("Increase value of aqo.fs_max_items on restart of the instance")));
 			return false;
 		}
+		entry->key = key;
 	}
 
 
@@ -2251,6 +2248,7 @@ update_query_timeout(uint64 queryid, int64 smart_timeout)
  * if forced is false, do nothing if query with such ID isn't exists yet.
  * Return true if operation have done some changes.
  */
+/* TODO: add dbid as key to *_update functions parameters */
 Datum
 aqo_queries_update(PG_FUNCTION_ARGS)
 {
@@ -2350,7 +2348,7 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 		{
 			char *ptr;
 
-			if (entry->fs != dentry->key.fs)
+			if (entry->fs != dentry->key.fs || entry->key.dbid != dentry->key.dbid)
 				/* Another FS */
 				continue;
 
@@ -2409,7 +2407,7 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 		/* Remove junk records from aqo_data */
 		foreach(lc, junk_fss)
 		{
-			data_key	key = {.fs = entry->fs, .fss = lfirst_int(lc)};
+     	 	data_key  key = {.fs = entry->fs, .fss = lfirst_int(lc), .dbid = entry->key.dbid};
 			(*fss_num) += (int) _aqo_data_remove(&key);
 		}
 
@@ -2737,6 +2735,7 @@ aqo_execution_time(PG_FUNCTION_ARGS)
  * Return true if operation have done some changes,
  * false otherwize.
  */
+/* TODO: add dbid as key to *_update functions parameters */
 Datum
 aqo_query_texts_update(PG_FUNCTION_ARGS)
 {
@@ -2786,6 +2785,7 @@ static int init_dbl_array(double **dest, ArrayType *arr)
  * Return true if operation have done some changes,
  * false otherwize.
  */
+/* TODO: add dbid as key to *_update functions parameters */
 Datum
 aqo_query_stat_update(PG_FUNCTION_ARGS)
 {
@@ -2851,6 +2851,7 @@ aqo_query_stat_update(PG_FUNCTION_ARGS)
  * Return true if operation have done some changes,
  * false otherwize.
  */
+/* TODO: add dbid as key to *_update functions parameters */
 Datum
 aqo_data_update(PG_FUNCTION_ARGS)
 {

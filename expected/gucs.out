@@ -88,10 +88,16 @@ SELECT obj_description('aqo_cleanup'::regproc::oid);
  Remove unneeded rows from the AQO ML storage
 (1 row)
 
-SELECT obj_description('aqo_reset'::regproc::oid);
-        obj_description         
---------------------------------
- Reset all data gathered by AQO
+SELECT obj_description('aqo_reset()'::regprocedure::oid);
+                     obj_description                     
+---------------------------------------------------------
+ Reset all data gathered by AQO for the current database
+(1 row)
+
+SELECT obj_description('aqo_reset(oid)'::regprocedure::oid);
+                      obj_description                      
+-----------------------------------------------------------
+ Reset all data gathered by AQO for the specified database
 (1 row)
 
 \df aqo_cardinality_error
@@ -127,7 +133,8 @@ SELECT obj_description('aqo_reset'::regproc::oid);
  Schema |   Name    | Result data type | Argument data types | Type 
 --------+-----------+------------------+---------------------+------
  public | aqo_reset | bigint           |                     | func
-(1 row)
+ public | aqo_reset | bigint           | dbid oid            | func
+(2 rows)
 
 -- Check stat reset
 SELECT count(*) FROM aqo_query_stat;

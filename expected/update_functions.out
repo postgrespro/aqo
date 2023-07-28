@@ -169,8 +169,8 @@ ORDER BY res;
 (TABLE aqo_query_texts EXCEPT TABLE aqo_query_texts_dump)
 UNION ALL
 (TABLE aqo_query_texts_dump EXCEPT TABLE aqo_query_texts);
- queryid | query_text 
----------+------------
+ queryid | query_text | dbid 
+---------+------------+------
 (0 rows)
 
 -- Update aqo_query_texts with dump data.
@@ -192,8 +192,8 @@ ORDER BY res;
 (TABLE aqo_query_texts EXCEPT TABLE aqo_query_texts_dump)
 UNION ALL
 (TABLE aqo_query_texts_dump EXCEPT TABLE aqo_query_texts);
- queryid | query_text 
----------+------------
+ queryid | query_text | dbid 
+---------+------------+------
 (0 rows)
 
 --
@@ -218,8 +218,8 @@ ORDER BY res;
 (TABLE aqo_queries_dump EXCEPT TABLE aqo_queries)
 UNION ALL
 (TABLE aqo_queries EXCEPT TABLE aqo_queries_dump);
- queryid | fs | learn_aqo | use_aqo | auto_tuning | smart_timeout | count_increase_timeout 
----------+----+-----------+---------+-------------+---------------+------------------------
+ queryid | fs | learn_aqo | use_aqo | auto_tuning | smart_timeout | count_increase_timeout | dbid 
+---------+----+-----------+---------+-------------+---------------+------------------------+------
 (0 rows)
 
 -- Update aqo_queries with dump data.
@@ -241,8 +241,8 @@ ORDER BY res;
 (TABLE aqo_queries_dump EXCEPT TABLE aqo_queries)
 UNION ALL
 (TABLE aqo_queries EXCEPT TABLE aqo_queries_dump);
- queryid | fs | learn_aqo | use_aqo | auto_tuning | smart_timeout | count_increase_timeout 
----------+----+-----------+---------+-------------+---------------+------------------------
+ queryid | fs | learn_aqo | use_aqo | auto_tuning | smart_timeout | count_increase_timeout | dbid 
+---------+----+-----------+---------+-------------+---------------+------------------------+------
 (0 rows)
 
 --
@@ -269,8 +269,8 @@ ORDER BY res;
 (TABLE aqo_query_stat_dump EXCEPT TABLE aqo_query_stat)
 UNION ALL
 (TABLE aqo_query_stat EXCEPT TABLE aqo_query_stat_dump);
- queryid | execution_time_with_aqo | execution_time_without_aqo | planning_time_with_aqo | planning_time_without_aqo | cardinality_error_with_aqo | cardinality_error_without_aqo | executions_with_aqo | executions_without_aqo 
----------+-------------------------+----------------------------+------------------------+---------------------------+----------------------------+-------------------------------+---------------------+------------------------
+ queryid | execution_time_with_aqo | execution_time_without_aqo | planning_time_with_aqo | planning_time_without_aqo | cardinality_error_with_aqo | cardinality_error_without_aqo | executions_with_aqo | executions_without_aqo | dbid 
+---------+-------------------------+----------------------------+------------------------+---------------------------+----------------------------+-------------------------------+---------------------+------------------------+------
 (0 rows)
 
 -- Update aqo_query_stat with dump data.
@@ -294,8 +294,8 @@ ORDER BY res;
 (TABLE aqo_query_stat_dump EXCEPT TABLE aqo_query_stat)
 UNION ALL
 (TABLE aqo_query_stat EXCEPT TABLE aqo_query_stat_dump);
- queryid | execution_time_with_aqo | execution_time_without_aqo | planning_time_with_aqo | planning_time_without_aqo | cardinality_error_with_aqo | cardinality_error_without_aqo | executions_with_aqo | executions_without_aqo 
----------+-------------------------+----------------------------+------------------------+---------------------------+----------------------------+-------------------------------+---------------------+------------------------
+ queryid | execution_time_with_aqo | execution_time_without_aqo | planning_time_with_aqo | planning_time_without_aqo | cardinality_error_with_aqo | cardinality_error_without_aqo | executions_with_aqo | executions_without_aqo | dbid 
+---------+-------------------------+----------------------------+------------------------+---------------------------+----------------------------+-------------------------------+---------------------+------------------------+------
 (0 rows)
 
 --
@@ -310,8 +310,8 @@ WHERE ret \gset
 (TABLE aqo_data_dump EXCEPT TABLE aqo_data)
 UNION ALL
 (TABLE aqo_data EXCEPT TABLE aqo_data_dump);
- fs | fss | nfeatures | features | targets | reliability | oids 
-----+-----+-----------+----------+---------+-------------+------
+ fs | fss | nfeatures | features | targets | reliability | oids | dbid 
+----+-----+-----------+----------+---------+-------------+------+------
 (0 rows)
 
 -- Update aqo_data with dump data.
@@ -329,8 +329,8 @@ SELECT :res1 = :res2 AS ml_sizes_are_equal;
 (TABLE aqo_data_dump EXCEPT TABLE aqo_data)
 UNION ALL
 (TABLE aqo_data EXCEPT TABLE aqo_data_dump);
- fs | fss | nfeatures | features | targets | reliability | oids 
-----+-----+-----------+----------+---------+-------------+------
+ fs | fss | nfeatures | features | targets | reliability | oids | dbid 
+----+-----+-----------+----------+---------+-------------+------+------
 (0 rows)
 
 -- Reject aqo_query_stat_update if there is NULL elements in array arg.

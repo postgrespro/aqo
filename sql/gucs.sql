@@ -40,7 +40,8 @@ SELECT obj_description('aqo_cardinality_error'::regproc::oid);
 SELECT obj_description('aqo_execution_time'::regproc::oid);
 SELECT obj_description('aqo_drop_class'::regproc::oid);
 SELECT obj_description('aqo_cleanup'::regproc::oid);
-SELECT obj_description('aqo_reset'::regproc::oid);
+SELECT obj_description('aqo_reset()'::regprocedure::oid);
+SELECT obj_description('aqo_reset(oid)'::regprocedure::oid);
 
 \df aqo_cardinality_error
 \df aqo_execution_time

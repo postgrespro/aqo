@@ -251,8 +251,8 @@ SELECT true AS success FROM aqo_cleanup();
 -- Result of the query below should be empty
 SELECT * FROM aqo_query_texts aqt1, aqo_query_texts aqt2
 WHERE aqt1.query_text = aqt2.query_text AND aqt1.queryid <> aqt2.queryid;
- queryid | query_text | queryid | query_text 
----------+------------+---------+------------
+ queryid | query_text | dbid | queryid | query_text | dbid 
+---------+------------+------+---------+------------+------
 (0 rows)
 
 -- Fix the state of the AQO data

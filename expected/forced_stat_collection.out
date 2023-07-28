@@ -39,8 +39,8 @@ SELECT count(*) FROM person WHERE age<18 AND passport IS NOT NULL;
 (1 row)
 
 SELECT * FROM aqo_data;
- fs | fss | nfeatures | features | targets | reliability | oids 
-----+-----+-----------+----------+---------+-------------+------
+ fs | fss | nfeatures | features | targets | reliability | oids | dbid 
+----+-----+-----------+----------+---------+-------------+------+------
 (0 rows)
 
 CREATE OR REPLACE FUNCTION round_array (double precision[])
