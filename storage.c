@@ -96,9 +96,9 @@ static int data_store(const char *filename, form_record_t callback,
 static void data_load(const char *filename, deform_record_t callback, void *ctx);
 static size_t _compute_data_dsa(const DataEntry *entry);
 
-static bool _aqo_stat_remove(uint64 queryid);
-static bool _aqo_queries_remove(uint64 queryid);
-static bool _aqo_qtexts_remove(uint64 queryid);
+static bool _aqo_stat_remove(uint64 queryid, Oid dbid);
+static bool _aqo_queries_remove(uint64 queryid, Oid dbid);
+static bool _aqo_qtexts_remove(uint64 queryid, Oid dbid);
 static bool _aqo_data_remove(data_key *key);
 static bool nearest_neighbor(double **matrix, int old_rows, double *neighbor, int cols);
 static double fs_distance(double *a, double *b, int len);
@@ -1207,10 +1207,10 @@ aqo_query_texts(PG_FUNCTION_ARGS)
 }
 
 static bool
-_aqo_stat_remove(uint64 queryid)
+_aqo_stat_remove(uint64 queryid, Oid dbid)
 {
 	bool		found;
-	stat_key	key = {.queryid = queryid, .dbid =(uint64) MyDatabaseId};
+	stat_key	key = {.queryid = queryid, .dbid =(uint64) dbid};
 	StatEntry  *entry;
 
 	Assert(!LWLockHeldByMe(&aqo_state->stat_lock));
@@ -1228,10 +1228,10 @@ _aqo_stat_remove(uint64 queryid)
 }
 
 static bool
-_aqo_queries_remove(uint64 queryid)
+_aqo_queries_remove(uint64 queryid, Oid dbid)
 {
 	bool			found;
-	queries_key		key = {.queryid = queryid, .dbid = (uint64) MyDatabaseId};
+	queries_key		key = {.queryid = queryid, .dbid = (uint64) dbid};
 	QueriesEntry   *entry;
 
 
@@ -1250,11 +1250,11 @@ _aqo_queries_remove(uint64 queryid)
 }
 
 static bool
-_aqo_qtexts_remove(uint64 queryid)
+_aqo_qtexts_remove(uint64 queryid, Oid dbid)
 {
 	bool			found = false;
 	QueryTextEntry *entry;
-	qtext_key		key = {.queryid = queryid, .dbid = (uint64) MyDatabaseId};
+	qtext_key		key = {.queryid = queryid, .dbid = (uint64) dbid};
 
 	dsa_init();
 
@@ -2418,13 +2418,13 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 		if (entry->fs != 0 && (actual_fss == NIL || (junk_fss != NIL && !gentle)))
 		{
 			/* Query Stat */
-			_aqo_stat_remove(entry->key.queryid);
+			_aqo_stat_remove(entry->key.queryid, entry->key.dbid);
 
 			/* Query text */
-			_aqo_qtexts_remove(entry->key.queryid);
+			_aqo_qtexts_remove(entry->key.queryid, entry->key.dbid);
 
 			/* Query class preferences */
-			(*fs_num) += (int) _aqo_queries_remove(entry->key.queryid);
+			(*fs_num) += (int) _aqo_queries_remove(entry->key.queryid, entry->key.dbid);
 		}
 	}
 
@@ -2510,9 +2510,9 @@ aqo_drop_class(PG_FUNCTION_ARGS)
 			 "id = "INT64_FORMAT", fs = "UINT64_FORMAT".", (int64) queryid, fs);
 
 	/* Now, remove all data related to the class */
-	_aqo_queries_remove(queryid);
-	_aqo_stat_remove(queryid);
-	_aqo_qtexts_remove(queryid);
+	_aqo_queries_remove(queryid, entry->key.dbid);
+	_aqo_stat_remove(queryid, entry->key.dbid);
+	_aqo_qtexts_remove(queryid, entry->key.dbid);
 	cnt = _aqo_data_clean(fs);
 
 	/* Immediately save changes to permanent storage. */
