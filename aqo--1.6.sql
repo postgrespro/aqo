@@ -167,12 +167,12 @@ COMMENT ON FUNCTION aqo_reset(oid) IS
 CREATE FUNCTION aqo_data (
   OUT fs			bigint,
   OUT fss			integer,
-  OUT dbid    Oid,
   OUT nfeatures		integer,
   OUT features		double precision[][],
   OUT targets		double precision[],
   OUT reliability	double precision[],
-  OUT oids			Oid[]
+  OUT oids			Oid[],
+  OUT dbid		bigint
 )
 RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'aqo_data'
@@ -180,13 +180,13 @@ LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
 
 CREATE FUNCTION aqo_queries (
   OUT queryid                bigint,
-  OUT dbid                   Oid,
   OUT fs                     bigint,
   OUT learn_aqo              boolean,
   OUT use_aqo                boolean,
   OUT auto_tuning            boolean,
   OUT smart_timeout          bigint,
-  OUT count_increase_timeout bigint
+  OUT count_increase_timeout bigint,
+  OUT dbid                   bigint
 )
 RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'aqo_queries'
@@ -194,7 +194,6 @@ LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
 
 CREATE FUNCTION aqo_query_stat (
   OUT queryid						bigint,
-  OUT dbid              oid,
   OUT execution_time_with_aqo		double precision[],
   OUT execution_time_without_aqo	double precision[],
   OUT planning_time_with_aqo		double precision[],
@@ -202,13 +201,14 @@ CREATE FUNCTION aqo_query_stat (
   OUT cardinality_error_with_aqo	double precision[],
   OUT cardinality_error_without_aqo	double precision[],
   OUT executions_with_aqo bigint,
-  OUT executions_without_aqo		bigint
+  OUT executions_without_aqo		bigint,
+  OUT dbid                   bigint
 )
 RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'aqo_query_stat'
 LANGUAGE C STRICT VOLATILE PARALLEL SAFE;
 
-CREATE FUNCTION aqo_query_texts(OUT queryid bigint, OUT dbid Oid, OUT query_text text)
+CREATE FUNCTION aqo_query_texts(OUT queryid bigint, OUT query_text text, OUT dbid bigint)
 RETURNS SETOF record
 AS 'MODULE_PATHNAME', 'aqo_query_texts'
 LANGUAGE C STRICT VOLATILE PARALLEL SAFE;

@@ -41,22 +41,22 @@
 
 
 typedef enum {
-	QUERYID = 0, DBID, EXEC_TIME_AQO, EXEC_TIME, PLAN_TIME_AQO, PLAN_TIME,
-	EST_ERROR_AQO, EST_ERROR, NEXECS_AQO, NEXECS, TOTAL_NCOLS
+	QUERYID = 0, EXEC_TIME_AQO, EXEC_TIME, PLAN_TIME_AQO, PLAN_TIME,
+	EST_ERROR_AQO, EST_ERROR, NEXECS_AQO, NEXECS, DBID, TOTAL_NCOLS
 } aqo_stat_cols;
 
 typedef enum {
-	QT_QUERYID = 0, QT_DBID, QT_QUERY_STRING, QT_TOTAL_NCOLS
+	QT_QUERYID = 0, QT_QUERY_STRING, QT_DBID, QT_TOTAL_NCOLS
 } aqo_qtexts_cols;
 
 typedef enum {
-	AD_FS = 0, AD_FSS, AD_DBID, AD_NFEATURES, AD_FEATURES, AD_TARGETS, AD_RELIABILITY,
-	AD_OIDS, AD_TOTAL_NCOLS
+	AD_FS = 0, AD_FSS, AD_NFEATURES, AD_FEATURES, AD_TARGETS, AD_RELIABILITY,
+	AD_OIDS, AD_DBID, AD_TOTAL_NCOLS
 } aqo_data_cols;
 
 typedef enum {
-	AQ_QUERYID = 0, AQ_DBID, AQ_FS, AQ_LEARN_AQO, AQ_USE_AQO, AQ_AUTO_TUNING, AQ_SMART_TIMEOUT, AQ_COUNT_INCREASE_TIMEOUT,
-	AQ_TOTAL_NCOLS
+	AQ_QUERYID = 0, AQ_FS, AQ_LEARN_AQO, AQ_USE_AQO, AQ_AUTO_TUNING, AQ_SMART_TIMEOUT, AQ_COUNT_INCREASE_TIMEOUT,
+	AQ_DBID, AQ_TOTAL_NCOLS
 } aqo_queries_cols;
 
 typedef void* (*form_record_t) (void *ctx, size_t *size);
@@ -424,7 +424,7 @@ aqo_query_stat(PG_FUNCTION_ARGS)
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
 		values[QUERYID] = Int64GetDatum(entry->key.queryid);
-		values[DBID] = ObjectIdGetDatum(entry->key.dbid);
+		values[DBID] = UInt64GetDatum(entry->key.dbid);
 		values[NEXECS] = Int64GetDatum(entry->execs_without_aqo);
 		values[NEXECS_AQO] = Int64GetDatum(entry->execs_with_aqo);
 		values[EXEC_TIME_AQO] = PointerGetDatum(form_vector(entry->exec_time_aqo, entry->cur_stat_slot_aqo));
@@ -1202,7 +1202,6 @@ aqo_query_texts(PG_FUNCTION_ARGS)
 		Assert(DsaPointerIsValid(entry->qtext_dp));
 		ptr = dsa_get_address(qtext_dsa, entry->qtext_dp);
 		values[QT_QUERYID] = Int64GetDatum(entry->key.queryid);
-		values[QT_DBID] = ObjectIdGetDatum(entry->key.dbid);
 		values[QT_QUERY_STRING] = CStringGetTextDatum(ptr);
 		tuplestore_putvalues(tupstore, tupDesc, values, nulls);
 	}
@@ -1829,7 +1828,7 @@ aqo_data(PG_FUNCTION_ARGS)
 
 		values[AD_FS] = Int64GetDatum(entry->key.fs);
 		values[AD_FSS] = Int32GetDatum((int) entry->key.fss);
-		values[AD_DBID] = ObjectIdGetDatum(entry->key.dbid);
+		values[AD_DBID] = UInt64GetDatum(entry->key.dbid);
 		values[AD_NFEATURES] = Int32GetDatum(entry->cols);
 
 		/* Fill values from the DSA data chunk */
@@ -1991,7 +1990,7 @@ aqo_queries(PG_FUNCTION_ARGS)
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
 		values[AQ_QUERYID] = Int64GetDatum(entry->key.queryid);
-		values[AQ_DBID] = ObjectIdGetDatum(entry->key.dbid);
+		values[AQ_DBID] = UInt64GetDatum(entry->key.dbid);
 		values[AQ_FS] = Int64GetDatum(entry->fs);
 		values[AQ_LEARN_AQO] = BoolGetDatum(entry->learn_aqo);
 		values[AQ_USE_AQO] = BoolGetDatum(entry->use_aqo);
@@ -2344,9 +2343,6 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 		List		   *junk_fss = NIL;
 		List		   *actual_fss = NIL;
 		ListCell	   *lc;
-
-		if (entry->key.dbid != (uint64) MyDatabaseId && entry->key.queryid != 0)
-			continue;
 
 		/* Scan aqo_data for any junk records related to this FS */
 		hash_seq_init(&hash_seq2, data_htab);
@@ -2751,14 +2747,14 @@ aqo_query_texts_update(PG_FUNCTION_ARGS)
 	bool	res = false;
 
 	/* Do nothing if any arguments are NULLs */
-	if ((PG_ARGISNULL(QT_QUERYID) || PG_ARGISNULL(QT_QUERY_STRING)))
+	if ((PG_ARGISNULL(0) || PG_ARGISNULL(1)))
 		PG_RETURN_BOOL(false);
 
-	if (!(queryid = PG_GETARG_INT64(QT_QUERYID)))
+	if (!(queryid = PG_GETARG_INT64(0)))
 		/* Do nothing for default feature space */
 		PG_RETURN_BOOL(false);
 
-	str = PG_GETARG_TEXT_PP(QT_QUERY_STRING);
+	str = PG_GETARG_TEXT_PP(1);
 	str_len = VARSIZE_ANY_EXHDR(str) + 1;
 	if (str_len > querytext_max_size)
 		str_len = querytext_max_size;

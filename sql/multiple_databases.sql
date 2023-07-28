@@ -37,7 +37,7 @@ SELECT x1,y1 FROM A LEFT JOIN b ON A.x1 = B.y1 WHERE x1 = 5 AND x2 = 5;') AS str
 WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
 
 SELECT count(*) FROM aqo_data();
-SELECT count(*) FROM aqo_queries;();
+SELECT count(*) FROM aqo_queries();
 SELECT count(*) FROM aqo_query_texts();
 SELECT count(*) FROM aqo_query_stat();
 
@@ -49,20 +49,35 @@ set aqo.join_threshold = 0;
 set aqo.show_details = on;
 set aqo.mode = learn;
 set aqo.use = on;
-select * from aqo_reset(NULL);
 
--- Only see info from current database.
+CREATE TABLE a (x1 int, x2 int, x3 int);
+INSERT INTO a (x1, x2, x3) SELECT mod(ival,10), mod(ival,10), mod(ival,10) FROM generate_series(1,100) As ival;
+
+CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
+BEGIN
+    RETURN QUERY
+        EXECUTE format('EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF) %s', query_string);
+    RETURN;
+END;
+$$ LANGUAGE PLPGSQL;
+
+SELECT str AS result
+FROM expln('
+SELECT * FROM a WHERE x1 > 1;') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+
 SELECT count(*) FROM aqo_data();
-SELECT count(*) FROM aqo_queries;();
+SELECT count(*) FROM aqo_queries();
 SELECT count(*) FROM aqo_query_texts();
 SELECT count(*) FROM aqo_query_stat();
--- Remove plan from other DB.
+
+-- Remove aqo info from other DB.
 SELECT aqo_reset(:old_dbid);
 
 -- Reconnect to old DB.
 \c :old_db - - :old_port
 SELECT count(*) FROM aqo_data();
-SELECT count(*) FROM aqo_queries;();
+SELECT count(*) FROM aqo_queries();
 SELECT count(*) FROM aqo_query_texts();
 SELECT count(*) FROM aqo_query_stat();
 SELECT aqo_reset(NULL);
