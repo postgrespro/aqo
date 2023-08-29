@@ -270,8 +270,8 @@ _PG_init(void)
 							&dsm_size_max,
 							100,
 							0, INT_MAX,
-							PGC_SUSET,
-							0,
+							PGC_POSTMASTER,
+							GUC_UNIT_MB,
 							NULL,
 							NULL,
 							NULL
@@ -383,5 +383,5 @@ PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
 Datum
 invalidate_deactivated_queries_cache(PG_FUNCTION_ARGS)
 {
-       PG_RETURN_POINTER(NULL);
+	PG_RETURN_POINTER(NULL);
 }
