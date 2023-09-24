@@ -130,6 +130,7 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 		 */
 		MemoryContextSwitchTo(oldctx);
 		disable_aqo_for_query();
+		query_context.query_hash = 0;
 
 		return (*aqo_planner_next)(parse, query_string, cursorOptions, boundParams);
 	}
@@ -233,7 +234,11 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 		 */
 		if (!query_context.learn_aqo && !query_context.use_aqo &&
 			!query_context.auto_tuning && !force_collect_stat)
+		{
 			add_deactivated_query(query_context.query_hash);
+			disable_aqo_for_query();
+			goto ignore_query_settings;
+		}
 
 		/*
 		 * That we can do if query exists in database.
