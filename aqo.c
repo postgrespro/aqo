@@ -96,7 +96,7 @@ MemoryContext 		AQOLearnMemCtx = NULL;
 MemoryContext 		AQOStorageMemCtx = NULL;
 
 /* Additional plan info */
-int njoins;
+int njoins = -1;
 
 
 /*****************************************************************************

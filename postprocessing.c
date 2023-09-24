@@ -85,7 +85,6 @@ static void StoreToQueryEnv(QueryDesc *queryDesc);
 static void StorePlanInternals(QueryDesc *queryDesc);
 static bool ExtractFromQueryEnv(QueryDesc *queryDesc);
 
-
 /*
  * This is the critical section: only one runner is allowed to be inside this
  * function for one feature subspace.
@@ -766,6 +765,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 
 	cardinality_sum_errors = 0.;
 	cardinality_num_objects = 0;
+	njoins = -1;
 
 	if (IsQueryDisabled() || !ExtractFromQueryEnv(queryDesc))
 		/* AQO keep all query-related preferences at the query context.
@@ -996,7 +996,8 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 		(*aqo_ExplainOnePlan_next)(plannedstmt, into, es, queryString,
 									 params, planduration, queryEnv);
 
-	if (IsQueryDisabled() || !aqo_show_details)
+	if (!(aqo_mode != AQO_MODE_DISABLED || force_collect_stat) ||
+		!aqo_show_details)
 		return;
 
 	/* Report to user about aqo state only in verbose mode */
@@ -1031,13 +1032,10 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 	 * Query class provides an user the conveniently use of the AQO
 	 * auxiliary functions.
 	 */
-	if (aqo_mode != AQO_MODE_DISABLED || force_collect_stat)
-	{
-		if (aqo_show_hash)
-			ExplainPropertyInteger("Query hash", NULL,
-									query_context.query_hash, es);
-		ExplainPropertyInteger("JOINS", NULL, njoins, es);
-	}
+	if (aqo_show_hash)
+		ExplainPropertyInteger("Query hash", NULL,
+								(int64) query_context.query_hash, es);
+	ExplainPropertyInteger("JOINS", NULL, njoins, es);
 }
 
 static void
