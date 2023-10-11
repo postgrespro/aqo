@@ -21,6 +21,7 @@ INSERT INTO a (x1, x2, x3) SELECT mod(ival,10), mod(ival,10), mod(ival,10) FROM 
 CREATE TABLE b (y1 int, y2 int, y3 int);
 INSERT INTO b (y1, y2, y3) SELECT mod(ival + 1,10), mod(ival + 1,10), mod(ival + 1,10) FROM generate_series(1,1000) As ival;
 
+ANALYZE a, b;
 
 --
 -- Returns string-by-string explain of a query. Made for removing some strings
@@ -127,6 +128,8 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
 
 CREATE TABLE c (z1 int, z2 int, z3 int);
 INSERT INTO c (z1, z2, z3) SELECT mod(ival + 1,10), mod(ival + 1,10), mod(ival + 1,10) FROM generate_series(1,1000) As ival;
+
+ANALYZE c;
 
 SELECT str AS result
 FROM expln('
