@@ -150,7 +150,6 @@ restore_selectivities(List *clauselist,
 {
 	List	   *lst = NIL;
 	ListCell   *l;
-	int			i = 0;
 	bool		parametrized_sel;
 	int			nargs;
 	int		   *args_hash;
@@ -190,7 +189,6 @@ restore_selectivities(List *clauselist,
 			cur_sel = &rinfo->outer_selec;
 
 		lst = lappend(lst, cur_sel);
-		i++;
 	}
 
 	if (parametrized_sel)
