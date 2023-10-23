@@ -204,6 +204,14 @@ SELECT aqo_data_update(1, 1, 1, '{{1}, {2}}', '{1}', '{1}', '{1, 2, 3}');
 
 SET aqo.mode='disabled';
 
+-- Testing the minimum querytext size
+SELECT true AS success FROM aqo_reset();
+SET aqo.querytext_max_size = 0;
+SET aqo.querytext_max_size = 1;
+SELECT queryid, query_text FROM aqo_query_texts WHERE queryid > 0;
+SELECT aqo_query_texts_update(1, 'test');
+SELECT queryid, query_text FROM aqo_query_texts WHERE queryid > 0;
+
 DROP EXTENSION aqo CASCADE;
 
 DROP TABLE aqo_test1, aqo_test2;
