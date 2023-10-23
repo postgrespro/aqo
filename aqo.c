@@ -256,7 +256,7 @@ _PG_init(void)
 							NULL,
 							&querytext_max_size,
 							1000,
-							0, INT_MAX,
+							1, INT_MAX,
 							PGC_SUSET,
 							0,
 							NULL,
