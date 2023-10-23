@@ -417,6 +417,33 @@ SELECT aqo_data_update(1, 1, 1, '{{1}, {2}}', '{1}', '{1}', '{1, 2, 3}');
 (1 row)
 
 SET aqo.mode='disabled';
+-- Testing the minimum querytext size
+SELECT true AS success FROM aqo_reset();
+ success 
+---------
+ t
+(1 row)
+
+SET aqo.querytext_max_size = 0;
+ERROR:  0 is outside the valid range for parameter "aqo.querytext_max_size" (1 .. 2147483647)
+SET aqo.querytext_max_size = 1;
+SELECT queryid, query_text FROM aqo_query_texts WHERE queryid > 0;
+ queryid | query_text 
+---------+------------
+(0 rows)
+
+SELECT aqo_query_texts_update(1, 'test');
+ aqo_query_texts_update 
+------------------------
+ t
+(1 row)
+
+SELECT queryid, query_text FROM aqo_query_texts WHERE queryid > 0;
+ queryid | query_text 
+---------+------------
+       1 | 
+(1 row)
+
 DROP EXTENSION aqo CASCADE;
 DROP TABLE aqo_test1, aqo_test2;
 DROP TABLE aqo_query_texts_dump, aqo_queries_dump, aqo_query_stat_dump, aqo_data_dump;
