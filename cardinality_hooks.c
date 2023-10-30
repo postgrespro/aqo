@@ -448,11 +448,11 @@ aqo_estimate_num_groups(PlannerInfo *root, List *groupExprs,
 	old_ctx_m = MemoryContextSwitchTo(AQOPredictMemCtx);
 
 	predicted = predict_num_groups(root, subpath, groupExprs, &fss);
+	grouped_rel->fss_hash = fss;
 	if (predicted > 0.)
 	{
 		grouped_rel->predicted_cardinality = predicted;
 		grouped_rel->rows = predicted;
-		grouped_rel->fss_hash = fss;
 		MemoryContextSwitchTo(old_ctx_m);
 		MemoryContextReset(AQOPredictMemCtx);
 		return predicted;
