@@ -22,6 +22,7 @@
 #include "storage/lmgr.h"
 #include "utils/syscache.h"
 #include "utils/lsyscache.h"
+#include "common/shortest_dec.h"
 
 #include "aqo.h"
 #include "hash.h"
@@ -34,7 +35,8 @@ static AQOPlanNode DefaultAQOPlanNode =
 	.node.type = T_ExtensibleNode,
 	.node.extnodename = AQO_PLAN_NODE,
 	.had_path = false,
-	.rels = NULL,
+	.rels.hrels = NIL,
+	.rels.signatures = NIL,
 	.clauses = NIL,
 	.selectivities = NIL,
 	.grouping_exprs = NIL,
@@ -42,17 +44,38 @@ static AQOPlanNode DefaultAQOPlanNode =
 	.parallel_divisor = -1.,
 	.was_parametrized = false,
 	.fss = INT_MAX,
-	.prediction = -1
+	.prediction = -1.
 };
 
 /*
  * Hook on creation of a plan node. We need to store AQO-specific data to
  * support learning stage.
  */
-static create_plan_hook_type			aqo_create_plan_next					= NULL;
+static create_plan_hook_type			aqo_create_plan_next		= NULL;
 
-/*static create_upper_paths_hook_type	aqo_create_upper_paths_next				= NULL;*/
+/*static create_upper_paths_hook_type	aqo_create_upper_paths_next	= NULL;*/
 
+
+/* Return a copy of the given list of AQOClause structs */
+static List *
+copy_aqo_clauses(List *src)
+{
+	List	   *result = NIL;
+	ListCell   *lc;
+
+	foreach(lc, src)
+	{
+		AQOClause *old = (AQOClause *) lfirst(lc);
+		AQOClause *new = palloc(sizeof(AQOClause));
+
+		memcpy(new, old, sizeof(AQOClause));
+		new->clause = copyObject(old->clause);
+
+		result = lappend(result, (void *) new);
+	}
+
+	return result;
+}
 
 static AQOPlanNode *
 create_aqo_plan_node()
@@ -61,12 +84,20 @@ create_aqo_plan_node()
 															T_ExtensibleNode);
 	Assert(node != NULL);
 	memcpy(node, &DefaultAQOPlanNode, sizeof(AQOPlanNode));
-	node->rels = palloc(sizeof(RelSortOut));
-	node->rels->hrels = NIL;
-	node->rels->signatures = NIL;
 	return node;
 }
 
+AQOConstNode *
+create_aqo_const_node(AQOConstType type, int fss)
+{
+	AQOConstNode *node = (AQOConstNode *) newNode(sizeof(AQOConstNode),
+															T_ExtensibleNode);
+	Assert(node != NULL);
+	node->node.extnodename = AQO_CONST_NODE;
+	node->type = type;
+	node->fss = fss;
+	return node;
+}
 
 /* Ensure that it's postgres_fdw's foreign server oid */
 static bool
@@ -271,13 +302,8 @@ subplan_hunter(Node *node, void *context)
 
 	if (IsA(node, SubPlan))
 	{
-		A_Const	*fss = makeNode(A_Const);
-
-		fss->val.ival.type = T_Integer;
-		fss->location = -1;
-		fss->val.ival.ival = 0;
-		return (Node *) fss;
-
+		/* TODO: use fss of SubPlan here */
+		return (Node *) create_aqo_const_node(AQO_NODE_SUBPLAN, 0);
 	}
 	return expression_tree_mutator(node, subplan_hunter, context);
 }
@@ -287,8 +313,8 @@ subplan_hunter(Node *node, void *context)
  * During this operation clauses could be changed and we couldn't walk across
  * this list next.
  */
-List *
-aqo_get_clauses(PlannerInfo *root, List *restrictlist)
+static List *
+aqo_get_raw_clauses(PlannerInfo *root, List *restrictlist)
 {
 	List		*clauses = NIL;
 	ListCell	*lc;
@@ -306,14 +332,49 @@ aqo_get_clauses(PlannerInfo *root, List *restrictlist)
 	return clauses;
 }
 
+static List *
+copy_aqo_clauses_from_rinfo(List *src)
+{
+	List	   *result = NIL;
+	ListCell   *lc;
+
+	foreach(lc, src)
+	{
+		RestrictInfo *old = (RestrictInfo *) lfirst(lc);
+		AQOClause *new = palloc(sizeof(AQOClause));
+
+		new->clause = copyObject(old->clause);
+		new->norm_selec = old->norm_selec;
+		new->outer_selec = old->outer_selec;
+
+		result = lappend(result, (void *) new);
+	}
+
+	return result;
+}
+
 /*
- * For given path returns the list of all clauses used in it.
- * Also returns selectivities for the clauses throw the selectivities variable.
- * Both clauses and selectivities returned lists are copies and therefore
- * may be modified without corruption of the input data.
+ * Return copy of clauses returned from the aqo_get_raw_clause() routine
+ * and convert it into AQOClause struct.
  */
 List *
-get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
+aqo_get_clauses(PlannerInfo *root, List *restrictlist)
+{
+	List		*clauses = aqo_get_raw_clauses(root, restrictlist);
+	List		*result = copy_aqo_clauses_from_rinfo(clauses);
+
+	list_free_deep(clauses);
+	return result;
+}
+
+/*
+ * Returns a list of all used clauses for the given path.
+ * Also returns selectivities for the clauses to 'selectivities' variable.
+ * The returned list of the selectivities is a copy and therefore
+ * may be modified without corruption of the input data.
+ */
+static List *
+get_path_clauses_recurse(Path *path, PlannerInfo *root, List **selectivities)
 {
 	List	   *inner;
 	List	   *inner_sel = NIL;
@@ -333,98 +394,98 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 		case T_NestPath:
 		case T_MergePath:
 		case T_HashPath:
-			cur = ((JoinPath *) path)->joinrestrictinfo;
+			cur = list_concat(cur, ((JoinPath *) path)->joinrestrictinfo);
 
 			/* Not quite correct to avoid sjinfo, but we believe in caching */
 			cur_sel = get_selectivities(root, cur, 0,
 										((JoinPath *) path)->jointype,
 										NULL);
 
-			outer = get_path_clauses(((JoinPath *) path)->outerjoinpath, root,
+			outer = get_path_clauses_recurse(((JoinPath *) path)->outerjoinpath, root,
 									 &outer_sel);
-			inner = get_path_clauses(((JoinPath *) path)->innerjoinpath, root,
+			inner = get_path_clauses_recurse(((JoinPath *) path)->innerjoinpath, root,
 									 &inner_sel);
 			*selectivities = list_concat(cur_sel,
 										 list_concat(outer_sel, inner_sel));
-			return list_concat(list_copy(cur), list_concat(outer, inner));
+			return list_concat(cur, list_concat(outer, inner));
 			break;
 		case T_UniquePath:
-			return get_path_clauses(((UniquePath *) path)->subpath, root,
+			return get_path_clauses_recurse(((UniquePath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_GatherPath:
 		case T_GatherMergePath:
-			return get_path_clauses(((GatherPath *) path)->subpath, root,
+			return get_path_clauses_recurse(((GatherPath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_MaterialPath:
-			return get_path_clauses(((MaterialPath *) path)->subpath, root,
+			return get_path_clauses_recurse(((MaterialPath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_MemoizePath:
-			return get_path_clauses(((MemoizePath *) path)->subpath, root,
+			return get_path_clauses_recurse(((MemoizePath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_ProjectionPath:
-			return get_path_clauses(((ProjectionPath *) path)->subpath, root,
+			return get_path_clauses_recurse(((ProjectionPath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_ProjectSetPath:
-			return get_path_clauses(((ProjectSetPath *) path)->subpath, root,
+			return get_path_clauses_recurse(((ProjectSetPath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_SortPath:
-			return get_path_clauses(((SortPath *) path)->subpath, root,
+			return get_path_clauses_recurse(((SortPath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_IncrementalSortPath:
 			{
 				IncrementalSortPath *p = (IncrementalSortPath *) path;
-				return get_path_clauses(p->spath.subpath, root,
+				return get_path_clauses_recurse(p->spath.subpath, root,
 									selectivities);
 			}
 			break;
 		case T_GroupPath:
-			return get_path_clauses(((GroupPath *) path)->subpath, root,
+			return get_path_clauses_recurse(((GroupPath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_UpperUniquePath:
-			return get_path_clauses(((UpperUniquePath *) path)->subpath, root,
+			return get_path_clauses_recurse(((UpperUniquePath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_AggPath:
-			return get_path_clauses(((AggPath *) path)->subpath, root,
+			return get_path_clauses_recurse(((AggPath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_GroupingSetsPath:
-			return get_path_clauses(((GroupingSetsPath *) path)->subpath, root,
+			return get_path_clauses_recurse(((GroupingSetsPath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_WindowAggPath:
-			return get_path_clauses(((WindowAggPath *) path)->subpath, root,
+			return get_path_clauses_recurse(((WindowAggPath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_SetOpPath:
-			return get_path_clauses(((SetOpPath *) path)->subpath, root,
+			return get_path_clauses_recurse(((SetOpPath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_LockRowsPath:
-			return get_path_clauses(((LockRowsPath *) path)->subpath, root,
+			return get_path_clauses_recurse(((LockRowsPath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_LimitPath:
-			return get_path_clauses(((LimitPath *) path)->subpath, root,
+			return get_path_clauses_recurse(((LimitPath *) path)->subpath, root,
 									selectivities);
 			break;
 		case T_SubqueryScanPath:
 			/* Recursing into Subquery we must use subroot */
 			Assert(path->parent->subroot != NULL);
-			return get_path_clauses(((SubqueryScanPath *) path)->subpath,
+			return get_path_clauses_recurse(((SubqueryScanPath *) path)->subpath,
 									path->parent->subroot,
 									selectivities);
 			break;
 		case T_ModifyTablePath:
-			return get_path_clauses(((ModifyTablePath *) path)->subpath, root,
+			return get_path_clauses_recurse(((ModifyTablePath *) path)->subpath, root,
 									selectivities);
 			break;
 		/* TODO: RecursiveUnionPath */
@@ -441,11 +502,11 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 			{
 				Path *subpath = lfirst(lc);
 
-				cur = list_concat(cur, list_copy(
-					get_path_clauses(subpath, root, selectivities)));
+				cur = list_concat(cur,
+					get_path_clauses_recurse(subpath, root, selectivities));
 				cur_sel = list_concat(cur_sel, *selectivities);
 			}
-			cur = list_concat(cur, aqo_get_clauses(root,
+			cur = list_concat(cur, aqo_get_raw_clauses(root,
 											path->parent->baserestrictinfo));
 			*selectivities = list_concat(cur_sel,
 										 get_selectivities(root,
@@ -457,7 +518,7 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 		case T_ForeignPath:
 			/* The same as in the default case */
 		default:
-			cur = list_concat(list_copy(path->parent->baserestrictinfo),
+			cur = list_concat(list_concat(cur, path->parent->baserestrictinfo),
 							  path->param_info ?
 							  path->param_info->ppi_clauses : NIL);
 			if (path->param_info)
@@ -466,10 +527,24 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 			else
 				cur_sel = get_selectivities(root, cur, 0, JOIN_INNER, NULL);
 			*selectivities = cur_sel;
-			cur = aqo_get_clauses(root, cur);
+			cur = aqo_get_raw_clauses(root, cur);
 			return cur;
 			break;
 	}
+}
+
+/*
+ * Returns a list of AQOClauses for the given path, which is a copy
+ * of the clauses returned from the get_path_clauses_recurse() routine.
+ * Also returns selectivities for the clauses to 'selectivities' variable.
+ * Both returned lists are copies and therefore may be modified without
+ * corruption of the input data.
+ */
+List *
+get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
+{
+	return copy_aqo_clauses_from_rinfo(
+		get_path_clauses_recurse(path, root, selectivities));
 }
 
 /*
@@ -578,7 +653,7 @@ aqo_create_plan(PlannerInfo *root, Path *src, Plan **dest)
 												(*dest)->lefttree->targetlist);
 		/* Copy bare expressions for further AQO learning case. */
 		node->grouping_exprs = copyObject(groupExprs);
-		get_list_of_relids(root, ap->subpath->parent->relids, node->rels);
+		get_list_of_relids(root, ap->subpath->parent->relids, &node->rels);
 		node->jointype = JOIN_INNER;
 	}
 	else if (is_appropriate_path(src))
@@ -589,7 +664,7 @@ aqo_create_plan(PlannerInfo *root, Path *src, Plan **dest)
 		node->jointype = JOIN_INNER;
 	}
 
-	get_list_of_relids(root, src->parent->relids, node->rels);
+	get_list_of_relids(root, src->parent->relids, &node->rels);
 
 	if (src->parallel_workers > 0)
 		node->parallel_divisor = get_parallel_divisor(src);
@@ -624,15 +699,19 @@ AQOnodeCopy(struct ExtensibleNode *enew, const struct ExtensibleNode *eold)
 	Assert(strcmp(old->node.extnodename, AQO_PLAN_NODE) == 0);
 	Assert(new && old);
 
-	/* Copy static fields in one command */
-	memcpy(new, old, sizeof(AQOPlanNode));
+	/*
+	 * Copy static fields in one command.
+	 * But do not copy fields of the old->node.
+	 * Elsewise, we can use pointers that will be freed.
+	 * For example, it is old->node.extnodename.
+	 */
+	memcpy(&new->had_path, &old->had_path, sizeof(AQOPlanNode) - offsetof(AQOPlanNode, had_path));
 
 	/* These lists couldn't contain AQO nodes. Use basic machinery */
-	new->rels = palloc(sizeof(RelSortOut));
-	new->rels->hrels = list_copy(old->rels->hrels);
-	new->rels->signatures = list_copy(old->rels->signatures);
+	new->rels.hrels = list_copy(old->rels.hrels);
+	new->rels.signatures = list_copy(old->rels.signatures);
 
-	new->clauses = copyObject(old->clauses);
+	new->clauses = copy_aqo_clauses(old->clauses);
 	new->grouping_exprs = copyObject(old->grouping_exprs);
 	new->selectivities = copyObject(old->selectivities);
 	enew = (ExtensibleNode *) new;
@@ -642,6 +721,39 @@ static bool
 AQOnodeEqual(const struct ExtensibleNode *a, const struct ExtensibleNode *b)
 {
 	return false;
+}
+
+static void
+AQOconstCopy(struct ExtensibleNode *enew, const struct ExtensibleNode *eold)
+{
+	AQOConstNode *new = (AQOConstNode *) enew;
+	AQOConstNode *old = (AQOConstNode *) eold;
+
+	Assert(IsA(old, ExtensibleNode));
+	Assert(strcmp(old->node.extnodename, AQO_CONST_NODE) == 0);
+	Assert(new && old);
+
+	new->type = old->type;
+	new->fss = old->fss;
+	enew = (ExtensibleNode *) new;
+}
+
+static bool
+AQOconstEqual(const struct ExtensibleNode *a, const struct ExtensibleNode *b)
+{
+	return false;
+}
+
+/*
+ * Convert a double value, attempting to ensure the value is preserved exactly.
+ */
+static void
+outDouble(StringInfo str, double d)
+{
+	char		buf[DOUBLE_SHORTEST_DECIMAL_LEN];
+
+	double_to_shortest_decimal_buf(d, buf);
+	appendStringInfoString(str, buf);
 }
 
 #define WRITE_INT_FIELD(fldname) \
@@ -661,17 +773,57 @@ AQOnodeEqual(const struct ExtensibleNode *a, const struct ExtensibleNode *b)
 	appendStringInfo(str, " :" CppAsString(fldname) " %d", \
 					 (int) node->fldname)
 
-/* Write a float field --- caller must give format to define precision */
-#define WRITE_FLOAT_FIELD(fldname,format) \
-	appendStringInfo(str, " :" CppAsString(fldname) " " format, node->fldname)
+/* Write a float field */
+#define WRITE_FLOAT_FIELD(fldname) \
+	(appendStringInfo(str, " :" CppAsString(fldname) " "), \
+	 outDouble(str, node->fldname))
+
+/* The start part of a custom list writer */
+#define WRITE_CUSTOM_LIST_START(fldname) \
+	{ \
+		appendStringInfo(str, " :N_" CppAsString(fldname) " %d ", \
+			list_length(node->fldname)); \
+		/* Serialize this list like an array */ \
+		if (list_length(node->fldname)) \
+		{ \
+			ListCell	*lc; \
+			appendStringInfo(str, "("); \
+			foreach (lc, node->fldname)
+
+/* The end part of a custom list writer */
+#define WRITE_CUSTOM_LIST_END() \
+			appendStringInfo(str, " )"); \
+		} \
+		else \
+			appendStringInfo(str, "<>"); \
+	}
+
+/* Write a list of int values */
+#define WRITE_INT_LIST(fldname) \
+	WRITE_CUSTOM_LIST_START(fldname) \
+	{ \
+		int val = lfirst_int(lc); \
+		appendStringInfo(str, " %d", val); \
+	} \
+	WRITE_CUSTOM_LIST_END()
+
+/* Write a list of AQOClause values */
+#define WRITE_AQOCLAUSE_LIST(fldname) \
+	WRITE_CUSTOM_LIST_START(clauses) \
+	{ \
+		AQOClause *node = lfirst(lc); \
+		/* Serialize this struct like a node */ \
+		appendStringInfo(str, " {"); \
+		WRITE_NODE_FIELD(clause); \
+		WRITE_FLOAT_FIELD(norm_selec); \
+		WRITE_FLOAT_FIELD(outer_selec); \
+		appendStringInfo(str, " }"); \
+	} \
+	WRITE_CUSTOM_LIST_END()
 
 /*
  * Serialize AQO plan node to a string.
  *
- * Right now we can't correctly serialize all fields of the node. Taking into
- * account that this action needed when a plan moves into parallel workers or
- * just during debugging, we serialize it only partially, just for debug
- * purposes.
  * Some extensions may manipulate by parts of serialized plan too.
  */
 static void
@@ -679,9 +831,36 @@ AQOnodeOut(struct StringInfoData *str, const struct ExtensibleNode *enode)
 {
 	AQOPlanNode *node = (AQOPlanNode *) enode;
 
-	/* For Adaptive optimization DEBUG purposes */
+	WRITE_BOOL_FIELD(had_path);
+
+	WRITE_NODE_FIELD(rels.hrels);
+	WRITE_INT_LIST(rels.signatures);
+
+	WRITE_AQOCLAUSE_LIST(clauses);
+
+	WRITE_NODE_FIELD(selectivities);
+	WRITE_NODE_FIELD(grouping_exprs);
+	WRITE_ENUM_FIELD(jointype, JoinType);
+
+	WRITE_FLOAT_FIELD(parallel_divisor);
+	WRITE_BOOL_FIELD(was_parametrized);
+
 	WRITE_INT_FIELD(fss);
-	WRITE_FLOAT_FIELD(prediction, "%.0f");
+	WRITE_FLOAT_FIELD(prediction);
+}
+
+/*
+ * Serialize AQO const node to a string.
+ *
+ * Some extensions may manipulate by parts of serialized plan too.
+ */
+static void
+AQOconstOut(struct StringInfoData *str, const struct ExtensibleNode *enode)
+{
+	AQOConstNode *node = (AQOConstNode *) enode;
+
+	WRITE_ENUM_FIELD(type, AQOConstType);
+	WRITE_INT_FIELD(fss);
 }
 
 /* Read an integer field (anything written as ":fldname %d") */
@@ -714,6 +893,54 @@ AQOnodeOut(struct StringInfoData *str, const struct ExtensibleNode *enode)
 	(void) token;				/* in case not used elsewhere */ \
 	local_node->fldname = nodeRead(NULL, 0)
 
+/* The start part of a custom list reader */
+#define READ_CUSTOM_LIST_START() \
+	{ \
+		int	counter; \
+		token = pg_strtok(&length); /* skip the name */ \
+		token = pg_strtok(&length); \
+		counter = atoi(token); \
+		token = pg_strtok(&length); /* left bracket "(" */ \
+		if (length) \
+		{ \
+			for (int i = 0; i < counter; i++)
+
+/* The end part of a custom list reader */
+#define READ_CUSTOM_LIST_END(fldname) \
+			token = pg_strtok(&length); /* right bracket ")" */ \
+		} \
+		else \
+			local_node->fldname = NIL; \
+	}
+
+/* Read a list of int values */
+#define READ_INT_LIST(fldname) \
+	READ_CUSTOM_LIST_START() \
+	{ \
+		int val; \
+		token = pg_strtok(&length); \
+		val = atoi(token); \
+		local_node->fldname = lappend_int( \
+			local_node->fldname, val); \
+	} \
+	READ_CUSTOM_LIST_END(fldname)
+
+/* Read a list of AQOClause values */
+#define READ_AQOCLAUSE_LIST(fldname) \
+	READ_CUSTOM_LIST_START() \
+	{ \
+		/* copy to use in the inner blocks of code */ \
+		AQOPlanNode *node_copy = local_node; \
+		AQOClause  *local_node = palloc(sizeof(AQOClause)); \
+		token = pg_strtok(&length); /* left bracket "{" */ \
+		READ_NODE_FIELD(clause); \
+		READ_FLOAT_FIELD(norm_selec); \
+		READ_FLOAT_FIELD(outer_selec); \
+		token = pg_strtok(&length); /* right bracket "}" */ \
+		node_copy->fldname = lappend(node_copy->fldname, local_node); \
+	} \
+	READ_CUSTOM_LIST_END(fldname)
+
 /*
  * Deserialize AQO plan node from a string to internal representation.
  *
@@ -726,22 +953,41 @@ AQOnodeRead(struct ExtensibleNode *enode)
 	const char	*token;
 	int			length;
 
-	local_node->had_path = false;
-	local_node->jointype = 0;
-	local_node->parallel_divisor = 1.0;
-	local_node->was_parametrized = false;
+	READ_BOOL_FIELD(had_path);
 
-	local_node->rels = palloc0(sizeof(RelSortOut));
-	local_node->clauses = NIL;
-	local_node->selectivities = NIL;
-	local_node->grouping_exprs = NIL;
+	READ_NODE_FIELD(rels.hrels);
+	READ_INT_LIST(rels.signatures);
 
-	/* For Adaptive optimization DEBUG purposes */
+	READ_AQOCLAUSE_LIST(clauses);
+
+	READ_NODE_FIELD(selectivities);
+	READ_NODE_FIELD(grouping_exprs);
+	READ_ENUM_FIELD(jointype, JoinType);
+
+	READ_FLOAT_FIELD(parallel_divisor);
+	READ_BOOL_FIELD(was_parametrized);
+
 	READ_INT_FIELD(fss);
 	READ_FLOAT_FIELD(prediction);
 }
 
-static const ExtensibleNodeMethods method =
+/*
+ * Deserialize AQO const node from a string to internal representation.
+ *
+ * Should work in coherence with AQOconstOut().
+ */
+static void
+AQOconstRead(struct ExtensibleNode *enode)
+{
+	AQOConstNode   *local_node = (AQOConstNode *) enode;
+	const char	   *token;
+	int				length;
+
+	READ_ENUM_FIELD(type, AQOConstType);
+	READ_INT_FIELD(fss);
+}
+
+static const ExtensibleNodeMethods aqo_node_method =
 {
 	.extnodename = AQO_PLAN_NODE,
 	.node_size = sizeof(AQOPlanNode),
@@ -751,10 +997,21 @@ static const ExtensibleNodeMethods method =
 	.nodeRead = AQOnodeRead
 };
 
+static const ExtensibleNodeMethods aqo_const_method =
+{
+	.extnodename = AQO_CONST_NODE,
+	.node_size = sizeof(AQOConstNode),
+	.nodeCopy =  AQOconstCopy,
+	.nodeEqual = AQOconstEqual,
+	.nodeOut = AQOconstOut,
+	.nodeRead = AQOconstRead
+};
+
 void
 RegisterAQOPlanNodeMethods(void)
 {
-	RegisterExtensibleNodeMethods(&method);
+	RegisterExtensibleNodeMethods(&aqo_node_method);
+	RegisterExtensibleNodeMethods(&aqo_const_method);
 }
 
 /*

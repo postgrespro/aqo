@@ -6,6 +6,7 @@
 #include "optimizer/planner.h"
 
 #define AQO_PLAN_NODE	"AQOPlanNode"
+#define AQO_CONST_NODE	"AQOConstNode"
 
 /*
  * Find and sort out relations that used in the query:
@@ -21,13 +22,27 @@ typedef struct
 } RelSortOut;
 
 /*
+ * Fields of the RestrictInfo needed in the AQOPlanNode
+ */
+typedef struct AQOClause
+{
+	/* the represented clause of WHERE or JOIN */
+	Expr	   *clause;
+	/* selectivity for "normal" (JOIN_INNER) semantics; -1 if not yet set */
+	Selectivity norm_selec;
+	/* selectivity for outer join semantics; -1 if not yet set */
+	Selectivity outer_selec;
+
+} AQOClause;
+
+/*
  * information for adaptive query optimization
  */
 typedef struct AQOPlanNode
 {
 	ExtensibleNode	node;
 	bool			had_path;
-	RelSortOut	   *rels;
+	RelSortOut	 	rels;
 	List		   *clauses;
 	List		   *selectivities;
 
@@ -43,6 +58,25 @@ typedef struct AQOPlanNode
 	double	prediction;
 } AQOPlanNode;
 
+/*
+ * The type of a node that is replaced by AQOConstNode.
+ */
+typedef enum AQOConstType
+{
+	AQO_NODE_EXPR = 0,
+	AQO_NODE_SUBPLAN
+} AQOConstType;
+
+/*
+ * A custom node that is used to calcucate a fss instead of regular node,
+ * such as SubPlan or Expr.
+ */
+typedef struct AQOConstNode
+{
+	ExtensibleNode	node;
+	AQOConstType	type;	/* The type of the replaced node */
+	int				fss;	/* The fss of the replaced node */
+} AQOConstNode;
 
 #define strtobool(x)  ((*(x) == 't') ? true : false)
 
@@ -63,6 +97,8 @@ extern void get_list_of_relids(PlannerInfo *root, Relids relids,
 extern List *get_path_clauses(Path *path,
 							  PlannerInfo *root,
 							  List **selectivities);
+
+extern AQOConstNode *create_aqo_const_node(AQOConstType type, int fss);
 
 extern AQOPlanNode *get_aqo_plan_node(Plan *plan, bool create);
 extern void RegisterAQOPlanNodeMethods(void);

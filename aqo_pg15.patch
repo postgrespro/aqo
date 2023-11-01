@@ -76,7 +76,7 @@ index 3f8e58626c..256c76acf2 100644
  	WRITE_NODE_FIELD(initPlan);
  	WRITE_BITMAPSET_FIELD(extParam);
  	WRITE_BITMAPSET_FIELD(allParam);
-+	/*WRITE_NODE_FIELD(ext_nodes); */
++	WRITE_NODE_FIELD(ext_nodes);
  }
  
  /*
@@ -84,15 +84,11 @@ diff --git a/src/backend/nodes/readfuncs.c b/src/backend/nodes/readfuncs.c
 index c84e5af3a2..ae0e78b142 100644
 --- a/src/backend/nodes/readfuncs.c
 +++ b/src/backend/nodes/readfuncs.c
-@@ -1666,6 +1666,11 @@ ReadCommonPlan(Plan *local_node)
+@@ -1666,6 +1666,7 @@ ReadCommonPlan(Plan *local_node)
  	READ_NODE_FIELD(initPlan);
  	READ_BITMAPSET_FIELD(extParam);
  	READ_BITMAPSET_FIELD(allParam);
-+	local_node->ext_nodes = NIL;
-+	/* READ_NODE_FIELD(ext_nodes);
-+	 * Don't serialize this field. It is required to serialize RestrictInfo and
-+	 * EqualenceClass.
-+	*/
++	READ_NODE_FIELD(ext_nodes);
  }
  
  /*
