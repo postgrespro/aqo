@@ -187,7 +187,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 
 		forboth(l, allclauses, l2, selectivities)
 		{
-			current_hash = get_clause_hash(((AQOClause *) lfirst(l))->clause,
+			current_hash = get_clause_hash((AQOClause *) lfirst(l),
 										   nargs, args_hash, eclass_hash);
 			cache_selectivity(current_hash, rel->relid, rte->relid,
 							  *((double *) lfirst(l2)));

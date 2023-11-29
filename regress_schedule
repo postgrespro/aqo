@@ -21,3 +21,5 @@ test: top_queries
 test: relocatable
 test: look_a_like
 test: feature_subspace
+test: eclasses
+test: eclasses_mchar

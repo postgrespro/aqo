@@ -2,6 +2,7 @@
 #define AQO_HASH_H
 
 #include "nodes/pg_list.h"
+#include "path_utils.h"
 
 extern bool list_member_uint64(const List *list, uint64 datum);
 extern List *list_copy_uint64(List *list);
@@ -16,6 +17,7 @@ extern int get_grouped_exprs_hash(int fss, List *group_exprs);
 /* Hash functions */
 void get_eclasses(List *clauselist, int *nargs, int **args_hash,
 				  int **eclass_hash);
-int get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash);
+int get_clause_hash(AQOClause *clause, int nargs, int *args_hash,
+					int *eclass_hash);
 
 #endif							/* AQO_HASH_H */

@@ -1,0 +1,6 @@
+-- Testing for working with equivalence classes for mchar type
+-- Skip test if mchar extension does not exist
+SELECT count(*) = 0 AS skip_test
+FROM pg_available_extensions WHERE name = 'mchar' \gset
+\if :skip_test
+\quit
