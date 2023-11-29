@@ -47,6 +47,14 @@ static AQOPlanNode DefaultAQOPlanNode =
 	.prediction = -1.
 };
 
+
+/*
+ * Auxiliary list for relabel equivalence classes
+ * from pointers to the serial numbers - indexes of this list.
+ * Maybe it's need to use some smart data structure such a HTAB?
+ */
+List *eclass_collector = NIL;
+
 /*
  * Hook on creation of a plan node. We need to store AQO-specific data to
  * support learning stage.
@@ -332,6 +340,42 @@ aqo_get_raw_clauses(PlannerInfo *root, List *restrictlist)
 	return clauses;
 }
 
+void
+eclass_collector_free(void)
+{
+	list_free(eclass_collector);
+	eclass_collector = NIL;
+}
+
+static int
+get_eclass_index(EquivalenceClass *ec)
+{
+	ListCell	   *lc;
+	int				i = 0;
+	MemoryContext	old_ctx;
+
+	if (ec == NULL)
+		return -1;
+
+	/* Get the top of merged eclasses */
+	while(ec->ec_merged)
+		ec = ec->ec_merged;
+
+	foreach (lc, eclass_collector)
+	{
+		if (lfirst(lc) == ec)
+			break;
+		i++;
+	}
+
+	old_ctx = MemoryContextSwitchTo(AQOCacheMemCtx);
+	if (i == list_length(eclass_collector))
+		eclass_collector = lappend(eclass_collector, ec);
+	MemoryContextSwitchTo(old_ctx);
+
+	return i;
+}
+
 static List *
 copy_aqo_clauses_from_rinfo(List *src)
 {
@@ -346,6 +390,11 @@ copy_aqo_clauses_from_rinfo(List *src)
 		new->clause = copyObject(old->clause);
 		new->norm_selec = old->norm_selec;
 		new->outer_selec = old->outer_selec;
+
+		new->left_ec = get_eclass_index(old->left_ec);
+		new->right_ec = get_eclass_index(old->right_ec);
+
+		new->is_eq_clause = (old->left_ec != NULL || old->left_ec != NULL);
 
 		result = lappend(result, (void *) new);
 	}
@@ -817,6 +866,9 @@ outDouble(StringInfo str, double d)
 		WRITE_NODE_FIELD(clause); \
 		WRITE_FLOAT_FIELD(norm_selec); \
 		WRITE_FLOAT_FIELD(outer_selec); \
+		WRITE_INT_FIELD(left_ec); \
+		WRITE_INT_FIELD(right_ec); \
+		WRITE_BOOL_FIELD(is_eq_clause); \
 		appendStringInfo(str, " }"); \
 	} \
 	WRITE_CUSTOM_LIST_END()
@@ -936,6 +988,9 @@ AQOconstOut(struct StringInfoData *str, const struct ExtensibleNode *enode)
 		READ_NODE_FIELD(clause); \
 		READ_FLOAT_FIELD(norm_selec); \
 		READ_FLOAT_FIELD(outer_selec); \
+		READ_INT_FIELD(left_ec); \
+		READ_INT_FIELD(right_ec); \
+		READ_BOOL_FIELD(is_eq_clause); \
 		token = pg_strtok(&length); /* right bracket "}" */ \
 		node_copy->fldname = lappend(node_copy->fldname, local_node); \
 	} \

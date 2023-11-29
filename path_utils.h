@@ -33,6 +33,14 @@ typedef struct AQOClause
 	/* selectivity for outer join semantics; -1 if not yet set */
 	Selectivity outer_selec;
 
+	/* Serial number of EquivalenceClass containing lefthand */
+	int			left_ec;
+	/* Serial number of EquivalenceClass containing righthand */
+	int			right_ec;
+	/* Quick check for equivalence class */
+	bool		is_eq_clause;
+
+	EquivalenceClass *ec;
 } AQOClause;
 
 /*
@@ -106,5 +114,6 @@ extern void RegisterAQOPlanNodeMethods(void);
 extern List *aqo_get_clauses(PlannerInfo *root, List *restrictlist);
 
 void aqo_path_utils_init(void);
+void eclass_collector_free(void);
 
 #endif /* PATH_UTILS_H */
