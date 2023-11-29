@@ -47,15 +47,11 @@ static int	get_id_in_sorted_int_array(int val, int n, int *arr);
 static int get_arg_eclass(int arg_hash, int nargs,
 			   int *args_hash, int *eclass_hash);
 
-static void get_clauselist_args(List *clauselist, int *nargs, int **args_hash);
-static int	disjoint_set_get_parent(int *p, int v);
-static void disjoint_set_merge_eclasses(int *p, int v1, int v2);
-static int *perform_eclasses_join(List *clauselist, int nargs, int *args_hash);
+static int *get_clauselist_args(List *clauselist, int *nargs, int **args_hash);
 
 static bool is_brace(char ch);
 static bool has_consts(List *lst);
 static List **get_clause_args_ptr(Expr *clause);
-static bool clause_is_eq_clause(Expr *clause);
 
 /*
  * Computes hash for given query.Query Identifier: =
@@ -239,8 +235,8 @@ get_fss_for_object(List *relsigns, List *clauselist,
 	{
 		AQOClause *clause = (AQOClause *) lfirst(lc);
 
-		clause_hashes[i] = get_clause_hash(clause->clause,
-										   nargs, args_hash, eclass_hash);
+		clause_hashes[i] = get_clause_hash(clause, nargs, args_hash,
+										   eclass_hash);
 		args = get_clause_args_ptr(clause->clause);
 		clause_has_consts[i] = (args != NULL && has_consts(*args));
 		i++;
@@ -324,19 +320,19 @@ get_fss_for_object(List *relsigns, List *clauselist,
  * Also args-order-insensitiveness for equal clause is required.
  */
 int
-get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash)
+get_clause_hash(AQOClause *clause, int nargs, int *args_hash, int *eclass_hash)
 {
 	Expr	   *cclause;
-	List	  **args = get_clause_args_ptr(clause);
+	List	  **args = get_clause_args_ptr(clause->clause);
 	int			arg_eclass;
 	ListCell   *l;
 
 	if (args == NULL)
-		return get_node_hash((Node *) clause);
+		return get_node_hash((Node *) clause->clause);
 
-	cclause = copyObject(clause);
+	cclause = copyObject(clause->clause);
 	args = get_clause_args_ptr(cclause);
-	/* XXX: Why does it work even if this loop is removed? */
+
 	foreach(l, *args)
 	{
 		arg_eclass = get_arg_eclass(get_node_hash(lfirst(l)),
@@ -346,7 +342,7 @@ get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash)
 			lfirst(l) = create_aqo_const_node(AQO_NODE_EXPR, arg_eclass);
 		}
 	}
-	if (!clause_is_eq_clause(clause) || has_consts(*args))
+	if (!clause->is_eq_clause || has_consts(*args))
 		return get_node_hash((Node *) cclause);
 	return get_node_hash((Node *) linitial(*args));
 }
@@ -570,121 +566,98 @@ get_arg_eclass(int arg_hash, int nargs, int *args_hash, int *eclass_hash)
  * Builds list of non-constant arguments of equivalence clauses
  * of given clauselist.
  */
-static void
+static int *
 get_clauselist_args(List *clauselist, int *nargs, int **args_hash)
 {
 	AQOClause  *clause;
 	List	  **args;
 	ListCell   *l;
-	ListCell   *l2;
 	int			i = 0;
 	int			sh = 0;
 	int			cnt = 0;
+	int		   *p;
+	int		   *p_sorted;
+	int		   *args_hash_sorted;
+	int		   *idx;
+
+	/* Not more than 2 args in each clause from clauselist */
+	*args_hash = palloc(2 * list_length(clauselist) * sizeof(**args_hash));
+	p = palloc(2 * list_length(clauselist) * sizeof(*p));
 
 	foreach(l, clauselist)
 	{
+		Expr   *e;
+
 		clause = (AQOClause *) lfirst(l);
 		args = get_clause_args_ptr(clause->clause);
-		if (args != NULL && clause_is_eq_clause(clause->clause))
-			foreach(l2, *args)
-				if (!IsA(lfirst(l2), Const))
-				cnt++;
+		if (args == NULL || !clause->is_eq_clause)
+			continue;
+
+		/* Left argument */
+		e = (args != NULL && list_length(*args) ? linitial(*args) : NULL);
+		if (e && !IsA(e, Const))
+		{
+			(*args_hash)[cnt] = get_node_hash((Node *) e);
+			p[cnt++] = clause->left_ec;
+		}
+
+		/* Right argument */
+		e = (args != NULL && list_length(*args) >= 2 ? lsecond(*args) : NULL);
+		if (e && !IsA(e, Const))
+		{
+			(*args_hash)[cnt] = get_node_hash((Node *) e);
+			p[cnt++] = clause->right_ec;
+		}
 	}
 
-	*args_hash = palloc(cnt * sizeof(**args_hash));
-	foreach(l, clauselist)
+	/* Use argsort for simultaniously sorting of args_hash and p arrays */
+	idx = argsort(*args_hash, cnt, sizeof(**args_hash), int_cmp);
+
+	args_hash_sorted = palloc(cnt * sizeof(*args_hash_sorted));
+	p_sorted = palloc(cnt * sizeof(*p_sorted));
+
+	for (i = 0; i < cnt; ++i)
 	{
-		clause = (AQOClause *) lfirst(l);
-		args = get_clause_args_ptr(clause->clause);
-		if (args != NULL && clause_is_eq_clause(clause->clause))
-			foreach(l2, *args)
-				if (!IsA(lfirst(l2), Const))
-				(*args_hash)[i++] = get_node_hash(lfirst(l2));
+		args_hash_sorted[i] = (*args_hash)[idx[i]];
+		p_sorted[i] = p[idx[i]];
 	}
-	qsort(*args_hash, cnt, sizeof(**args_hash), int_cmp);
+	pfree(idx);
+	pfree(p);
+	pfree(*args_hash);
 
+	*args_hash = args_hash_sorted;
+
+	/* Remove duplicates of the hashes */
 	for (i = 1; i < cnt; ++i)
 		if ((*args_hash)[i - 1] == (*args_hash)[i])
 			sh++;
 		else
+		{
 			(*args_hash)[i - sh] = (*args_hash)[i];
+			p_sorted[i - sh] = p_sorted[i];
+		}
 
 	*nargs = cnt - sh;
 	*args_hash = repalloc(*args_hash, (*nargs) * sizeof(**args_hash));
-}
+	p_sorted = repalloc(p_sorted, (*nargs) * sizeof(*p_sorted));
 
-/*
- * Returns class of an object in disjoint set.
- */
-static int
-disjoint_set_get_parent(int *p, int v)
-{
-	if (p[v] == -1)
-		return v;
-	else
-		return p[v] = disjoint_set_get_parent(p, p[v]);
-}
-
-/*
- * Merges two equivalence classes in disjoint set.
- */
-static void
-disjoint_set_merge_eclasses(int *p, int v1, int v2)
-{
-	int			p1,
-				p2;
-
-	p1 = disjoint_set_get_parent(p, v1);
-	p2 = disjoint_set_get_parent(p, v2);
-	if (p1 != p2)
+	/* Compress the values of eclasses */
+	if (*nargs > 0)
 	{
-		if ((v1 + v2) % 2)
-			p[p1] = p2;
-		else
-			p[p2] = p1;
-	}
-}
-
-/*
- * Constructs disjoint set on arguments.
- */
-static int *
-perform_eclasses_join(List *clauselist, int nargs, int *args_hash)
-{
-	AQOClause *clause;
-	int		   *p;
-	ListCell   *l,
-			   *l2;
-	List	  **args;
-	int			h2;
-	int			i2,
-				i3;
-
-	p = palloc(nargs * sizeof(*p));
-	memset(p, -1, nargs * sizeof(*p));
-
-	foreach(l, clauselist)
-	{
-		clause = (AQOClause *) lfirst(l);
-		args = get_clause_args_ptr(clause->clause);
-		if (args != NULL && clause_is_eq_clause(clause->clause))
+		int prev = p_sorted[0];
+		p_sorted[0] = 0;
+		for (i = 1; i < *nargs; i++)
 		{
-			i3 = -1;
-			foreach(l2, *args)
-			{
-				if (!IsA(lfirst(l2), Const))
-				{
-					h2 = get_node_hash(lfirst(l2));
-					i2 = get_id_in_sorted_int_array(h2, nargs, args_hash);
-					if (i3 != -1)
-						disjoint_set_merge_eclasses(p, i2, i3);
-					i3 = i2;
-				}
-			}
+			int cur = p_sorted[i];
+			if (cur == prev)
+				p_sorted[i] = p_sorted[i-1];
+			else
+				p_sorted[i] = p_sorted[i-1] + 1;
+			prev = cur;
 		}
 	}
 
-	return p;
+	return p_sorted;
 }
 
 /*
@@ -696,30 +669,31 @@ get_eclasses(List *clauselist, int *nargs, int **args_hash, int **eclass_hash)
 {
 	int		   *p;
 	List	  **lsts;
-	int			i,
-				v;
+	int			i;
+	/*
+	 * An auxiliary array of equivalence clauses hashes
+	 * used to improve performance.
+	 */
 	int		   *e_hashes;
 
-	get_clauselist_args(clauselist, nargs, args_hash);
+	p = get_clauselist_args(clauselist, nargs, args_hash);
 	*eclass_hash = palloc((*nargs) * sizeof(**eclass_hash));
 
-	p = perform_eclasses_join(clauselist, *nargs, *args_hash);
-	lsts = palloc((*nargs) * sizeof(*lsts));
+	lsts = palloc0((*nargs) * sizeof(*lsts));
 	e_hashes = palloc((*nargs) * sizeof(*e_hashes));
 
+	/* Combine args hashes corresponding to the same eclass into one list. */
 	for (i = 0; i < *nargs; ++i)
-		lsts[i] = NIL;
+		lsts[p[i]] = lappend_int(lsts[p[i]], (*args_hash)[i]);
 
+	/* Precompute eclasses hashes only once per eclass. */
 	for (i = 0; i < *nargs; ++i)
-	{
-		v = disjoint_set_get_parent(p, i);
-		lsts[v] = lappend_int(lsts[v], (*args_hash)[i]);
-	}
-	for (i = 0; i < *nargs; ++i)
-		e_hashes[i] = get_unordered_int_list_hash(lsts[i]);
+		if (lsts[i] != NIL)
+			e_hashes[i] = get_unordered_int_list_hash(lsts[i]);
 
+	/* Determine the hashes of each eclass. */
 	for (i = 0; i < *nargs; ++i)
-		(*eclass_hash)[i] = e_hashes[disjoint_set_get_parent(p, i)];
+		(*eclass_hash)[i] = e_hashes[p[i]];
 
 	pfree(e_hashes);
 }
@@ -771,76 +745,4 @@ get_clause_args_ptr(Expr *clause)
 			return NULL;
 			break;
 	}
-}
-
-/*
- * Returns whether the clause is an equivalence clause.
- */
-static bool
-clause_is_eq_clause(Expr *clause)
-{
-	/* TODO: fix this horrible mess */
-	return (
-			clause->type == T_OpExpr ||
-			clause->type == T_DistinctExpr ||
-			clause->type == T_NullIfExpr ||
-			clause->type == T_ScalarArrayOpExpr
-		) && (
-			  ((OpExpr *) clause)->opno == Int4EqualOperator ||
-			  ((OpExpr *) clause)->opno == BooleanEqualOperator ||
-			  ((OpExpr *) clause)->opno == TextEqualOperator ||
-			  ((OpExpr *) clause)->opno == TIDEqualOperator ||
-			  ((OpExpr *) clause)->opno == ARRAY_EQ_OP ||
-			  ((OpExpr *) clause)->opno == RECORD_EQ_OP ||
-			  ((OpExpr *) clause)->opno == 15 ||
-			  ((OpExpr *) clause)->opno == 92 ||
-			  ((OpExpr *) clause)->opno == 93 ||
-			  ((OpExpr *) clause)->opno == 94 ||
-			  ((OpExpr *) clause)->opno == 352 ||
-			  ((OpExpr *) clause)->opno == 353 ||
-			  ((OpExpr *) clause)->opno == 385 ||
-			  ((OpExpr *) clause)->opno == 386 ||
-			  ((OpExpr *) clause)->opno == 410 ||
-			  ((OpExpr *) clause)->opno == 416 ||
-			  ((OpExpr *) clause)->opno == 503 ||
-			  ((OpExpr *) clause)->opno == 532 ||
-			  ((OpExpr *) clause)->opno == 533 ||
-			  ((OpExpr *) clause)->opno == 560 ||
-			  ((OpExpr *) clause)->opno == 566 ||
-			  ((OpExpr *) clause)->opno == 607 ||
-			  ((OpExpr *) clause)->opno == 649 ||
-			  ((OpExpr *) clause)->opno == 620 ||
-			  ((OpExpr *) clause)->opno == 670 ||
-			  ((OpExpr *) clause)->opno == 792 ||
-			  ((OpExpr *) clause)->opno == 811 ||
-			  ((OpExpr *) clause)->opno == 900 ||
-			  ((OpExpr *) clause)->opno == 1093 ||
-			  ((OpExpr *) clause)->opno == 1108 ||
-			  ((OpExpr *) clause)->opno == 1550 ||
-			  ((OpExpr *) clause)->opno == 1120 ||
-			  ((OpExpr *) clause)->opno == 1130 ||
-			  ((OpExpr *) clause)->opno == 1320 ||
-			  ((OpExpr *) clause)->opno == 1330 ||
-			  ((OpExpr *) clause)->opno == 1500 ||
-			  ((OpExpr *) clause)->opno == 1535 ||
-			  ((OpExpr *) clause)->opno == 1616 ||
-			  ((OpExpr *) clause)->opno == 1220 ||
-			  ((OpExpr *) clause)->opno == 1201 ||
-			  ((OpExpr *) clause)->opno == 1752 ||
-			  ((OpExpr *) clause)->opno == 1784 ||
-			  ((OpExpr *) clause)->opno == 1804 ||
-			  ((OpExpr *) clause)->opno == 1862 ||
-			  ((OpExpr *) clause)->opno == 1868 ||
-			  ((OpExpr *) clause)->opno == 1955 ||
-			  ((OpExpr *) clause)->opno == 2060 ||
-			  ((OpExpr *) clause)->opno == 2542 ||
-			  ((OpExpr *) clause)->opno == 2972 ||
-			  ((OpExpr *) clause)->opno == 3222 ||
-			  ((OpExpr *) clause)->opno == 3516 ||
-			  ((OpExpr *) clause)->opno == 3629 ||
-			  ((OpExpr *) clause)->opno == 3676 ||
-			  ((OpExpr *) clause)->opno == 3882 ||
-			  ((OpExpr *) clause)->opno == 3240 ||
-			  ((OpExpr *) clause)->opno == 3240
-		);
 }

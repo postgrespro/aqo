@@ -202,8 +202,7 @@ restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 
 		if (parametrized_sel)
 		{
-			cur_hash = get_clause_hash(clause->clause, nargs,
-									   args_hash, eclass_hash);
+			cur_hash = get_clause_hash(clause, nargs, args_hash, eclass_hash);
 			cur_sel = selectivity_cache_find_global_relid(cur_hash, cur_relid);
 		}
 
@@ -849,6 +848,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 end:
 	/* Release all AQO-specific memory, allocated during learning procedure */
 	selectivity_cache_clear();
+	eclass_collector_free();
 	MemoryContextSwitchTo(oldctx);
 	MemoryContextReset(AQOLearnMemCtx);
 
