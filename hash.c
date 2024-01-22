@@ -27,6 +27,7 @@
 
 #include "aqo.h"
 #include "hash.h"
+#include "path_utils.h"
 
 static int	get_str_hash(const char *str);
 static int	get_node_hash(Node *node);
@@ -236,11 +237,11 @@ get_fss_for_object(List *relsigns, List *clauselist,
 	i = 0;
 	foreach(lc, clauselist)
 	{
-		RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+		AQOClause *clause = (AQOClause *) lfirst(lc);
 
-		clause_hashes[i] = get_clause_hash(rinfo->clause,
+		clause_hashes[i] = get_clause_hash(clause->clause,
 										   nargs, args_hash, eclass_hash);
-		args = get_clause_args_ptr(rinfo->clause);
+		args = get_clause_args_ptr(clause->clause);
 		clause_has_consts[i] = (args != NULL && has_consts(*args));
 		i++;
 	}
@@ -335,14 +336,14 @@ get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash)
 
 	cclause = copyObject(clause);
 	args = get_clause_args_ptr(cclause);
+	/* XXX: Why does it work even if this loop is removed? */
 	foreach(l, *args)
 	{
 		arg_eclass = get_arg_eclass(get_node_hash(lfirst(l)),
 									nargs, args_hash, eclass_hash);
 		if (arg_eclass != 0)
 		{
-			lfirst(l) = makeNode(Param);
-			((Param *) lfirst(l))->paramid = arg_eclass;
+			lfirst(l) = create_aqo_const_node(AQO_NODE_EXPR, arg_eclass);
 		}
 	}
 	if (!clause_is_eq_clause(clause) || has_consts(*args))
@@ -572,7 +573,7 @@ get_arg_eclass(int arg_hash, int nargs, int *args_hash, int *eclass_hash)
 static void
 get_clauselist_args(List *clauselist, int *nargs, int **args_hash)
 {
-	RestrictInfo *rinfo;
+	AQOClause  *clause;
 	List	  **args;
 	ListCell   *l;
 	ListCell   *l2;
@@ -582,9 +583,9 @@ get_clauselist_args(List *clauselist, int *nargs, int **args_hash)
 
 	foreach(l, clauselist)
 	{
-		rinfo = (RestrictInfo *) lfirst(l);
-		args = get_clause_args_ptr(rinfo->clause);
-		if (args != NULL && clause_is_eq_clause(rinfo->clause))
+		clause = (AQOClause *) lfirst(l);
+		args = get_clause_args_ptr(clause->clause);
+		if (args != NULL && clause_is_eq_clause(clause->clause))
 			foreach(l2, *args)
 				if (!IsA(lfirst(l2), Const))
 				cnt++;
@@ -593,9 +594,9 @@ get_clauselist_args(List *clauselist, int *nargs, int **args_hash)
 	*args_hash = palloc(cnt * sizeof(**args_hash));
 	foreach(l, clauselist)
 	{
-		rinfo = (RestrictInfo *) lfirst(l);
-		args = get_clause_args_ptr(rinfo->clause);
-		if (args != NULL && clause_is_eq_clause(rinfo->clause))
+		clause = (AQOClause *) lfirst(l);
+		args = get_clause_args_ptr(clause->clause);
+		if (args != NULL && clause_is_eq_clause(clause->clause))
 			foreach(l2, *args)
 				if (!IsA(lfirst(l2), Const))
 				(*args_hash)[i++] = get_node_hash(lfirst(l2));
@@ -650,7 +651,7 @@ disjoint_set_merge_eclasses(int *p, int v1, int v2)
 static int *
 perform_eclasses_join(List *clauselist, int nargs, int *args_hash)
 {
-	RestrictInfo *rinfo;
+	AQOClause *clause;
 	int		   *p;
 	ListCell   *l,
 			   *l2;
@@ -664,9 +665,9 @@ perform_eclasses_join(List *clauselist, int nargs, int *args_hash)
 
 	foreach(l, clauselist)
 	{
-		rinfo = (RestrictInfo *) lfirst(l);
-		args = get_clause_args_ptr(rinfo->clause);
-		if (args != NULL && clause_is_eq_clause(rinfo->clause))
+		clause = (AQOClause *) lfirst(l);
+		args = get_clause_args_ptr(clause->clause);
+		if (args != NULL && clause_is_eq_clause(clause->clause))
 		{
 			i3 = -1;
 			foreach(l2, *args)
