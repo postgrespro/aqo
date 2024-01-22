@@ -197,12 +197,12 @@ restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 
 	foreach(l, clauselist)
 	{
-		RestrictInfo *rinfo = (RestrictInfo *) lfirst(l);
-		Selectivity  *cur_sel = NULL;
+		AQOClause   *clause = (AQOClause *) lfirst(l);
+		Selectivity *cur_sel = NULL;
 
 		if (parametrized_sel)
 		{
-			cur_hash = get_clause_hash(rinfo->clause, nargs,
+			cur_hash = get_clause_hash(clause->clause, nargs,
 									   args_hash, eclass_hash);
 			cur_sel = selectivity_cache_find_global_relid(cur_hash, cur_relid);
 		}
@@ -212,9 +212,9 @@ restore_selectivities(List *clauselist, List *relidslist, JoinType join_type,
 			cur_sel = palloc(sizeof(double));
 
 			if (join_type == JOIN_INNER)
-				*cur_sel = rinfo->norm_selec;
+				*cur_sel = clause->norm_selec;
 			else
-				*cur_sel = rinfo->outer_selec;
+				*cur_sel = clause->outer_selec;
 
 			if (*cur_sel < 0)
 				*cur_sel = 0;
@@ -500,7 +500,7 @@ learnOnPlanState(PlanState *p, void *context)
 		List *cur_selectivities;
 
 		cur_selectivities = restore_selectivities(aqo_node->clauses,
-												  aqo_node->rels->hrels,
+												  aqo_node->rels.hrels,
 												  aqo_node->jointype,
 												  aqo_node->was_parametrized);
 		SubplanCtx.selectivities = list_concat(SubplanCtx.selectivities,
@@ -508,14 +508,14 @@ learnOnPlanState(PlanState *p, void *context)
 		SubplanCtx.clauselist = list_concat(SubplanCtx.clauselist,
 											list_copy(aqo_node->clauses));
 
-		if (aqo_node->rels->hrels != NIL)
+		if (aqo_node->rels.hrels != NIL)
 		{
 			/*
 			 * This plan can be stored as a cached plan. In the case we will have
 			 * bogus path_relids field (changed by list_concat routine) at the
 			 * next usage (and aqo-learn) of this plan.
 			 */
-			ctx->relidslist = list_copy(aqo_node->rels->hrels);
+			ctx->relidslist = list_copy(aqo_node->rels.hrels);
 
 			if (p->instrument)
 			{
@@ -527,12 +527,12 @@ learnOnPlanState(PlanState *p, void *context)
 				{
 					if (IsA(p, AggState))
 						learn_agg_sample(&SubplanCtx,
-										 aqo_node->rels, learn_rows, rfactor,
+										 &aqo_node->rels, learn_rows, rfactor,
 										 p->plan, notExecuted);
 
 					else
 						learn_sample(&SubplanCtx,
-									 aqo_node->rels, learn_rows, rfactor,
+									 &aqo_node->rels, learn_rows, rfactor,
 									 p->plan, notExecuted);
 				}
 			}
