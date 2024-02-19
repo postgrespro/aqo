@@ -8,6 +8,8 @@
 #define AQO_PLAN_NODE	"AQOPlanNode"
 #define AQO_CONST_NODE	"AQOConstNode"
 
+extern List *aqo_eclass_collector;
+
 /*
  * Find and sort out relations that used in the query:
  * Use oids of relations to store dependency of ML row on a set of tables.
@@ -114,6 +116,5 @@ extern void RegisterAQOPlanNodeMethods(void);
 extern List *aqo_get_clauses(PlannerInfo *root, List *restrictlist);
 
 void aqo_path_utils_init(void);
-void eclass_collector_free(void);
 
 #endif /* PATH_UTILS_H */

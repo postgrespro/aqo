@@ -118,6 +118,7 @@ aqo_free_callback(ResourceReleasePhase phase,
 	{
 		MemoryContextReset(AQOCacheMemCtx);
 		cur_classes = NIL;
+		aqo_eclass_collector = NIL;
 	}
 }
 
