@@ -848,7 +848,6 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 end:
 	/* Release all AQO-specific memory, allocated during learning procedure */
 	selectivity_cache_clear();
-	eclass_collector_free();
 	MemoryContextSwitchTo(oldctx);
 	MemoryContextReset(AQOLearnMemCtx);
 

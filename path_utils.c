@@ -52,13 +52,13 @@ static AQOPlanNode DefaultAQOPlanNode =
 	.prediction = -1.
 };
 
-
 /*
  * Auxiliary list for relabel equivalence classes
  * from pointers to the serial numbers - indexes of this list.
- * Maybe it's need to use some smart data structure such a HTAB?
+ * XXX: Maybe it's need to use some smart data structure such a HTAB?
+ * It must be allocated in AQOCacheMemCtx.
  */
-List *eclass_collector = NIL;
+List *aqo_eclass_collector = NIL;
 
 /*
  * Hook on creation of a plan node. We need to store AQO-specific data to
@@ -345,13 +345,6 @@ aqo_get_raw_clauses(PlannerInfo *root, List *restrictlist)
 	return clauses;
 }
 
-void
-eclass_collector_free(void)
-{
-	list_free(eclass_collector);
-	eclass_collector = NIL;
-}
-
 static int
 get_eclass_index(EquivalenceClass *ec)
 {
@@ -366,7 +359,7 @@ get_eclass_index(EquivalenceClass *ec)
 	while(ec->ec_merged)
 		ec = ec->ec_merged;
 
-	foreach (lc, eclass_collector)
+	foreach (lc, aqo_eclass_collector)
 	{
 		if (lfirst(lc) == ec)
 			break;
@@ -374,8 +367,8 @@ get_eclass_index(EquivalenceClass *ec)
 	}
 
 	old_ctx = MemoryContextSwitchTo(AQOCacheMemCtx);
-	if (i == list_length(eclass_collector))
-		eclass_collector = lappend(eclass_collector, ec);
+	if (i == list_length(aqo_eclass_collector))
+		aqo_eclass_collector = lappend(aqo_eclass_collector, ec);
 	MemoryContextSwitchTo(old_ctx);
 
 	return i;

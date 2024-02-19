@@ -641,18 +641,28 @@ get_clauselist_args(List *clauselist, int *nargs, int **args_hash)
 	*args_hash = repalloc(*args_hash, (*nargs) * sizeof(**args_hash));
 	p_sorted = repalloc(p_sorted, (*nargs) * sizeof(*p_sorted));
 
-	/* Compress the values of eclasses */
+	/*
+	 * Compress the values of eclasses.
+	 * It is only sorted in order of args_hash.
+	 * Get the indexes in ascending order of the elements.
+	 */
+	idx = argsort(p_sorted, *nargs, sizeof(*p_sorted), int_cmp);
+
+	/*
+	 * Remove the holes from given array.
+	 * Later we can use it as indexes of args_hash.
+	 */
 	if (*nargs > 0)
 	{
-		int prev = p_sorted[0];
-		p_sorted[0] = 0;
+		int prev = p_sorted[idx[0]];
+		p_sorted[idx[0]] = 0;
 		for (i = 1; i < *nargs; i++)
 		{
-			int cur = p_sorted[i];
+			int cur = p_sorted[idx[i]];
 			if (cur == prev)
-				p_sorted[i] = p_sorted[i-1];
+				p_sorted[idx[i]] = p_sorted[idx[i-1]];
 			else
-				p_sorted[i] = p_sorted[i-1] + 1;
+				p_sorted[idx[i]] = p_sorted[idx[i-1]] + 1;
 			prev = cur;
 		}
 	}
