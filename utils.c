@@ -32,11 +32,14 @@ static int	argsort_cmp(const void *a, const void *b);
  * Function for qsorting an integer arrays
  */
 int
-int_cmp(const void *a, const void *b)
+int_cmp(const void *arg1, const void *arg2)
 {
-	if (*(int *) a < *(int *) b)
+	int			v1 = *((const int *) arg1);
+	int			v2 = *((const int *) arg2);
+
+	if (v1 < v2)
 		return -1;
-	else if (*(int *) a > *(int *) b)
+	else if (v1 > v2)
 		return 1;
 	else
 		return 0;
@@ -46,11 +49,14 @@ int_cmp(const void *a, const void *b)
  * Function for qsorting an double arrays
  */
 int
-double_cmp(const void *a, const void *b)
+double_cmp(const void *arg1, const void *arg2)
 {
-	if (*(double *) a < *(double *) b)
+	double		v1 = *((const double *) arg1);
+	double		v2 = *((const double *) arg2);
+
+	if (v1 < v2)
 		return -1;
-	else if (*(double *) a > *(double *) b)
+	else if (v1 > v2)
 		return 1;
 	else
 		return 0;
@@ -60,12 +66,14 @@ double_cmp(const void *a, const void *b)
  * Compares elements for two given indexes
  */
 int
-argsort_cmp(const void *a, const void *b)
+argsort_cmp(const void *arg1, const void *arg2)
 {
-	return (*argsort_value_cmp) ((char *) argsort_a +
-								 *((int *) a) * argsort_es,
-								 (char *) argsort_a +
-								 *((int *) b) * argsort_es);
+	int			idx1 = *((const int *) arg1);
+	int			idx2 = *((const int *) arg2);
+	char	   *arr = (char *) argsort_a;
+
+	return (*argsort_value_cmp) (&arr[idx1 * argsort_es],
+								 &arr[idx2 * argsort_es]);
 }
 
 /*
