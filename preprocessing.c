@@ -316,10 +316,11 @@ ignore_query_settings:
 			disable_aqo_for_query();
 
 			/*
-			 * Switch AQO to controlled mode. In this mode we wouldn't add new
-			 * query classes, just use and learn on existed set.
+			 * Switch AQO to frozen mode. In this mode we wouldn't collect
+			 * any new data, just read collected statistics for already
+			 * known query classes.
 			 */
-			aqo_mode = AQO_MODE_CONTROLLED;
+			aqo_mode = AQO_MODE_FROZEN;
 		}
 	}
 
