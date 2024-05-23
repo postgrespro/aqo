@@ -79,7 +79,7 @@ WHERE te.fshash = (
 );
   to_char  
 -----------
-  1.94e+00
+  1.95e+00
 (1 row)
 
 -- Should return zero
