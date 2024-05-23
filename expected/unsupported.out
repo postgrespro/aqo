@@ -203,7 +203,7 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 ----------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
-   InitPlan 1 (returns $0)
+   InitPlan 1
      ->  Aggregate (actual rows=1 loops=1)
            AQO not used
            ->  Seq Scan on t t_1 (actual rows=50 loops=1)
@@ -212,7 +212,7 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
                  Rows Removed by Filter: 950
    ->  Seq Scan on t (actual rows=50 loops=1)
          AQO: rows=50, error=0%
-         Filter: ((x)::numeric = $0)
+         Filter: ((x)::numeric = (InitPlan 1).col1)
          Rows Removed by Filter: 950
  Using aqo: true
  AQO mode: LEARN
@@ -253,13 +253,13 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 	SELECT count(*) FROM t WHERE
 		x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21) OR
 		x IN (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21);
-                            QUERY PLAN                             
--------------------------------------------------------------------
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
    ->  Seq Scan on t (actual rows=0 loops=1)
          AQO not used
-         Filter: (((x)::numeric = (SubPlan 1)) OR (SubPlan 2))
+         Filter: (((x)::numeric = (SubPlan 1)) OR (ANY ((x)::numeric = (SubPlan 2).col1)))
          Rows Removed by Filter: 1000
          SubPlan 1
            ->  Aggregate (actual rows=1 loops=1000)
@@ -284,13 +284,13 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 	SELECT count(*) FROM t WHERE
 		x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21) OR
 		x IN (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 21);
-                            QUERY PLAN                             
--------------------------------------------------------------------
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
    ->  Seq Scan on t (actual rows=0 loops=1)
          AQO: rows=1, error=100%
-         Filter: (((x)::numeric = (SubPlan 1)) OR (SubPlan 2))
+         Filter: (((x)::numeric = (SubPlan 1)) OR (ANY ((x)::numeric = (SubPlan 2).col1)))
          Rows Removed by Filter: 1000
          SubPlan 1
            ->  Aggregate (actual rows=1 loops=1000)
@@ -316,13 +316,13 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 	SELECT count(*) FROM t WHERE
 		x = (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 22) OR
 		x IN (SELECT avg(x) FROM t t0 WHERE t0.x = t.x + 23);
-                            QUERY PLAN                             
--------------------------------------------------------------------
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    AQO not used
    ->  Seq Scan on t (actual rows=0 loops=1)
          AQO: rows=1, error=100%
-         Filter: (((x)::numeric = (SubPlan 1)) OR (SubPlan 2))
+         Filter: (((x)::numeric = (SubPlan 1)) OR (ANY ((x)::numeric = (SubPlan 2).col1)))
          Rows Removed by Filter: 1000
          SubPlan 1
            ->  Aggregate (actual rows=1 loops=1000)

@@ -258,20 +258,27 @@ WHERE str NOT LIKE '%Memory%';
 
 DROP TABLE main, local_main_p0, local_main_p1;
 DROP TABLE ref, local_ref_p0, local_ref_p1;
-ALTER SERVER loopback OPTIONS (DROP fdw_tuple_cost);
+--ALTER SERVER loopback OPTIONS (DROP fdw_tuple_cost);
 reset enable_partitionwise_join;
 -- TODO: Non-mergejoinable join condition.
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
-                QUERY PLAN                 
--------------------------------------------
- Foreign Scan (actual rows=0 loops=1)
+                         QUERY PLAN                         
+------------------------------------------------------------
+ Nested Loop (actual rows=0 loops=1)
    AQO not used
-   Relations: (frgn a) INNER JOIN (frgn b)
+   Join Filter: (a.x < b.x)
+   Rows Removed by Join Filter: 1
+   ->  Foreign Scan on frgn a (actual rows=1 loops=1)
+         AQO not used
+   ->  Materialize (actual rows=1 loops=1)
+         AQO not used
+         ->  Foreign Scan on frgn b (actual rows=1 loops=1)
+               AQO not used
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(6 rows)
+(13 rows)
 
 SELECT str FROM expln('
   EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
