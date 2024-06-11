@@ -136,7 +136,7 @@ aqo_planner(Query *parse, const char *query_string, int cursorOptions,
 
 	/* Check unlucky case (get a hash of zero) */
 	if (parse->queryId == UINT64CONST(0))
-		JumbleQuery(parse, query_string);
+		JumbleQuery(parse);
 
 	Assert(parse->utilityStmt == NULL);
 	Assert(parse->queryId != UINT64CONST(0));
