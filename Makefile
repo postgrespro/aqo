@@ -23,6 +23,11 @@ REGRESS =	aqo_disabled \
 			gucs
 endif
 
+# Set default values of some gucs to be stable on custom settings during
+# a kind of installcheck
+PGOPTIONS = --max_parallel_workers_per_gather=0
+export PGOPTIONS
+
 fdw_srcdir = $(top_srcdir)/contrib/postgres_fdw
 PG_CPPFLAGS += -I$(libpq_srcdir) -I$(fdw_srcdir)
 EXTRA_REGRESS_OPTS=--temp-config=$(top_srcdir)/$(subdir)/conf.add
