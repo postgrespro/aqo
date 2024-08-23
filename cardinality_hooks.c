@@ -442,9 +442,6 @@ aqo_estimate_num_groups(PlannerInfo *root, List *groupExprs,
 		/* It is unclear that to do in situation of such kind. Just report it */
 		elog(WARNING, "AQO is in the middle of the estimate_num_groups_hook chain");
 
-	if (groupExprs == NIL)
-		return 1.0;
-
 	old_ctx_m = MemoryContextSwitchTo(AQOPredictMemCtx);
 
 	predicted = predict_num_groups(root, subpath, groupExprs, &fss);

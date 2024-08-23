@@ -5,7 +5,7 @@ use Config;
 use PostgreSQL::Test::Cluster;
 use PostgreSQL::Test::Utils;
 
-use Test::More tests => 5;
+use Test::More tests => 6;
 
 my $node = PostgreSQL::Test::Cluster->new('aqotest');
 $node->init;
@@ -57,6 +57,12 @@ is($node->start(),
 		1, "node starts");
 $node->psql('postgres', 'select * from aqo_reset();');
 $node->stop();
+
+# 3000mb (more than 2*31 bytes) overflows 4-byte signed int
+$node->append_conf('postgresql.conf', 'aqo.dsm_size_max = 3000');
+is($node->start(fail_ok => 1), 1, "Large aqo.dsm_size_max doesn't cause integer overflow");
+$node->stop();
+
 
 my $regex;
 $long_string = 'a' x 100000;

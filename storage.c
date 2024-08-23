@@ -968,8 +968,6 @@ read_error:
 	ereport(LOG,
 			(errcode_for_file_access(),
 			 errmsg("could not read file \"%s\": %m", filename)));
-	if (file)
-		FreeFile(file);
 	unlink(filename);
 	return -1;
 }
@@ -981,7 +979,7 @@ check_dsa_file_size(void)
 	long data_size = aqo_get_file_size(PGAQO_DATA_FILE);
 
 	if (qtext_size == -1 || data_size == -1 ||
-		qtext_size + data_size >= dsm_size_max * 1024 * 1024)
+		((unsigned long) qtext_size + (unsigned long) data_size) >> 20 >= dsm_size_max)
 	{
 		elog(ERROR, "aqo.dsm_size_max is too small");
 	}
