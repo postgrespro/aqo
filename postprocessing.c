@@ -30,6 +30,8 @@
 #include "machine_learning.h"
 #include "storage.h"
 
+#define SMART_TIMEOUT_ERROR_THRESHOLD (0.1)
+
 
 bool aqo_learn_statement_timeout = false;
 
@@ -761,7 +763,6 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	instr_time				endtime;
 	EphemeralNamedRelation	enr = get_ENR(queryDesc->queryEnv, PlanStateInfo);
 	MemoryContext oldctx = MemoryContextSwitchTo(AQOLearnMemCtx);
-	double error = .0;
 
 	cardinality_sum_errors = 0.;
 	cardinality_num_objects = 0;
@@ -827,17 +828,21 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 
 		if (stat != NULL)
 		{
-			/* Store all learn data into the AQO service relations. */
-			if (!query_context.adding_query && query_context.auto_tuning)
-				automatical_query_tuning(query_context.query_hash, stat);
-
-			error = stat->est_error_aqo[stat->cur_stat_slot_aqo-1] - cardinality_sum_errors/(1 + cardinality_num_objects);
-
-			if ( aqo_learn_statement_timeout_enable && aqo_statement_timeout > 0 && error >= 0.1)
+			Assert(!query_context.use_aqo || stat->cur_stat_slot_aqo > 0);
+			/* If query used aqo, increase smart timeout if needed */
+			if (query_context.use_aqo &&
+				aqo_learn_statement_timeout_enable &&
+				aqo_statement_timeout > 0 &&
+				stat->est_error_aqo[stat->cur_stat_slot_aqo-1] -
+					cardinality_sum_errors/(1 + cardinality_num_objects) >= SMART_TIMEOUT_ERROR_THRESHOLD)
 			{
 				int64 fintime = increase_smart_timeout();
 				elog(NOTICE, "[AQO] Time limit for execution of the statement was increased. Current timeout is "UINT64_FORMAT, fintime);
 			}
+
+			/* Store all learn data into the AQO service relations. */
+			if (!query_context.adding_query && query_context.auto_tuning)
+				automatical_query_tuning(query_context.query_hash, stat);
 
 			pfree(stat);
 		}

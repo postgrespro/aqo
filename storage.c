@@ -233,7 +233,9 @@ reset_deactivated_queries(void)
 /*
  * Update AQO statistics.
  *
- * Add a record (or update an existed) to stat storage for the query class.
+ * In append mode, append one element to exec_time, plan_time, est_error arrays
+ * (or their *_aqo counterparts, if use_aqo is true). Without append mode, add a
+ * record (or overwrite an existing) to stat storage for the query class.
  * Returns a copy of stat entry, allocated in current memory context. Caller is
  * in charge to free this struct after usage.
  * If stat hash table is full, return NULL and log this fact.
@@ -312,19 +314,20 @@ aqo_stat_store(uint64 queryid, bool use_aqo, AqoStatArgs *stat_arg,
 	if (use_aqo)
 	{
 		Assert(entry->cur_stat_slot_aqo >= 0);
-		pos = entry->cur_stat_slot_aqo;
-		if (entry->cur_stat_slot_aqo < STAT_SAMPLE_SIZE - 1)
+		if (entry->cur_stat_slot_aqo < STAT_SAMPLE_SIZE)
 			entry->cur_stat_slot_aqo++;
 		else
 		{
 			size_t sz = (STAT_SAMPLE_SIZE - 1) * sizeof(entry->est_error_aqo[0]);
 
-			Assert(entry->cur_stat_slot_aqo = STAT_SAMPLE_SIZE - 1);
+			Assert(entry->cur_stat_slot_aqo == STAT_SAMPLE_SIZE);
+
 			memmove(entry->plan_time_aqo, &entry->plan_time_aqo[1], sz);
 			memmove(entry->exec_time_aqo, &entry->exec_time_aqo[1], sz);
 			memmove(entry->est_error_aqo, &entry->est_error_aqo[1], sz);
 		}
 
+		pos = entry->cur_stat_slot_aqo - 1;
 		entry->execs_with_aqo++;
 		entry->plan_time_aqo[pos] = *stat_arg->plan_time_aqo;
 		entry->exec_time_aqo[pos] = *stat_arg->exec_time_aqo;
@@ -333,19 +336,20 @@ aqo_stat_store(uint64 queryid, bool use_aqo, AqoStatArgs *stat_arg,
 	else
 	{
 		Assert(entry->cur_stat_slot >= 0);
-		pos = entry->cur_stat_slot;
-		if (entry->cur_stat_slot < STAT_SAMPLE_SIZE - 1)
+		if (entry->cur_stat_slot < STAT_SAMPLE_SIZE)
 			entry->cur_stat_slot++;
 		else
 		{
 			size_t sz = (STAT_SAMPLE_SIZE - 1) * sizeof(entry->est_error[0]);
 
-			Assert(entry->cur_stat_slot = STAT_SAMPLE_SIZE - 1);
+			Assert(entry->cur_stat_slot == STAT_SAMPLE_SIZE);
+
 			memmove(entry->plan_time, &entry->plan_time[1], sz);
 			memmove(entry->exec_time, &entry->exec_time[1], sz);
 			memmove(entry->est_error, &entry->est_error[1], sz);
 		}
 
+		pos = entry->cur_stat_slot - 1;
 		entry->execs_without_aqo++;
 		entry->plan_time[pos] = *stat_arg->plan_time;
 		entry->exec_time[pos] = *stat_arg->exec_time;
