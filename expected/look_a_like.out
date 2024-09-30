@@ -9,8 +9,9 @@ SELECT true AS success FROM aqo_reset();
 SET aqo.wide_search = 'on';
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
-set aqo.show_hash = 'off';
+SET aqo.show_hash = 'off';
 SET aqo.min_neighbors_for_predicting = 1;
+SET aqo.predict_with_few_neighbors = 'off';
 SET enable_nestloop = 'off';
 SET enable_mergejoin = 'off';
 SET enable_material = 'off';
@@ -553,9 +554,131 @@ WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT L
  JOINS: 2
 (24 rows)
 
+-- Next few test cases focus on fss corresponding to (x1 > ? AND x2 < ? AND x3 < ?). We will denote
+-- it by fss0. At this moment there is exactly one fs with (fs, fss0, dbid) record in aqo_data. We'll
+-- refer to it as fs0.
+-- Let's create another fs for fss0. We'll call this fs fs1. Since aqo.wide_search='on',
+-- aqo.min_neighbors_for_predicting=1, and there is (fs0, fss0, dbid) data record, AQO must be used here.
+SELECT str AS result
+FROM expln('
+SELECT * FROM A WHERE x1 > -100 AND x2 < 10 AND x3 < 10;') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+                                result                                
+----------------------------------------------------------------------
+ Seq Scan on public.a (actual rows=100 loops=1)
+   AQO: rows=20, error=-400%
+   Output: x1, x2, x3
+   Filter: ((a.x1 > '-100'::integer) AND (a.x2 < 10) AND (a.x3 < 10))
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(7 rows)
+
+-- Now there are 2 data records for fss0: one for (fs0, fss0, dbid) and one for (fs1, fss0, dbid)
+-- We repeat previous query, but set aqo.min_neighbors_for_predicting to 2. Since aqo.predict_with_few_neighbors
+-- is 'off', AQO is obliged to use both data records for fss0.
+SET aqo.min_neighbors_for_predicting = 2;
+SELECT str AS result
+FROM expln('
+SELECT * FROM A WHERE x1 > 1 AND x2 < 10 AND x3 < 10;') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+                         result                         
+--------------------------------------------------------
+ Seq Scan on public.a (actual rows=80 loops=1)
+   AQO: rows=77, error=-4%
+   Output: x1, x2, x3
+   Filter: ((a.x1 > 1) AND (a.x2 < 10) AND (a.x3 < 10))
+   Rows Removed by Filter: 20
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(8 rows)
+
+-- Now there are 3 data records for fss0: 1 for (fs0, fss0, dbid) and 2 for (fs1, fss0, dbid)
+-- Lastly, we run invoke query with previously unseen fs with fss0 feature subspace. AQO must use
+-- three data records from two neighbors for this one.
+SET aqo.min_neighbors_for_predicting = 3;
+SELECT str AS result
+FROM expln('
+SELECT x2 FROM A WHERE x1 > 3 AND x2 < 10 AND x3 < 10 GROUP BY(x2);') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+                            result                            
+--------------------------------------------------------------
+ HashAggregate (actual rows=6 loops=1)
+   AQO not used
+   Output: x2
+   Group Key: a.x2
+   ->  Seq Scan on public.a (actual rows=60 loops=1)
+         AQO: rows=71, error=15%
+         Output: x1, x2, x3
+         Filter: ((a.x1 > 3) AND (a.x2 < 10) AND (a.x3 < 10))
+         Rows Removed by Filter: 40
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(12 rows)
+
+-----
+DROP TABLE IF EXISTS t;
+NOTICE:  table "t" does not exist, skipping
+CREATE TABLE t AS SELECT x, x AS y, x AS z FROM generate_series(1, 10000) x;
+ANALYZE t;
+SELECT true AS success FROM aqo_reset();
+ success 
+---------
+ t
+(1 row)
+
+-- Test that when there are less records than aqo.min_neighbors_for_predicting for given (fs, fss, dbid)
+-- and aqo.predict_with_few_neighbors is off, those records have higher precedence for cardinality estimation
+-- than neighbors' records.
+SELECT str AS result
+FROM expln('
+select * from t where x <= 10000 and y <= 10000 and z <= 10000;') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+                              result                              
+------------------------------------------------------------------
+ Seq Scan on public.t (actual rows=10000 loops=1)
+   AQO not used
+   Output: x, y, z
+   Filter: ((t.x <= 10000) AND (t.y <= 10000) AND (t.z <= 10000))
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(7 rows)
+
+DO
+$$
+BEGIN
+	for counter in 1..20 loop
+		EXECUTE format('explain analyze select *, 1 from t where x <= 1 and y <= 1 and z <= %L;', 10 * counter);
+		EXECUTE format('explain analyze select *, 1 from t where x <= 1 and y <= %L and z <= 1;', 10 * counter);
+		EXECUTE format('explain analyze select *, 1 from t where x <= %L and y <= 1 and z <= 1;', 10 * counter);
+	end loop;
+END;
+$$ LANGUAGE PLPGSQL;
+-- AQO should predict ~1000 rows to indicate that the record from previous invocation was used.
+SELECT str AS result
+FROM expln('
+select * from t where x <= 10000 and y <= 10000 and z <= 10000;') AS str
+WHERE str NOT LIKE 'Query Identifier%' and str NOT LIKE '%Memory%' and str NOT LIKE '%Sort Method%';
+                              result                              
+------------------------------------------------------------------
+ Seq Scan on public.t (actual rows=10000 loops=1)
+   AQO: rows=9987, error=-0%
+   Output: x, y, z
+   Filter: ((t.x <= 10000) AND (t.y <= 10000) AND (t.z <= 10000))
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(7 rows)
+
 RESET aqo.wide_search;
+RESET aqo.predict_with_few_neighbors;
+RESET aqo.min_neighbors_for_predicting;
 DROP EXTENSION aqo CASCADE;
 DROP TABLE a;
 DROP TABLE b;
 DROP TABLE c;
+DROP TABLE t;
 DROP FUNCTION expln;
