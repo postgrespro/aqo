@@ -96,7 +96,7 @@ atomic_fss_learn_step(uint64 fs, int fss, OkNNrdata *data,
 					  double *features, double target, double rfactor,
 					  List *reloids)
 {
-	if (!load_fss_ext(fs, fss, data, NULL))
+	if (!load_aqo_data(fs, fss, data, false))
 		data->rows = 0;
 
 	data->rows = OkNNr_learn(data, features, target, rfactor);

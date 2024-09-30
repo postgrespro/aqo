@@ -145,4 +145,5 @@ SELECT count(*) FROM aqo_query_stat;
      0
 (1 row)
 
+DROP TABLE t;
 DROP EXTENSION aqo;

@@ -16,6 +16,7 @@ $$ LANGUAGE PLPGSQL;
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
 DROP TABLE IF EXISTS t;
+NOTICE:  table "t" does not exist, skipping
 CREATE TABLE t AS SELECT (gs.* / 50) AS x FROM generate_series(1,1000) AS gs;
 ANALYZE t;
 CREATE TABLE t1 AS SELECT mod(gs,10) AS x, mod(gs+1,10) AS y

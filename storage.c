@@ -121,12 +121,6 @@ PG_FUNCTION_INFO_V1(aqo_data_update);
 
 
 bool
-load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids)
-{
-	return load_aqo_data(fs, fss, data, reloids, false, NULL);
-}
-
-bool
 update_fss_ext(uint64 fs, int fss, OkNNrdata *data, List *reloids)
 {
 	/*
@@ -1577,66 +1571,53 @@ fs_distance(double *a, double *b, int len)
 }
 
 static bool
-nearest_neighbor(double **matrix, int old_rows, double *neibour, int cols)
+nearest_neighbor(double **matrix, int old_rows, double *neighbor, int cols)
 {
 	int i;
 	for (i=0; i<old_rows; i++)
 	{
-		if (fs_distance(neibour, matrix[i], cols) == 0)
+		if (fs_distance(neighbor, matrix[i], cols) == 0)
 			return true;
 	}
 	return false;
 }
 
+/*
+ * Append data records from temp_data to data.
+ * Repeated records (with same features) are skipped; data->rows is kept <= aqo_K.
+ */
 static void
-build_knn_matrix(OkNNrdata *data, const OkNNrdata *temp_data, double *features)
+update_knn_matrix(OkNNrdata *data, const OkNNrdata *temp_data)
 {
+	int			k = (data->rows < 0) ? 0 : data->rows;
+	int			i;
+
 	Assert(data->cols == temp_data->cols);
 	Assert(data->matrix);
 
-	if (features != NULL)
+	if (data->cols > 0)
 	{
-		int old_rows = data->rows;
-		int k = (old_rows < 0) ? 0 : old_rows;
-
-		if (data->cols > 0)
+		for (i = 0; i < temp_data->rows && k < aqo_K; i++)
 		{
-			int i;
-
-			Assert(data->cols == temp_data->cols);
-
-			for (i = 0; i < temp_data->rows; i++)
+			if (!nearest_neighbor(data->matrix, k, temp_data->matrix[i], data->cols))
 			{
-				if (k < aqo_K && !nearest_neighbor(data->matrix, old_rows,
-												   temp_data->matrix[i],
-												   data->cols))
-				{
-					memcpy(data->matrix[k], temp_data->matrix[i], data->cols * sizeof(double));
-					data->rfactors[k] = temp_data->rfactors[i];
-					data->targets[k] = temp_data->targets[i];
-					k++;
-				}
-			}
-			data->rows = k;
-		}
-	}
-	else
-	{
-		if (data->rows > 0)
-			/* trivial strategy - use first suitable record and ignore others */
-			return;
-		memcpy(data, temp_data, sizeof(OkNNrdata));
-		if (data->cols > 0)
-		{
-			int i;
-
-			for (i = 0; i < data->rows; i++)
-			{
-				Assert(data->matrix[i]);
-				memcpy(data->matrix[i], temp_data->matrix[i], data->cols * sizeof(double));
+				memcpy(data->matrix[k], temp_data->matrix[i], data->cols * sizeof(double));
+				data->rfactors[k] = temp_data->rfactors[i];
+				data->targets[k] = temp_data->targets[i];
+				k++;
 			}
 		}
 	}
+	/* Data has no columns. Only one record can be added */
+	else if (k == 0 && temp_data->rows > 0)
+	{
+		data->rfactors[0] = temp_data->rfactors[0];
+		data->targets[0] = temp_data->targets[0];
+		k = 1;
+	}
+	data->rows = k;
+
+	Assert(data->rows >= 0 && data->rows <= aqo_K);
 }
 
 static OkNNrdata *
@@ -1706,13 +1687,11 @@ _fill_knn_data(const DataEntry *entry, List **reloids)
  *
  * If wideSearch is true - make seqscan on the hash table to see for relevant
  * data across neighbours.
- * If reloids is NULL - don't fill this list.
  *
  * Return false if the operation was unsuccessful.
  */
 bool
-load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
-			  bool wideSearch, double *features)
+load_aqo_data(uint64 fs, int fss, OkNNrdata *data, bool wideSearch)
 {
 	DataEntry  *entry;
 	bool		found;
@@ -1720,6 +1699,7 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 	OkNNrdata  *temp_data;
 
 	Assert(!LWLockHeldByMe(&aqo_state->data_lock));
+	Assert(wideSearch || data->rows <= 0);
 
 	dsa_init();
 
@@ -1739,16 +1719,16 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 		if (entry->cols != data->cols)
 		{
 			/* Collision happened? */
-			elog(LOG, "[AQO] Does a collision happened? Check it if possible "
+			elog(LOG, "[AQO] Did a collision happen? Check it if possible "
 				 "(fs: "UINT64_FORMAT", fss: %d).",
 				 fs, fss);
 			found = false; /* Sign of unsuccessful operation */
 			goto end;
 		}
 
-		temp_data = _fill_knn_data(entry, reloids);
+		temp_data = _fill_knn_data(entry, NULL);
 		Assert(temp_data->rows > 0);
-		build_knn_matrix(data, temp_data, features);
+		update_knn_matrix(data, temp_data);
 		Assert(data->rows > 0);
 	}
 	else
@@ -1770,28 +1750,31 @@ load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
 
 			temp_data = _fill_knn_data(entry, &tmp_oids);
 
-			if (data->rows > 0 && list_length(tmp_oids) != noids)
+			if (noids >= 0 && list_length(tmp_oids) != noids)
 			{
 				/* Dubious case. So log it and skip these data */
 				elog(LOG,
 					 "[AQO] different number depended oids for the same fss %d: "
 					 "%d and %d correspondingly.",
 					 fss, list_length(tmp_oids), noids);
-				Assert(noids >= 0);
 				list_free(tmp_oids);
 				continue;
 			}
 
 			noids = list_length(tmp_oids);
+			list_free(tmp_oids);
 
-			if (reloids != NULL && *reloids == NIL)
-				*reloids = tmp_oids;
-			else
-				list_free(tmp_oids);
-
-			build_knn_matrix(data, temp_data, NULL);
+			update_knn_matrix(data, temp_data);
 			found = true;
+
+			/* Abort if data is full */
+			if (data->rows == aqo_K || (data->cols == 0 && data->rows == 1))
+			{
+				hash_seq_term(&hash_seq);
+				break;
+			}
 		}
+
 	}
 
 	Assert(!found || (data->rows > 0 && data->rows <= aqo_K));

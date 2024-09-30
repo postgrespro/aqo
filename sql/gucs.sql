@@ -51,4 +51,5 @@ SELECT count(*) FROM aqo_query_stat;
 SELECT true AS success FROM aqo_reset();
 SELECT count(*) FROM aqo_query_stat;
 
+DROP TABLE t;
 DROP EXTENSION aqo;
