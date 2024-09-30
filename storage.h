@@ -144,8 +144,7 @@ extern void aqo_qtexts_load(void);
 
 extern bool aqo_data_store(uint64 fs, int fss, AqoDataArgs *data,
 						   List *reloids);
-extern bool load_aqo_data(uint64 fs, int fss, OkNNrdata *data, List **reloids,
-						  bool wideSearch, double *features);
+extern bool load_aqo_data(uint64 fs, int fss, OkNNrdata *data, bool wideSearch);
 extern void aqo_data_flush(void);
 extern void aqo_data_load(void);
 
@@ -166,7 +165,6 @@ extern bool query_is_deactivated(uint64 query_hash);
 extern void add_deactivated_query(uint64 query_hash);
 
 /* Storage interaction */
-extern bool load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids);
 extern bool update_fss_ext(uint64 fs, int fss, OkNNrdata *data, List *reloids);
 
 extern bool update_query_timeout(uint64 queryid, int64 smart_timeout);

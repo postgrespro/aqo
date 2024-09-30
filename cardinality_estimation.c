@@ -81,8 +81,17 @@ predict_for_relation(List *clauses, List *selectivities, List *relsigns,
 							  &ncols, &features);
 	data = OkNNr_allocate(ncols);
 
-	if (load_fss_ext(query_context.fspace_hash, *fss, data, NULL))
+	if (load_aqo_data(query_context.fspace_hash, *fss, data, false) &&
+			data->rows >= (aqo_predict_with_few_neighbors ? 1 : aqo_k))
 		result = OkNNr_predict(data, features);
+	/* Try to search in surrounding feature spaces for the same node */
+	else if (use_wide_search && load_aqo_data(query_context.fspace_hash, *fss, data, true))
+	{
+		elog(DEBUG5, "[AQO] Make prediction for fss "INT64_FORMAT" by a neighbour "
+			 "includes %d feature(s) and %d fact(s).",
+			 (int64) *fss, data->cols, data->rows);
+		result = OkNNr_predict(data, features);
+	}
 	else
 	{
 		/*
@@ -91,17 +100,7 @@ predict_for_relation(List *clauses, List *selectivities, List *relsigns,
 		 * small part of paths was used for AQO learning and stored into
 		 * the AQO knowledge base.
 		 */
-
-		/* Try to search in surrounding feature spaces for the same node */
-		if (!load_aqo_data(query_context.fspace_hash, *fss, data, NULL, use_wide_search, features))
-			result = -1;
-		else
-		{
-			elog(DEBUG5, "[AQO] Make prediction for fss %d by a neighbour "
-				 "includes %d feature(s) and %d fact(s).",
-				 *fss, data->cols, data->rows);
-			result = OkNNr_predict(data, features);
-		}
+		result = -1;
 	}
 
 #ifdef AQO_DEBUG_PRINT
