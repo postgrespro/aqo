@@ -28,10 +28,10 @@ typedef struct
 	double		selectivity;
 }	Entry;
 
-List	   *objects = NIL;
+static List	   *objects = NIL;
 
 /* Specific memory context for selectivity objects */
-MemoryContext AQOCacheSelectivity = NULL;
+static MemoryContext AQOCacheSelectivity = NULL;
 
 /*
  * Stores the given selectivity for clause_hash, relid and global_relid

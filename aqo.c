@@ -81,7 +81,7 @@ int			auto_tuning_infinite_loop = 8;
 int			aqo_k;
 double		log_selectivity_lower_bound = -30;
 
-bool		cleanup_bgworker = false;
+static bool		cleanup_bgworker = false;
 
 /*
  * Currently we use it only to store query_text string which is initialized
@@ -118,7 +118,7 @@ get_parameterized_joinrel_size_hook_type	prev_get_parameterized_joinrel_size_hoo
 ExplainOnePlan_hook_type					prev_ExplainOnePlan_hook;
 ExplainOneNode_hook_type					prev_ExplainOneNode_hook;
 static shmem_request_hook_type				prev_shmem_request_hook = NULL;
-object_access_hook_type						prev_object_access_hook;
+static object_access_hook_type				prev_object_access_hook;
 
 PGDLLEXPORT void aqo_bgworker_cleanup(Datum main_arg);
 static void aqo_bgworker_startup(void);

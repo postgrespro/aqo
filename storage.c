@@ -69,10 +69,10 @@ int dsm_size_max = 100; /* in MB */
 HTAB *stat_htab = NULL;
 HTAB *queries_htab = NULL;
 HTAB *qtexts_htab = NULL;
-dsa_area *qtext_dsa = NULL;
+static dsa_area *qtext_dsa = NULL;
 HTAB *data_htab = NULL;
-dsa_area *data_dsa = NULL;
-HTAB *deactivated_queries = NULL;
+static dsa_area *data_dsa = NULL;
+static HTAB *deactivated_queries = NULL;
 
 /* Used to check data file consistency */
 static const uint32 PGAQO_FILE_HEADER = 123467589;
@@ -422,7 +422,6 @@ aqo_query_stat(PG_FUNCTION_ARGS)
 	}
 
 	LWLockRelease(&aqo_state->stat_lock);
-	tuplestore_donestoring(tupstore);
 	return (Datum) 0;
 }
 
@@ -1185,7 +1184,6 @@ aqo_query_texts(PG_FUNCTION_ARGS)
 	}
 
 	LWLockRelease(&aqo_state->qtexts_lock);
-	tuplestore_donestoring(tupstore);
 	return (Datum) 0;
 }
 
@@ -1820,7 +1818,6 @@ aqo_data(PG_FUNCTION_ARGS)
 	}
 
 	LWLockRelease(&aqo_state->data_lock);
-	tuplestore_donestoring(tupstore);
 	return (Datum) 0;
 }
 
@@ -1942,7 +1939,6 @@ aqo_queries(PG_FUNCTION_ARGS)
 	}
 
 	LWLockRelease(&aqo_state->queries_lock);
-	tuplestore_donestoring(tupstore);
 	return (Datum) 0;
 }
 
@@ -2538,7 +2534,6 @@ aqo_cardinality_error(PG_FUNCTION_ARGS)
 	LWLockRelease(&aqo_state->stat_lock);
 	LWLockRelease(&aqo_state->queries_lock);
 
-	tuplestore_donestoring(tupstore);
 	return (Datum) 0;
 }
 
@@ -2642,7 +2637,6 @@ aqo_execution_time(PG_FUNCTION_ARGS)
 	LWLockRelease(&aqo_state->stat_lock);
 	LWLockRelease(&aqo_state->queries_lock);
 
-	tuplestore_donestoring(tupstore);
 	return (Datum) 0;
 }
 
