@@ -103,10 +103,12 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 			x = (SELECT x FROM t t0 WHERE t0.x = t.x LIMIT 1) AND
 			x IN (SELECT x FROM t t0 WHERE t0.x = t.x);
 -- No prediction for top SeqScan, because it fss is changed
+SELECT str FROM expln('
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 	SELECT * FROM t WHERE
 			x = (SELECT x FROM t t0 WHERE t0.x = t.x LIMIT 1) AND
 			x IN (SELECT x FROM t t0 WHERE t0.x = t.x);
+') AS str WHERE str NOT LIKE '%Memory Usage%';
 
 -- It's OK to use the knowledge for a query with different constants.
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)

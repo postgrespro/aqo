@@ -316,27 +316,28 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 	SELECT * FROM t WHERE
 			x = (SELECT x FROM t t0 WHERE t0.x = t.x LIMIT 1) AND
 			x IN (SELECT x FROM t t0 WHERE t0.x = t.x);
-                        QUERY PLAN                         
------------------------------------------------------------
- Seq Scan on t (actual rows=1000 loops=1)
+                            QUERY PLAN                             
+-------------------------------------------------------------------
+ Nested Loop Semi Join (actual rows=1000 loops=1)
    AQO not used
-   Filter: ((x = (SubPlan 1)) AND (SubPlan 2))
-   SubPlan 1
-     ->  Limit (actual rows=1 loops=1000)
-           AQO not used
-           ->  Seq Scan on t t0 (actual rows=1 loops=1000)
+   Join Filter: (t.x = t0.x)
+   Rows Removed by Join Filter: 475049
+   ->  Seq Scan on t (actual rows=1000 loops=1)
+         AQO not used
+         Filter: (x = (SubPlan 1))
+         SubPlan 1
+           ->  Limit (actual rows=1 loops=1000)
                  AQO not used
-                 Filter: (x = t.x)
-                 Rows Removed by Filter: 475
-   SubPlan 2
-     ->  Seq Scan on t t0_1 (actual rows=1 loops=1000)
-           AQO not used
-           Filter: (x = t.x)
-           Rows Removed by Filter: 475
+                 ->  Seq Scan on t t0_1 (actual rows=1 loops=1000)
+                       AQO not used
+                       Filter: (x = t.x)
+                       Rows Removed by Filter: 475
+   ->  Seq Scan on t t0 (actual rows=476 loops=1000)
+         AQO not used
  Using aqo: true
  AQO mode: LEARN
- JOINS: 0
-(18 rows)
+ JOINS: 1
+(19 rows)
 
 -- No prediction for top SeqScan, because it fss is changed
 SELECT str FROM expln('
@@ -345,27 +346,31 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 			x = (SELECT x FROM t t0 WHERE t0.x = t.x LIMIT 1) AND
 			x IN (SELECT x FROM t t0 WHERE t0.x = t.x);
 ') AS str WHERE str NOT LIKE '%Memory Usage%';
-                            str                            
------------------------------------------------------------
- Seq Scan on t (actual rows=1000 loops=1)
-   AQO not used
-   Filter: ((SubPlan 2) AND (x = (SubPlan 1)))
-   SubPlan 2
-     ->  Seq Scan on t t0_1 (actual rows=1 loops=1000)
-           AQO: rows=1, error=0%
-           Filter: (x = t.x)
-           Rows Removed by Filter: 475
-   SubPlan 1
-     ->  Limit (actual rows=1 loops=1000)
-           AQO not used
-           ->  Seq Scan on t t0 (actual rows=1 loops=1000)
-                 AQO: rows=1, error=0%
-                 Filter: (x = t.x)
-                 Rows Removed by Filter: 475
+                                str                                
+-------------------------------------------------------------------
+ Hash Join (actual rows=1000 loops=1)
+   AQO: rows=1000, error=0%
+   Hash Cond: (t.x = t0.x)
+   ->  Seq Scan on t (actual rows=1000 loops=1)
+         AQO: rows=1000, error=0%
+         Filter: (x = (SubPlan 1))
+         SubPlan 1
+           ->  Limit (actual rows=1 loops=1000)
+                 AQO not used
+                 ->  Seq Scan on t t0_1 (actual rows=1 loops=1000)
+                       AQO: rows=1, error=0%
+                       Filter: (x = t.x)
+                       Rows Removed by Filter: 475
+   ->  Hash (actual rows=21 loops=1)
+         ->  HashAggregate (actual rows=21 loops=1)
+               AQO: rows=476, error=96%
+               Group Key: t0.x, t0.x
+               ->  Seq Scan on t t0 (actual rows=1000 loops=1)
+                     AQO: rows=476, error=-110%
  Using aqo: true
  AQO mode: LEARN
- JOINS: 0
-(18 rows)
+ JOINS: 1
+(22 rows)
 
 -- It's OK to use the knowledge for a query with different constants.
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
@@ -636,7 +641,7 @@ ORDER BY (md5(query_text),error) DESC;
 -------+------------------------------------------------------------------------------------------------
  0.768 | SELECT count(*) FROM (SELECT count(*) FROM t1 GROUP BY (x,y)) AS q1;
  0.070 | SELECT count(*) FROM (SELECT * FROM t GROUP BY (x) HAVING x > 3) AS q1;
- 1.554 | EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)                                         +
+ 0.644 | EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)                                         +
        |         SELECT * FROM t WHERE                                                                 +
        |                         x = (SELECT x FROM t t0 WHERE t0.x = t.x LIMIT 1) AND                 +
        |                         x IN (SELECT x FROM t t0 WHERE t0.x = t.x);
@@ -678,7 +683,7 @@ DROP TABLE t,t1 CASCADE; -- delete all tables used in the test
 SELECT count(*) FROM aqo_data; -- Just to detect some changes in the logic. May some false positives really bother us here?
  count 
 -------
-    48
+    49
 (1 row)
 
 SELECT true AS success FROM aqo_cleanup();
