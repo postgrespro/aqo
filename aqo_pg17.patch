@@ -1,5 +1,17 @@
+diff --git a/contrib/Makefile b/contrib/Makefile
+index abd780f277..601892ef54 100644
+--- a/contrib/Makefile
++++ b/contrib/Makefile
+@@ -6,6 +6,7 @@ include $(top_builddir)/src/Makefile.global
+ 
+ SUBDIRS = \
+ 		amcheck		\
++		aqo	\
+ 		auth_delay	\
+ 		auto_explain	\
+ 		basic_archive	\
 diff --git a/src/backend/commands/explain.c b/src/backend/commands/explain.c
-index 18a5af6b91..18c2ed3bfd 100644
+index 8086607710..878a8ea9f9 100644
 --- a/src/backend/commands/explain.c
 +++ b/src/backend/commands/explain.c
 @@ -25,6 +25,7 @@
@@ -23,7 +35,7 @@ index 18a5af6b91..18c2ed3bfd 100644
  
  /* Instrumentation data for SERIALIZE option */
  typedef struct SerializeMetrics
-@@ -805,6 +812,10 @@ ExplainOnePlan(PlannedStmt *plannedstmt, IntoClause *into, ExplainState *es,
+@@ -796,6 +803,10 @@ ExplainOnePlan(PlannedStmt *plannedstmt, IntoClause *into, ExplainState *es,
  		ExplainPropertyFloat("Execution Time", "ms", 1000.0 * totaltime, 3,
  							 es);
  
@@ -34,7 +46,7 @@ index 18a5af6b91..18c2ed3bfd 100644
  	ExplainCloseGroup("Query", NULL, true, es);
  }
  
-@@ -2001,6 +2012,9 @@ ExplainNode(PlanState *planstate, List *ancestors,
+@@ -1886,6 +1897,9 @@ ExplainNode(PlanState *planstate, List *ancestors,
  		}
  	}
  
@@ -45,10 +57,10 @@ index 18a5af6b91..18c2ed3bfd 100644
  	if (es->format == EXPLAIN_FORMAT_TEXT)
  		appendStringInfoChar(es->str, '\n');
 diff --git a/src/backend/optimizer/path/costsize.c b/src/backend/optimizer/path/costsize.c
-index 2bb6db1df7..ac95740598 100644
+index 52ebdd90fc..da0e257120 100644
 --- a/src/backend/optimizer/path/costsize.c
 +++ b/src/backend/optimizer/path/costsize.c
-@@ -109,6 +109,11 @@
+@@ -98,6 +98,11 @@
  #include "utils/spccache.h"
  #include "utils/tuplesort.h"
  
@@ -60,7 +72,7 @@ index 2bb6db1df7..ac95740598 100644
  
  #define LOG2(x)  (log(x) / 0.693147180559945)
  
-@@ -202,7 +207,6 @@ static void set_rel_width(PlannerInfo *root, RelOptInfo *rel);
+@@ -191,7 +196,6 @@ static void set_rel_width(PlannerInfo *root, RelOptInfo *rel);
  static int32 get_expr_width(PlannerInfo *root, const Node *expr);
  static double relation_byte_size(double tuples, int width);
  static double page_size(double tuples, int width);
@@ -68,7 +80,7 @@ index 2bb6db1df7..ac95740598 100644
  
  
  /*
-@@ -5309,6 +5313,58 @@ approx_tuple_count(PlannerInfo *root, JoinPath *path, List *quals)
+@@ -5225,6 +5229,58 @@ approx_tuple_count(PlannerInfo *root, JoinPath *path, List *quals)
  }
  
  
@@ -127,7 +139,7 @@ index 2bb6db1df7..ac95740598 100644
  /*
   * set_baserel_size_estimates
   *		Set the size estimates for the given base relation.
-@@ -5325,19 +5381,10 @@ approx_tuple_count(PlannerInfo *root, JoinPath *path, List *quals)
+@@ -5241,19 +5297,10 @@ approx_tuple_count(PlannerInfo *root, JoinPath *path, List *quals)
  void
  set_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel)
  {
@@ -148,7 +160,7 @@ index 2bb6db1df7..ac95740598 100644
  
  	cost_qual_eval(&rel->baserestrictcost, rel->baserestrictinfo, root);
  
-@@ -5348,13 +5395,33 @@ set_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel)
+@@ -5264,13 +5311,33 @@ set_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel)
   * get_parameterized_baserel_size
   *		Make a size estimate for a parameterized scan of a base relation.
   *
@@ -184,7 +196,7 @@ index 2bb6db1df7..ac95740598 100644
  {
  	List	   *allclauses;
  	double		nrows;
-@@ -5383,6 +5450,36 @@ get_parameterized_baserel_size(PlannerInfo *root, RelOptInfo *rel,
+@@ -5299,6 +5366,36 @@ get_parameterized_baserel_size(PlannerInfo *root, RelOptInfo *rel,
   * set_joinrel_size_estimates
   *		Set the size estimates for the given join relation.
   *
@@ -221,7 +233,7 @@ index 2bb6db1df7..ac95740598 100644
   * The rel's targetlist must have been constructed already, and a
   * restriction clause list that matches the given component rels must
   * be provided.
-@@ -5402,11 +5499,11 @@ get_parameterized_baserel_size(PlannerInfo *root, RelOptInfo *rel,
+@@ -5318,11 +5415,11 @@ get_parameterized_baserel_size(PlannerInfo *root, RelOptInfo *rel,
   * build_joinrel_tlist, and baserestrictcost is not used for join rels.
   */
  void
@@ -238,7 +250,7 @@ index 2bb6db1df7..ac95740598 100644
  {
  	rel->rows = calc_joinrel_size_estimate(root,
  										   rel,
-@@ -5422,6 +5519,35 @@ set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
+@@ -5338,6 +5435,35 @@ set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
   * get_parameterized_joinrel_size
   *		Make a size estimate for a parameterized scan of a join relation.
   *
@@ -274,7 +286,7 @@ index 2bb6db1df7..ac95740598 100644
   * 'rel' is the joinrel under consideration.
   * 'outer_path', 'inner_path' are (probably also parameterized) Paths that
   *		produce the relations being joined.
-@@ -5434,11 +5560,11 @@ set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
+@@ -5350,11 +5476,11 @@ set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
   * set_joinrel_size_estimates must have been applied already.
   */
  double
@@ -291,7 +303,7 @@ index 2bb6db1df7..ac95740598 100644
  {
  	double		nrows;
  
-@@ -6153,7 +6279,7 @@ set_foreign_size_estimates(PlannerInfo *root, RelOptInfo *rel)
+@@ -6069,7 +6195,7 @@ set_foreign_size_estimates(PlannerInfo *root, RelOptInfo *rel)
  	/* Should only be applied to base relations */
  	Assert(rel->relid > 0);
  
@@ -300,7 +312,7 @@ index 2bb6db1df7..ac95740598 100644
  
  	cost_qual_eval(&rel->baserestrictcost, rel->baserestrictinfo, root);
  
-@@ -6446,7 +6572,7 @@ page_size(double tuples, int width)
+@@ -6362,7 +6488,7 @@ page_size(double tuples, int width)
   * Estimate the fraction of the work that each worker will do given the
   * number of workers budgeted for the path.
   */
@@ -310,7 +322,7 @@ index 2bb6db1df7..ac95740598 100644
  {
  	double		parallel_divisor = path->parallel_workers;
 diff --git a/src/backend/optimizer/plan/createplan.c b/src/backend/optimizer/plan/createplan.c
-index c13586c537..2f889570de 100644
+index c0af10ebd3..31e0ece45a 100644
 --- a/src/backend/optimizer/plan/createplan.c
 +++ b/src/backend/optimizer/plan/createplan.c
 @@ -72,6 +72,7 @@
@@ -321,7 +333,7 @@ index c13586c537..2f889570de 100644
  
  static Plan *create_plan_recurse(PlannerInfo *root, Path *best_path,
  								 int flags);
-@@ -551,6 +552,10 @@ create_plan_recurse(PlannerInfo *root, Path *best_path, int flags)
+@@ -549,6 +550,10 @@ create_plan_recurse(PlannerInfo *root, Path *best_path, int flags)
  			break;
  	}
  
@@ -332,7 +344,7 @@ index c13586c537..2f889570de 100644
  	return plan;
  }
  
-@@ -5458,6 +5463,7 @@ copy_generic_path_info(Plan *dest, Path *src)
+@@ -5415,6 +5420,7 @@ copy_generic_path_info(Plan *dest, Path *src)
  	dest->plan_width = src->pathtarget->width;
  	dest->parallel_aware = src->parallel_aware;
  	dest->parallel_safe = src->parallel_safe;
@@ -341,10 +353,10 @@ index c13586c537..2f889570de 100644
  
  /*
 diff --git a/src/backend/optimizer/plan/planner.c b/src/backend/optimizer/plan/planner.c
-index 0f423e9684..8cd228baa1 100644
+index 0c7273b9cc..9399be1473 100644
 --- a/src/backend/optimizer/plan/planner.c
 +++ b/src/backend/optimizer/plan/planner.c
-@@ -144,7 +144,8 @@ static List *extract_rollup_sets(List *groupingSets);
+@@ -142,7 +142,8 @@ static List *extract_rollup_sets(List *groupingSets);
  static List *reorder_grouping_sets(List *groupingSets, List *sortclause);
  static void standard_qp_callback(PlannerInfo *root, void *extra);
  static double get_number_of_groups(PlannerInfo *root,
@@ -354,7 +366,7 @@ index 0f423e9684..8cd228baa1 100644
  								   grouping_sets_data *gd,
  								   List *target_list);
  static RelOptInfo *create_grouping_paths(PlannerInfo *root,
-@@ -3697,7 +3698,8 @@ standard_qp_callback(PlannerInfo *root, void *extra)
+@@ -3626,7 +3627,8 @@ standard_qp_callback(PlannerInfo *root, void *extra)
   */
  static double
  get_number_of_groups(PlannerInfo *root,
@@ -364,7 +376,7 @@ index 0f423e9684..8cd228baa1 100644
  					 grouping_sets_data *gd,
  					 List *target_list)
  {
-@@ -3734,7 +3736,7 @@ get_number_of_groups(PlannerInfo *root,
+@@ -3663,7 +3665,7 @@ get_number_of_groups(PlannerInfo *root,
  					GroupingSetData *gs = lfirst_node(GroupingSetData, lc3);
  					double		numGroups = estimate_num_groups(root,
  																groupExprs,
@@ -373,7 +385,7 @@ index 0f423e9684..8cd228baa1 100644
  																&gset,
  																NULL);
  
-@@ -3760,7 +3762,7 @@ get_number_of_groups(PlannerInfo *root,
+@@ -3689,7 +3691,7 @@ get_number_of_groups(PlannerInfo *root,
  					GroupingSetData *gs = lfirst_node(GroupingSetData, lc2);
  					double		numGroups = estimate_num_groups(root,
  																groupExprs,
@@ -382,7 +394,7 @@ index 0f423e9684..8cd228baa1 100644
  																&gset,
  																NULL);
  
-@@ -3777,8 +3779,8 @@ get_number_of_groups(PlannerInfo *root,
+@@ -3706,8 +3708,8 @@ get_number_of_groups(PlannerInfo *root,
  			groupExprs = get_sortgrouplist_exprs(root->processed_groupClause,
  												 target_list);
  
@@ -393,7 +405,7 @@ index 0f423e9684..8cd228baa1 100644
  		}
  	}
  	else if (parse->groupingSets)
-@@ -4168,7 +4170,8 @@ create_ordinary_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel,
+@@ -4097,7 +4099,8 @@ create_ordinary_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel,
  	 * Estimate number of groups.
  	 */
  	dNumGroups = get_number_of_groups(root,
@@ -403,7 +415,7 @@ index 0f423e9684..8cd228baa1 100644
  									  gd,
  									  extra->targetList);
  
-@@ -7405,13 +7408,15 @@ create_partial_grouping_paths(PlannerInfo *root,
+@@ -7303,13 +7306,15 @@ create_partial_grouping_paths(PlannerInfo *root,
  	if (cheapest_total_path != NULL)
  		dNumPartialGroups =
  			get_number_of_groups(root,
@@ -422,7 +434,7 @@ index 0f423e9684..8cd228baa1 100644
  								 extra->targetList);
  
 diff --git a/src/backend/optimizer/util/relnode.c b/src/backend/optimizer/util/relnode.c
-index d7266e4cdb..7e5b771d9f 100644
+index e05b21c884..5805136b70 100644
 --- a/src/backend/optimizer/util/relnode.c
 +++ b/src/backend/optimizer/util/relnode.c
 @@ -286,6 +286,7 @@ build_simple_rel(PlannerInfo *root, int relid, RelOptInfo *parent)
@@ -449,7 +461,7 @@ index d7266e4cdb..7e5b771d9f 100644
  
  	/* Compute information relevant to the foreign relations. */
  	set_foreign_rel_properties(joinrel, outer_rel, inner_rel);
-@@ -952,6 +953,7 @@ build_child_join_rel(PlannerInfo *root, RelOptInfo *outer_rel,
+@@ -962,6 +963,7 @@ build_child_join_rel(PlannerInfo *root, RelOptInfo *outer_rel,
  	joinrel->all_partrels = NULL;
  	joinrel->partexprs = NULL;
  	joinrel->nullable_partexprs = NULL;
@@ -457,7 +469,7 @@ index d7266e4cdb..7e5b771d9f 100644
  
  	/* Compute information relevant to foreign relations. */
  	set_foreign_rel_properties(joinrel, outer_rel, inner_rel);
-@@ -1530,6 +1532,7 @@ find_childrel_parents(PlannerInfo *root, RelOptInfo *rel)
+@@ -1542,6 +1544,7 @@ find_childrel_parents(PlannerInfo *root, RelOptInfo *rel)
  }
  
  
@@ -465,7 +477,7 @@ index d7266e4cdb..7e5b771d9f 100644
  /*
   * get_baserel_parampathinfo
   *		Get the ParamPathInfo for a parameterized path for a base relation,
-@@ -1622,6 +1625,10 @@ get_baserel_parampathinfo(PlannerInfo *root, RelOptInfo *baserel,
+@@ -1634,6 +1637,10 @@ get_baserel_parampathinfo(PlannerInfo *root, RelOptInfo *baserel,
  	ppi->ppi_rows = rows;
  	ppi->ppi_clauses = pclauses;
  	ppi->ppi_serials = pserials;
@@ -476,7 +488,7 @@ index d7266e4cdb..7e5b771d9f 100644
  	baserel->ppilist = lappend(baserel->ppilist, ppi);
  
  	return ppi;
-@@ -1876,6 +1883,10 @@ get_appendrel_parampathinfo(RelOptInfo *appendrel, Relids required_outer)
+@@ -1888,6 +1895,10 @@ get_appendrel_parampathinfo(RelOptInfo *appendrel, Relids required_outer)
  	ppi->ppi_rows = 0;
  	ppi->ppi_clauses = NIL;
  	ppi->ppi_serials = NULL;
@@ -488,7 +500,7 @@ index d7266e4cdb..7e5b771d9f 100644
  
  	return ppi;
 diff --git a/src/backend/utils/adt/selfuncs.c b/src/backend/utils/adt/selfuncs.c
-index 08fa6774d9..034b434773 100644
+index f4b3e91baa..45ccd76fd4 100644
 --- a/src/backend/utils/adt/selfuncs.c
 +++ b/src/backend/utils/adt/selfuncs.c
 @@ -146,6 +146,7 @@
@@ -499,7 +511,7 @@ index 08fa6774d9..034b434773 100644
  
  static double eqsel_internal(PG_FUNCTION_ARGS, bool negate);
  static double eqjoinsel_inner(Oid opfuncoid, Oid collation,
-@@ -3345,6 +3346,20 @@ add_unique_group_var(PlannerInfo *root, List *varinfos,
+@@ -3344,6 +3345,20 @@ add_unique_group_var(PlannerInfo *root, List *varinfos,
  	return varinfos;
  }
  
@@ -521,10 +533,10 @@ index 08fa6774d9..034b434773 100644
   * estimate_num_groups		- Estimate number of groups in a grouped query
   *
 diff --git a/src/include/commands/explain.h b/src/include/commands/explain.h
-index 3ab0aae78f..5a257cdb0a 100644
+index 9b8b351d9a..f49233826a 100644
 --- a/src/include/commands/explain.h
 +++ b/src/include/commands/explain.h
-@@ -87,6 +87,18 @@ extern PGDLLIMPORT ExplainOneQuery_hook_type ExplainOneQuery_hook;
+@@ -85,6 +85,18 @@ extern PGDLLIMPORT ExplainOneQuery_hook_type ExplainOneQuery_hook;
  typedef const char *(*explain_get_index_name_hook_type) (Oid indexId);
  extern PGDLLIMPORT explain_get_index_name_hook_type explain_get_index_name_hook;
  
@@ -544,10 +556,10 @@ index 3ab0aae78f..5a257cdb0a 100644
  extern void ExplainQuery(ParseState *pstate, ExplainStmt *stmt,
  						 ParamListInfo params, DestReceiver *dest);
 diff --git a/src/include/nodes/pathnodes.h b/src/include/nodes/pathnodes.h
-index 07e2415398..1413fbf03c 100644
+index 2ba297c117..36b66c43f6 100644
 --- a/src/include/nodes/pathnodes.h
 +++ b/src/include/nodes/pathnodes.h
-@@ -1049,6 +1049,16 @@ typedef struct RelOptInfo
+@@ -1043,6 +1043,16 @@ typedef struct RelOptInfo
  	List	  **partexprs pg_node_attr(read_write_ignore);
  	/* Nullable partition key expressions */
  	List	  **nullable_partexprs pg_node_attr(read_write_ignore);
@@ -564,7 +576,7 @@ index 07e2415398..1413fbf03c 100644
  } RelOptInfo;
  
  /*
-@@ -1586,6 +1596,10 @@ typedef struct ParamPathInfo
+@@ -1580,6 +1590,10 @@ typedef struct ParamPathInfo
  	Cardinality ppi_rows;		/* estimated number of result tuples */
  	List	   *ppi_clauses;	/* join clauses available from outer rels */
  	Bitmapset  *ppi_serials;	/* set of rinfo_serial for enforced quals */
@@ -576,10 +588,10 @@ index 07e2415398..1413fbf03c 100644
  
  
 diff --git a/src/include/nodes/plannodes.h b/src/include/nodes/plannodes.h
-index 62cd6a6666..bb47a51ba7 100644
+index 1aeeaec95e..308f38214a 100644
 --- a/src/include/nodes/plannodes.h
 +++ b/src/include/nodes/plannodes.h
-@@ -170,6 +170,9 @@ typedef struct Plan
+@@ -169,6 +169,9 @@ typedef struct Plan
  	 */
  	Bitmapset  *extParam;
  	Bitmapset  *allParam;
@@ -590,7 +602,7 @@ index 62cd6a6666..bb47a51ba7 100644
  
  /* ----------------
 diff --git a/src/include/optimizer/cost.h b/src/include/optimizer/cost.h
-index 854a782944..9e8cde176f 100644
+index b1c51a4e70..1cb601e3b2 100644
 --- a/src/include/optimizer/cost.h
 +++ b/src/include/optimizer/cost.h
 @@ -41,6 +41,37 @@ typedef enum
@@ -631,7 +643,7 @@ index 854a782944..9e8cde176f 100644
  /*
   * prototypes for costsize.c
   *	  routines to compute costs and sizes
-@@ -192,10 +223,22 @@ extern void compute_semi_anti_join_factors(PlannerInfo *root,
+@@ -184,10 +215,22 @@ extern void compute_semi_anti_join_factors(PlannerInfo *root,
  										   SpecialJoinInfo *sjinfo,
  										   List *restrictlist,
  										   SemiAntiJoinFactors *semifactors);
@@ -654,7 +666,7 @@ index 854a782944..9e8cde176f 100644
  extern double get_parameterized_joinrel_size(PlannerInfo *root,
  											 RelOptInfo *rel,
  											 Path *outer_path,
-@@ -207,6 +250,11 @@ extern void set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
+@@ -199,6 +242,11 @@ extern void set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
  									   RelOptInfo *inner_rel,
  									   SpecialJoinInfo *sjinfo,
  									   List *restrictlist);
@@ -666,15 +678,15 @@ index 854a782944..9e8cde176f 100644
  extern void set_subquery_size_estimates(PlannerInfo *root, RelOptInfo *rel);
  extern void set_function_size_estimates(PlannerInfo *root, RelOptInfo *rel);
  extern void set_values_size_estimates(PlannerInfo *root, RelOptInfo *rel);
-@@ -221,5 +269,6 @@ extern double compute_bitmap_pages(PlannerInfo *root, RelOptInfo *baserel,
+@@ -212,5 +260,6 @@ extern PathTarget *set_pathtarget_cost_width(PlannerInfo *root, PathTarget *targ
+ extern double compute_bitmap_pages(PlannerInfo *root, RelOptInfo *baserel,
  								   Path *bitmapqual, double loop_count,
  								   Cost *cost_p, double *tuples_p);
- extern double compute_gather_rows(Path *path);
 +extern double get_parallel_divisor(Path *path);
  
  #endif							/* COST_H */
 diff --git a/src/include/optimizer/pathnode.h b/src/include/optimizer/pathnode.h
-index 1035e6560c..27e42b2679 100644
+index 112e7c23d4..8397995e18 100644
 --- a/src/include/optimizer/pathnode.h
 +++ b/src/include/optimizer/pathnode.h
 @@ -18,6 +18,10 @@
@@ -689,7 +701,7 @@ index 1035e6560c..27e42b2679 100644
   * prototypes for pathnode.c
   */
 diff --git a/src/include/optimizer/planmain.h b/src/include/optimizer/planmain.h
-index 93137261e4..0621c27595 100644
+index aafc173792..d520d8d547 100644
 --- a/src/include/optimizer/planmain.h
 +++ b/src/include/optimizer/planmain.h
 @@ -24,6 +24,12 @@ extern PGDLLIMPORT double cursor_tuple_fraction;
