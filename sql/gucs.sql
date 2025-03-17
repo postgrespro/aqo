@@ -23,12 +23,12 @@ SELECT true AS success FROM aqo_reset();
 -- Check AQO addons to explain (the only stable data)
 SELECT regexp_replace(
         str,'Query Identifier: -?\m\d+\M','Query Identifier: N','g') as str FROM expln('
-  EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+  EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF)
     SELECT x FROM t;
 ') AS str;
 SELECT regexp_replace(
         str,'Query Identifier: -?\m\d+\M','Query Identifier: N','g') as str FROM expln('
-  EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+  EXPLAIN (ANALYZE, VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF)
     SELECT x FROM t;
 ') AS str;
 SET aqo.mode = 'disabled';

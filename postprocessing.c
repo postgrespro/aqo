@@ -19,6 +19,7 @@
 #include "postgres.h"
 
 #include "access/parallel.h"
+#include "commands/explain_format.h"
 #include "optimizer/optimizer.h"
 #include "postgres_fdw.h"
 #include "utils/queryenvironment.h"
@@ -542,11 +543,12 @@ end:
 /*
  * Set up flags to store cardinality statistics.
  */
-void
+bool
 aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 {
-	instr_time now;
-	bool use_aqo;
+	instr_time	now;
+	bool		use_aqo;
+	bool		plan_valid;
 
 	/*
 	 * If the plan pulled from a plan cache, planning don't needed. Restore
@@ -595,12 +597,14 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 	}
 
 	if (prev_ExecutorStart_hook)
-		prev_ExecutorStart_hook(queryDesc, eflags);
+		plan_valid = prev_ExecutorStart_hook(queryDesc, eflags);
 	else
-		standard_ExecutorStart(queryDesc, eflags);
+		plan_valid = standard_ExecutorStart(queryDesc, eflags);
 
 	if (use_aqo)
 		StorePlanInternals(queryDesc);
+
+	return plan_valid;
 }
 
 #include "utils/timeout.h"
@@ -707,8 +711,7 @@ set_timeout_if_need(QueryDesc *queryDesc)
  * ExecutorRun hook.
  */
 void
-aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count,
-				 bool execute_once)
+aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count)
 {
 	bool		timeout_enabled = false;
 
@@ -723,9 +726,9 @@ aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count,
 	PG_TRY();
 	{
 		if (prev_ExecutorRun)
-			prev_ExecutorRun(queryDesc, direction, count, execute_once);
+			prev_ExecutorRun(queryDesc, direction, count);
 		else
-			standard_ExecutorRun(queryDesc, direction, count, execute_once);
+			standard_ExecutorRun(queryDesc, direction, count);
 	}
 	PG_FINALLY();
 	{

@@ -36,22 +36,22 @@ BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
 -- Trivial foreign scan.
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
 SELECT x FROM frgn;
-                  QUERY PLAN                  
-----------------------------------------------
- Foreign Scan on frgn (actual rows=1 loops=1)
+                   QUERY PLAN                    
+-------------------------------------------------
+ Foreign Scan on frgn (actual rows=1.00 loops=1)
    AQO not used
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
 (5 rows)
 
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
 SELECT x FROM frgn;
-                  QUERY PLAN                  
-----------------------------------------------
- Foreign Scan on frgn (actual rows=1 loops=1)
+                   QUERY PLAN                    
+-------------------------------------------------
+ Foreign Scan on frgn (actual rows=1.00 loops=1)
    AQO: rows=1, error=0%
  Using aqo: true
  AQO mode: LEARN
@@ -65,7 +65,7 @@ SELECT str FROM expln('
 ') AS str;
                             str                            
 -----------------------------------------------------------
- Foreign Scan on public.frgn (actual rows=1 loops=1)
+ Foreign Scan on public.frgn (actual rows=1.00 loops=1)
    AQO not used
    Output: x
    Remote SQL: SELECT x FROM public.local WHERE ((x < 10))
@@ -80,7 +80,7 @@ SELECT str FROM expln('
 ') AS str;
                             str                            
 -----------------------------------------------------------
- Foreign Scan on public.frgn (actual rows=1 loops=1)
+ Foreign Scan on public.frgn (actual rows=1.00 loops=1)
    AQO: rows=1, error=0%
    Output: x
    Remote SQL: SELECT x FROM public.local WHERE ((x < 10))
@@ -89,11 +89,11 @@ SELECT str FROM expln('
  JOINS: 0
 (7 rows)
 
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
 SELECT x FROM frgn WHERE x < -10; -- AQO ignores constants
-                  QUERY PLAN                  
-----------------------------------------------
- Foreign Scan on frgn (actual rows=0 loops=1)
+                   QUERY PLAN                    
+-------------------------------------------------
+ Foreign Scan on frgn (actual rows=0.00 loops=1)
    AQO: rows=1, error=100%
  Using aqo: true
  AQO mode: LEARN
@@ -102,21 +102,21 @@ SELECT x FROM frgn WHERE x < -10; -- AQO ignores constants
 
 -- Trivial JOIN push-down.
 SELECT str FROM expln('
-  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
   SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
 ') AS str WHERE str NOT LIKE '%Sort Method%';
-                            str                             
-------------------------------------------------------------
- Merge Join (actual rows=1 loops=1)
+                              str                              
+---------------------------------------------------------------
+ Merge Join (actual rows=1.00 loops=1)
    AQO not used
    Merge Cond: (a.x = b.x)
-   ->  Sort (actual rows=1 loops=1)
+   ->  Sort (actual rows=1.00 loops=1)
          Sort Key: a.x
-         ->  Foreign Scan on frgn a (actual rows=1 loops=1)
+         ->  Foreign Scan on frgn a (actual rows=1.00 loops=1)
                AQO not used
-   ->  Sort (actual rows=1 loops=1)
+   ->  Sort (actual rows=1.00 loops=1)
          Sort Key: b.x
-         ->  Foreign Scan on frgn b (actual rows=1 loops=1)
+         ->  Foreign Scan on frgn b (actual rows=1.00 loops=1)
                AQO not used
  Using aqo: true
  AQO mode: LEARN
@@ -125,12 +125,12 @@ SELECT str FROM expln('
 
 -- Should learn on postgres_fdw nodes
 SELECT str FROM expln('
-  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE, BUFFERS OFF)
     SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
 ') AS str;
                                                   str                                                   
 --------------------------------------------------------------------------------------------------------
- Foreign Scan (actual rows=1 loops=1)
+ Foreign Scan (actual rows=1.00 loops=1)
    AQO: rows=1, error=0%
    Output: a.x, b.x
    Relations: (public.frgn a) INNER JOIN (public.frgn b)
@@ -147,12 +147,12 @@ INSERT INTO local_b SELECT i, mod((i+random()*10)::numeric, 10) + 1, 'val_' || i
 ANALYZE local_a, local_b;
 CREATE FOREIGN TABLE frgn_a(aid int, aval text) SERVER loopback OPTIONS (table_name 'local_a');
 CREATE FOREIGN TABLE frgn_b(bid int, aid int, bval text) SERVER loopback OPTIONS (table_name 'local_b');
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
 SELECT * from frgn_a AS a, frgn_b AS b
 WHERE a.aid = b.aid AND b.bval like 'val%';
                   QUERY PLAN                   
 -----------------------------------------------
- Foreign Scan (actual rows=1000 loops=1)
+ Foreign Scan (actual rows=1000.00 loops=1)
    AQO not used
    Relations: (frgn_a a) INNER JOIN (frgn_b b)
  Using aqo: true
@@ -160,12 +160,12 @@ WHERE a.aid = b.aid AND b.bval like 'val%';
  JOINS: 0
 (6 rows)
 
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
 SELECT * from frgn_a AS a, frgn_b AS b
 WHERE a.aid = b.aid AND b.bval like 'val%';
                   QUERY PLAN                   
 -----------------------------------------------
- Foreign Scan (actual rows=1000 loops=1)
+ Foreign Scan (actual rows=1000.00 loops=1)
    AQO: rows=1000, error=0%
    Relations: (frgn_a a) INNER JOIN (frgn_b b)
  Using aqo: true
@@ -198,28 +198,28 @@ ANALYZE local_main_p0, local_main_p1, main_p2;
 ANALYZE local_ref_p0, local_ref_p1, ref_p2;
 SELECT str AS result
 FROM expln('
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
 SELECT * from main AS a, ref AS b
 WHERE a.aid = b.aid AND b.bval like ''val%''') AS str
 WHERE str NOT LIKE '%Memory%';
-                               result                               
---------------------------------------------------------------------
- Append (actual rows=1000 loops=1)
+                                result                                 
+-----------------------------------------------------------------------
+ Append (actual rows=1000.00 loops=1)
    AQO not used
-   ->  Foreign Scan (actual rows=400 loops=1)
+   ->  Foreign Scan (actual rows=400.00 loops=1)
          AQO not used
          Relations: (main_p0 a_1) INNER JOIN (ref_p0 b_1)
-   ->  Foreign Scan (actual rows=300 loops=1)
+   ->  Foreign Scan (actual rows=300.00 loops=1)
          AQO not used
          Relations: (main_p1 a_2) INNER JOIN (ref_p1 b_2)
-   ->  Hash Join (actual rows=300 loops=1)
+   ->  Hash Join (actual rows=300.00 loops=1)
          AQO not used
          Hash Cond: (b_3.aid = a_3.aid)
-         ->  Seq Scan on ref_p2 b_3 (actual rows=300 loops=1)
+         ->  Seq Scan on ref_p2 b_3 (actual rows=300.00 loops=1)
                AQO not used
                Filter: (bval ~~ 'val%'::text)
-         ->  Hash (actual rows=38 loops=1)
-               ->  Seq Scan on main_p2 a_3 (actual rows=38 loops=1)
+         ->  Hash (actual rows=38.00 loops=1)
+               ->  Seq Scan on main_p2 a_3 (actual rows=38.00 loops=1)
                      AQO not used
  Using aqo: true
  AQO mode: LEARN
@@ -228,28 +228,28 @@ WHERE str NOT LIKE '%Memory%';
 
 SELECT str AS result
 FROM expln('
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
 SELECT * from main AS a, ref AS b
 WHERE a.aid = b.aid AND b.bval like ''val%''') AS str
 WHERE str NOT LIKE '%Memory%';
-                               result                               
---------------------------------------------------------------------
- Append (actual rows=1000 loops=1)
+                                result                                 
+-----------------------------------------------------------------------
+ Append (actual rows=1000.00 loops=1)
    AQO not used
-   ->  Foreign Scan (actual rows=400 loops=1)
+   ->  Foreign Scan (actual rows=400.00 loops=1)
          AQO: rows=400, error=0%
          Relations: (main_p0 a_1) INNER JOIN (ref_p0 b_1)
-   ->  Foreign Scan (actual rows=300 loops=1)
+   ->  Foreign Scan (actual rows=300.00 loops=1)
          AQO: rows=300, error=0%
          Relations: (main_p1 a_2) INNER JOIN (ref_p1 b_2)
-   ->  Hash Join (actual rows=300 loops=1)
+   ->  Hash Join (actual rows=300.00 loops=1)
          AQO: rows=300, error=0%
          Hash Cond: (b_3.aid = a_3.aid)
-         ->  Seq Scan on ref_p2 b_3 (actual rows=300 loops=1)
+         ->  Seq Scan on ref_p2 b_3 (actual rows=300.00 loops=1)
                AQO: rows=300, error=0%
                Filter: (bval ~~ 'val%'::text)
-         ->  Hash (actual rows=38 loops=1)
-               ->  Seq Scan on main_p2 a_3 (actual rows=38 loops=1)
+         ->  Hash (actual rows=38.00 loops=1)
+               ->  Seq Scan on main_p2 a_3 (actual rows=38.00 loops=1)
                      AQO: rows=38, error=0%
  Using aqo: true
  AQO mode: LEARN
@@ -261,25 +261,33 @@ DROP TABLE ref, local_ref_p0, local_ref_p1;
 ALTER SERVER loopback OPTIONS (DROP fdw_tuple_cost);
 reset enable_partitionwise_join;
 -- TODO: Non-mergejoinable join condition.
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
 SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
-                QUERY PLAN                 
--------------------------------------------
- Foreign Scan (actual rows=0 loops=1)
+                          QUERY PLAN                           
+---------------------------------------------------------------
+ Nested Loop (actual rows=0.00 loops=1)
    AQO not used
-   Relations: (frgn a) INNER JOIN (frgn b)
+   Join Filter: (a.x < b.x)
+   Rows Removed by Join Filter: 1
+   ->  Foreign Scan on frgn a (actual rows=1.00 loops=1)
+         AQO not used
+   ->  Materialize (actual rows=1.00 loops=1)
+         AQO not used
+         Storage: Memory  Maximum Storage: 17kB
+         ->  Foreign Scan on frgn b (actual rows=1.00 loops=1)
+               AQO not used
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
-(6 rows)
+(14 rows)
 
 SELECT str FROM expln('
-  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE, BUFFERS OFF)
     SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
 ') AS str;
                                                   str                                                   
 --------------------------------------------------------------------------------------------------------
- Foreign Scan (actual rows=0 loops=1)
+ Foreign Scan (actual rows=0.00 loops=1)
    AQO: rows=1, error=100%
    Output: a.x, b.x
    Relations: (public.frgn a) INNER JOIN (public.frgn b)

@@ -16,7 +16,7 @@ CREATE TABLE b AS (SELECT gs AS x FROM generate_series(1,100) AS gs);
 CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
 BEGIN
     RETURN QUERY
-        EXECUTE format('EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) %s', query_string);
+        EXECUTE format('EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) %s', query_string);
     RETURN;
 END;
 $$ LANGUAGE PLPGSQL;

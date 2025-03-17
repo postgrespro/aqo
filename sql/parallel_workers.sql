@@ -31,7 +31,7 @@ ANALYZE t;
 -- Simple test. Check serialization machinery mostly.
 SELECT count(*) FROM t WHERE id % 100 = 0; -- Learning stage
 SELECT str FROM expln('
-  EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+  EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF)
     SELECT count(*) FROM t WHERE id % 100 = 0;') AS str
 WHERE str NOT LIKE '%Worker%';
 
@@ -43,7 +43,7 @@ SELECT count(*) FROM
 WHERE q1.id = q2.id; -- Learning stage
 -- XXX: Why grouping prediction isn't working here?
 SELECT str FROM expln('
-EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF)
 SELECT count(*) FROM
   (SELECT id FROM t WHERE id % 100 = 0 GROUP BY (id)) AS q1,
   (SELECT max(id) AS id, payload FROM t

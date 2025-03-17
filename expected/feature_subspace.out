@@ -17,7 +17,7 @@ CREATE TABLE b AS (SELECT gs AS x FROM generate_series(1,100) AS gs);
 CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
 BEGIN
     RETURN QUERY
-        EXECUTE format('EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) %s', query_string);
+        EXECUTE format('EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) %s', query_string);
     RETURN;
 END;
 $$ LANGUAGE PLPGSQL;
@@ -28,18 +28,18 @@ SELECT str AS result
 FROM expln('
 SELECT * FROM a LEFT JOIN b USING (x);') AS str
 WHERE str NOT LIKE '%Memory%';
-                       result                        
------------------------------------------------------
- Merge Left Join (actual rows=10 loops=1)
+                         result                         
+--------------------------------------------------------
+ Merge Left Join (actual rows=10.00 loops=1)
    AQO not used
    Merge Cond: (a.x = b.x)
-   ->  Sort (actual rows=10 loops=1)
+   ->  Sort (actual rows=10.00 loops=1)
          Sort Key: a.x
-         ->  Seq Scan on a (actual rows=10 loops=1)
+         ->  Seq Scan on a (actual rows=10.00 loops=1)
                AQO not used
-   ->  Sort (actual rows=11 loops=1)
+   ->  Sort (actual rows=11.00 loops=1)
          Sort Key: b.x
-         ->  Seq Scan on b (actual rows=100 loops=1)
+         ->  Seq Scan on b (actual rows=100.00 loops=1)
                AQO not used
  Using aqo: true
  AQO mode: LEARN
@@ -51,18 +51,18 @@ SELECT str AS result
 FROM expln('
 SELECT * FROM b LEFT JOIN a USING (x);') AS str
 WHERE str NOT LIKE '%Memory%';
-                       result                        
------------------------------------------------------
- Merge Left Join (actual rows=100 loops=1)
+                         result                         
+--------------------------------------------------------
+ Merge Left Join (actual rows=100.00 loops=1)
    AQO not used
    Merge Cond: (b.x = a.x)
-   ->  Sort (actual rows=100 loops=1)
+   ->  Sort (actual rows=100.00 loops=1)
          Sort Key: b.x
-         ->  Seq Scan on b (actual rows=100 loops=1)
+         ->  Seq Scan on b (actual rows=100.00 loops=1)
                AQO not used
-   ->  Sort (actual rows=10 loops=1)
+   ->  Sort (actual rows=10.00 loops=1)
          Sort Key: a.x
-         ->  Seq Scan on a (actual rows=10 loops=1)
+         ->  Seq Scan on a (actual rows=10.00 loops=1)
                AQO not used
  Using aqo: true
  AQO mode: LEARN

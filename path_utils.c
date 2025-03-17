@@ -410,8 +410,12 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 									selectivities);
 			break;
 		case T_SetOpPath:
-			return get_path_clauses(((SetOpPath *) path)->subpath, root,
-									selectivities);
+			cur = list_concat(
+						get_path_clauses(((SetOpPath *) path)->leftpath, root,
+										 selectivities),
+						get_path_clauses(((SetOpPath *) path)->rightpath, root,
+										 selectivities));
+			return cur;
 			break;
 		case T_LockRowsPath:
 			return get_path_clauses(((LockRowsPath *) path)->subpath, root,

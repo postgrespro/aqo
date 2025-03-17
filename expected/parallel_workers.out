@@ -35,18 +35,18 @@ SELECT count(*) FROM t WHERE id % 100 = 0; -- Learning stage
 (1 row)
 
 SELECT str FROM expln('
-  EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+  EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF)
     SELECT count(*) FROM t WHERE id % 100 = 0;') AS str
 WHERE str NOT LIKE '%Worker%';
-                                str                                 
---------------------------------------------------------------------
- Finalize Aggregate (actual rows=1 loops=1)
+                                  str                                  
+-----------------------------------------------------------------------
+ Finalize Aggregate (actual rows=1.00 loops=1)
    AQO not used
-   ->  Gather (actual rows=3 loops=1)
+   ->  Gather (actual rows=3.00 loops=1)
          AQO not used
-         ->  Partial Aggregate (actual rows=1 loops=3)
+         ->  Partial Aggregate (actual rows=1.00 loops=3)
                AQO not used
-               ->  Parallel Seq Scan on t (actual rows=333 loops=3)
+               ->  Parallel Seq Scan on t (actual rows=333.33 loops=3)
                      AQO: rows=1000, error=0%
                      Filter: ((id % '100'::numeric) = '0'::numeric)
                      Rows Removed by Filter: 33000
@@ -68,7 +68,7 @@ WHERE q1.id = q2.id; -- Learning stage
 
 -- XXX: Why grouping prediction isn't working here?
 SELECT str FROM expln('
-EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF)
 SELECT count(*) FROM
   (SELECT id FROM t WHERE id % 100 = 0 GROUP BY (id)) AS q1,
   (SELECT max(id) AS id, payload FROM t
@@ -76,49 +76,46 @@ SELECT count(*) FROM
 WHERE q1.id = q2.id;') AS str
 WHERE str NOT LIKE '%Workers%' AND str NOT LIKE '%Sort Method%'
   AND str NOT LIKE '%Gather Merge%';
-                                               str                                                
---------------------------------------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
+                                                   str                                                   
+---------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1.00 loops=1)
    AQO not used
-   ->  Merge Join (actual rows=0 loops=1)
+   ->  Merge Join (actual rows=0.00 loops=1)
          AQO not used
-         Merge Cond: (q2.id = t_1.id)
-         ->  Sort (actual rows=1 loops=1)
+         Merge Cond: (t.id = q2.id)
+         ->  Group (actual rows=1000.00 loops=1)
+               AQO not used
+               Group Key: t.id
+                     AQO: rows=914, error=-9%
+                     ->  Sort (actual rows=333.33 loops=3)
+                           AQO: rows=914, error=64%
+                           Sort Key: t.id
+                           ->  Parallel Seq Scan on t (actual rows=333.33 loops=3)
+                                 AQO: rows=914, error=-9%
+                                 Filter: ((id % '100'::numeric) = '0'::numeric)
+                                 Rows Removed by Filter: 33000
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: q2.id
-               ->  Subquery Scan on q2 (actual rows=1 loops=1)
+               ->  Subquery Scan on q2 (actual rows=1.00 loops=1)
                      AQO not used
-                     ->  Finalize GroupAggregate (actual rows=1 loops=1)
+                     ->  Finalize GroupAggregate (actual rows=1.00 loops=1)
                            AQO not used
-                           Group Key: t.payload
+                           Group Key: t_1.payload
                                  AQO not used
-                                 ->  Partial GroupAggregate (actual rows=1 loops=3)
+                                 ->  Partial GroupAggregate (actual rows=1.00 loops=3)
                                        AQO not used
-                                       Group Key: t.payload
-                                       ->  Sort (actual rows=330 loops=3)
+                                       Group Key: t_1.payload
+                                       ->  Sort (actual rows=330.00 loops=3)
                                              AQO not used
-                                             Sort Key: t.payload
-                                             ->  Parallel Seq Scan on t (actual rows=330 loops=3)
-                                                   AQO: rows=991, error=0%
+                                             Sort Key: t_1.payload
+                                             ->  Parallel Seq Scan on t t_1 (actual rows=330.00 loops=3)
+                                                   AQO: rows=914, error=-8%
                                                    Filter: ((id % '101'::numeric) = '0'::numeric)
                                                    Rows Removed by Filter: 33003
-         ->  Group (actual rows=1000 loops=1)
-               AQO not used
-               Group Key: t_1.id
-                     AQO not used
-                     ->  Group (actual rows=333 loops=3)
-                           AQO not used
-                           Group Key: t_1.id
-                           ->  Sort (actual rows=333 loops=3)
-                                 AQO not used
-                                 Sort Key: t_1.id
-                                 ->  Parallel Seq Scan on t t_1 (actual rows=333 loops=3)
-                                       AQO: rows=991, error=-1%
-                                       Filter: ((id % '100'::numeric) = '0'::numeric)
-                                       Rows Removed by Filter: 33000
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1
-(40 rows)
+(37 rows)
 
 RESET parallel_tuple_cost;
 RESET parallel_setup_cost;

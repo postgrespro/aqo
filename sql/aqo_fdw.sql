@@ -38,9 +38,9 @@ END;
 $$ LANGUAGE PLPGSQL;
 
 -- Trivial foreign scan.
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
 SELECT x FROM frgn;
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
 SELECT x FROM frgn;
 
 -- Push down base filters. Use verbose mode to see filters.
@@ -52,18 +52,18 @@ SELECT str FROM expln('
   EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
     SELECT x FROM frgn WHERE x < 10;
 ') AS str;
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
 SELECT x FROM frgn WHERE x < -10; -- AQO ignores constants
 
 -- Trivial JOIN push-down.
 SELECT str FROM expln('
-  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
   SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
 ') AS str WHERE str NOT LIKE '%Sort Method%';
 
 -- Should learn on postgres_fdw nodes
 SELECT str FROM expln('
-  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE, BUFFERS OFF)
     SELECT * FROM frgn AS a, frgn AS b WHERE a.x=b.x;
 ') AS str;
 
@@ -76,11 +76,11 @@ ANALYZE local_a, local_b;
 CREATE FOREIGN TABLE frgn_a(aid int, aval text) SERVER loopback OPTIONS (table_name 'local_a');
 CREATE FOREIGN TABLE frgn_b(bid int, aid int, bval text) SERVER loopback OPTIONS (table_name 'local_b');
 
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
 SELECT * from frgn_a AS a, frgn_b AS b
 WHERE a.aid = b.aid AND b.bval like 'val%';
 
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
 SELECT * from frgn_a AS a, frgn_b AS b
 WHERE a.aid = b.aid AND b.bval like 'val%';
 
@@ -116,14 +116,14 @@ ANALYZE local_ref_p0, local_ref_p1, ref_p2;
 
 SELECT str AS result
 FROM expln('
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
 SELECT * from main AS a, ref AS b
 WHERE a.aid = b.aid AND b.bval like ''val%''') AS str
 WHERE str NOT LIKE '%Memory%';
 
 SELECT str AS result
 FROM expln('
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
 SELECT * from main AS a, ref AS b
 WHERE a.aid = b.aid AND b.bval like ''val%''') AS str
 WHERE str NOT LIKE '%Memory%';
@@ -134,10 +134,10 @@ ALTER SERVER loopback OPTIONS (DROP fdw_tuple_cost);
 reset enable_partitionwise_join;
 
 -- TODO: Non-mergejoinable join condition.
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
 SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
 SELECT str FROM expln('
-  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE)
+  EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, VERBOSE, BUFFERS OFF)
     SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
 ') AS str;
 
