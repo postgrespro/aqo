@@ -1,8 +1,8 @@
 diff --git a/src/backend/commands/explain.c b/src/backend/commands/explain.c
-index 19ffcc2cacb..93934d42e30 100644
+index 22616cf7add..8a28b783f72 100644
 --- a/src/backend/commands/explain.c
 +++ b/src/backend/commands/explain.c
-@@ -27,6 +27,7 @@
+@@ -29,6 +29,7 @@
  #include "nodes/extensible.h"
  #include "nodes/makefuncs.h"
  #include "nodes/nodeFuncs.h"
@@ -10,9 +10,9 @@ index 19ffcc2cacb..93934d42e30 100644
  #include "parser/analyze.h"
  #include "parser/parsetree.h"
  #include "rewrite/rewriteHandler.h"
-@@ -50,6 +51,12 @@ ExplainOneQuery_hook_type ExplainOneQuery_hook = NULL;
- /* Hook for plugins to get control in explain_get_index_name() */
- explain_get_index_name_hook_type explain_get_index_name_hook = NULL;
+@@ -45,6 +46,12 @@
+ #include "utils/typcache.h"
+ #include "utils/xml.h"
  
 +/* Hook for plugins to get control in ExplainOnePlan() */
 +ExplainOnePlan_hook_type ExplainOnePlan_hook = NULL;
@@ -21,9 +21,9 @@ index 19ffcc2cacb..93934d42e30 100644
 +ExplainOneNode_hook_type ExplainOneNode_hook = NULL;
 +
  
- /*
-  * Various places within need to convert bytes to kilobytes.  Round these up
-@@ -815,6 +822,10 @@ ExplainOnePlan(PlannedStmt *plannedstmt, CachedPlan *cplan,
+ /* Hook for plugins to get control in ExplainOneQuery() */
+ ExplainOneQuery_hook_type ExplainOneQuery_hook = NULL;
+@@ -690,6 +697,10 @@ ExplainOnePlan(PlannedStmt *plannedstmt, CachedPlan *cplan,
  		ExplainPropertyFloat("Execution Time", "ms", 1000.0 * totaltime, 3,
  							 es);
  
@@ -34,7 +34,7 @@ index 19ffcc2cacb..93934d42e30 100644
  	ExplainCloseGroup("Query", NULL, true, es);
  }
  
-@@ -2009,6 +2020,9 @@ ExplainNode(PlanState *planstate, List *ancestors,
+@@ -1884,6 +1895,9 @@ ExplainNode(PlanState *planstate, List *ancestors,
  		}
  	}
  
@@ -521,22 +521,22 @@ index 5b35debc8ff..06a7bebe4f8 100644
   * estimate_num_groups		- Estimate number of groups in a grouped query
   *
 diff --git a/src/include/commands/explain.h b/src/include/commands/explain.h
-index 64547bd9b9c..74792f1a8cf 100644
+index e8e92f966a1..323b3391b35 100644
 --- a/src/include/commands/explain.h
 +++ b/src/include/commands/explain.h
-@@ -87,6 +87,18 @@ extern PGDLLIMPORT ExplainOneQuery_hook_type ExplainOneQuery_hook;
+@@ -49,6 +49,18 @@ extern PGDLLIMPORT explain_per_node_hook_type explain_per_node_hook;
  typedef const char *(*explain_get_index_name_hook_type) (Oid indexId);
  extern PGDLLIMPORT explain_get_index_name_hook_type explain_get_index_name_hook;
  
 +/* Hook for plugins to get control in ExplainOnePlan() */
 +typedef void (*ExplainOnePlan_hook_type) (PlannedStmt *plannedstmt, IntoClause *into,
-+			   ExplainState *es, const char *queryString,
++			   struct ExplainState *es, const char *queryString,
 +			   ParamListInfo params, const instr_time *planduration,
 +			   QueryEnvironment *queryEnv);
 +extern PGDLLIMPORT ExplainOnePlan_hook_type ExplainOnePlan_hook;
 +
 +/* Explain a node info */
-+typedef void (*ExplainOneNode_hook_type) (ExplainState *es,
++typedef void (*ExplainOneNode_hook_type) (struct ExplainState *es,
 +										 PlanState *ps,
 +										 Plan *plan);
 +extern PGDLLIMPORT ExplainOneNode_hook_type ExplainOneNode_hook;

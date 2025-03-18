@@ -144,7 +144,6 @@
 #include "utils/snapmgr.h"
 
 #include "machine_learning.h"
-//#include "storage.h"
 
 /* Check PostgreSQL version (9.6.0 contains important changes in planner) */
 #if PG_VERSION_NUM < 90600
@@ -271,11 +270,11 @@ extern bool update_fss_ext(uint64 fs, int fss, OkNNrdata *data, List *reloids);
 
 /* Query preprocessing hooks */
 extern void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
-							   ExplainState *es, const char *queryString,
+							   struct ExplainState *es, const char *queryString,
 							   ParamListInfo params,
 							   const instr_time *planduration,
 							   QueryEnvironment *queryEnv);
-extern void print_node_explain(ExplainState *es, PlanState *ps, Plan *plan);
+extern void print_node_explain(struct ExplainState *es, PlanState *ps, Plan *plan);
 
 /* Cardinality estimation */
 extern double predict_for_relation(List *restrict_clauses, List *selectivities,
