@@ -31,8 +31,8 @@ WHERE str NOT LIKE '%Memory%';
                          result                         
 --------------------------------------------------------
  Merge Left Join (actual rows=10.00 loops=1)
-   AQO not used
    Merge Cond: (a.x = b.x)
+   AQO not used
    ->  Sort (actual rows=10.00 loops=1)
          Sort Key: a.x
          ->  Seq Scan on a (actual rows=10.00 loops=1)
@@ -54,8 +54,8 @@ WHERE str NOT LIKE '%Memory%';
                          result                         
 --------------------------------------------------------
  Merge Left Join (actual rows=100.00 loops=1)
-   AQO not used
    Merge Cond: (b.x = a.x)
+   AQO not used
    ->  Sort (actual rows=100.00 loops=1)
          Sort Key: b.x
          ->  Seq Scan on b (actual rows=100.00 loops=1)

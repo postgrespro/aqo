@@ -252,8 +252,8 @@ extern set_joinrel_size_estimates_hook_type
 										prev_set_joinrel_size_estimates_hook;
 extern get_parameterized_joinrel_size_hook_type
 									prev_get_parameterized_joinrel_size_hook;
-extern ExplainOnePlan_hook_type prev_ExplainOnePlan_hook;
-extern ExplainOneNode_hook_type prev_ExplainOneNode_hook;
+extern explain_per_plan_hook_type prev_explain_per_plan_hook;
+extern explain_per_node_hook_type prev_explain_per_node_hook;
 
 extern void ppi_hook(ParamPathInfo *ppi);
 extern int aqo_statement_timeout;
@@ -269,12 +269,15 @@ extern bool load_fss_ext(uint64 fs, int fss, OkNNrdata *data, List **reloids);
 extern bool update_fss_ext(uint64 fs, int fss, OkNNrdata *data, List *reloids);
 
 /* Query preprocessing hooks */
-extern void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
-							   struct ExplainState *es, const char *queryString,
+extern void print_into_explain(PlannedStmt *ps,
+							   IntoClause *into,
+							   struct ExplainState *es,
+							   const char *queryString,
 							   ParamListInfo params,
-							   const instr_time *planduration,
 							   QueryEnvironment *queryEnv);
-extern void print_node_explain(struct ExplainState *es, PlanState *ps, Plan *plan);
+extern void print_node_explain(PlanState *ps, List *ancestors,
+							   const char *relationship, const char *plan_name,
+							   struct ExplainState *es);
 
 /* Cardinality estimation */
 extern double predict_for_relation(List *restrict_clauses, List *selectivities,

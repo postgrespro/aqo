@@ -37,11 +37,11 @@ EXPLAIN (COSTS OFF)
  Aggregate
    AQO not used
    ->  HashAggregate
-         AQO: rows=17
          Group Key: t.x
+         AQO: rows=17
          ->  Seq Scan on t
-               AQO: rows=801
                Filter: (x > 3)
+               AQO: rows=801
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -54,12 +54,12 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
                        str                        
 --------------------------------------------------
  HashAggregate (actual rows=17.00 loops=1)
-   AQO not used
    Group Key: x
+   AQO not used
    ->  Seq Scan on t (actual rows=801.00 loops=1)
-         AQO not used
          Filter: (x > 3)
          Rows Removed by Filter: 199
+         AQO not used
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -81,8 +81,8 @@ EXPLAIN (COSTS OFF)
  Aggregate
    AQO not used
    ->  HashAggregate
-         AQO: rows=10
          Group Key: t1.x, t1.y
+         AQO: rows=10
          ->  Seq Scan on t1
                AQO: rows=1000
  Using aqo: true
@@ -103,8 +103,8 @@ EXPLAIN (COSTS OFF)
  Aggregate
    AQO not used
    ->  HashAggregate
-         AQO: rows=10
          Group Key: t1.x, (t1.x * t1.y)
+         AQO: rows=10
          ->  Seq Scan on t1
                AQO: rows=1000
  Using aqo: true
@@ -146,11 +146,11 @@ WHERE q2.x > 1;
  Aggregate
    AQO not used
    ->  Aggregate
-         AQO not used
          Filter: (count(*) > 1)
+         AQO not used
          ->  HashAggregate
-               AQO: rows=10
                Group Key: t1.x, t1.y
+               AQO: rows=10
                ->  Seq Scan on t1
                      AQO: rows=1000
  Using aqo: true
@@ -174,11 +174,11 @@ EXPLAIN (COSTS OFF)
  Aggregate
    AQO not used
    ->  MixedAggregate
-         AQO not used
          Hash Key: t1.x, t1.y
          Hash Key: t1.x
          Hash Key: t1.y
          Group Key: ()
+         AQO not used
          ->  Seq Scan on t1
                AQO: rows=1000
  Using aqo: true
@@ -207,13 +207,13 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
      ->  Aggregate (actual rows=1.00 loops=1)
            AQO not used
            ->  Seq Scan on t t_1 (actual rows=50.00 loops=1)
-                 AQO: rows=50, error=0%
                  Filter: (x = 1)
                  Rows Removed by Filter: 950
+                 AQO: rows=50, error=0%
    ->  Seq Scan on t (actual rows=50.00 loops=1)
-         AQO: rows=50, error=0%
          Filter: ((x)::numeric = (InitPlan 1).col1)
          Rows Removed by Filter: 950
+         AQO: rows=50, error=0%
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -234,15 +234,15 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
  Aggregate (actual rows=1.00 loops=1)
    AQO not used
    ->  Seq Scan on t (actual rows=1000.00 loops=1)
-         AQO: rows=1000, error=0%
          Filter: ((x)::numeric = (SubPlan 1))
+         AQO: rows=1000, error=0%
          SubPlan 1
            ->  Aggregate (actual rows=1.00 loops=1000)
                  AQO not used
                  ->  Seq Scan on t t0 (actual rows=49.90 loops=1000)
-                       AQO: rows=50, error=0%
                        Filter: (x = t.x)
                        Rows Removed by Filter: 950
+                       AQO: rows=50, error=0%
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -258,23 +258,23 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
  Aggregate (actual rows=1.00 loops=1)
    AQO not used
    ->  Seq Scan on t (actual rows=0.00 loops=1)
-         AQO not used
          Filter: (((x)::numeric = (SubPlan 1)) OR (ANY ((x)::numeric = (SubPlan 2).col1)))
          Rows Removed by Filter: 1000
+         AQO not used
          SubPlan 1
            ->  Aggregate (actual rows=1.00 loops=1000)
                  AQO not used
                  ->  Seq Scan on t t0 (actual rows=0.00 loops=1000)
-                       AQO not used
                        Filter: (x = (t.x + 21))
                        Rows Removed by Filter: 1000
+                       AQO not used
          SubPlan 2
            ->  Aggregate (actual rows=1.00 loops=1000)
                  AQO not used
                  ->  Seq Scan on t t0_1 (actual rows=0.00 loops=1000)
-                       AQO not used
                        Filter: (x = (t.x + 21))
                        Rows Removed by Filter: 1000
+                       AQO not used
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -289,23 +289,23 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
  Aggregate (actual rows=1.00 loops=1)
    AQO not used
    ->  Seq Scan on t (actual rows=0.00 loops=1)
-         AQO: rows=1, error=100%
          Filter: (((x)::numeric = (SubPlan 1)) OR (ANY ((x)::numeric = (SubPlan 2).col1)))
          Rows Removed by Filter: 1000
+         AQO: rows=1, error=100%
          SubPlan 1
            ->  Aggregate (actual rows=1.00 loops=1000)
                  AQO not used
                  ->  Seq Scan on t t0 (actual rows=0.00 loops=1000)
-                       AQO: rows=1, error=100%
                        Filter: (x = (t.x + 21))
                        Rows Removed by Filter: 1000
+                       AQO: rows=1, error=100%
          SubPlan 2
            ->  Aggregate (actual rows=1.00 loops=1000)
                  AQO not used
                  ->  Seq Scan on t t0_1 (actual rows=0.00 loops=1000)
-                       AQO: rows=1, error=100%
                        Filter: (x = (t.x + 21))
                        Rows Removed by Filter: 1000
+                       AQO: rows=1, error=100%
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -321,23 +321,23 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
  Aggregate (actual rows=1.00 loops=1)
    AQO not used
    ->  Seq Scan on t (actual rows=0.00 loops=1)
-         AQO: rows=1, error=100%
          Filter: (((x)::numeric = (SubPlan 1)) OR (ANY ((x)::numeric = (SubPlan 2).col1)))
          Rows Removed by Filter: 1000
+         AQO: rows=1, error=100%
          SubPlan 1
            ->  Aggregate (actual rows=1.00 loops=1000)
                  AQO not used
                  ->  Seq Scan on t t0 (actual rows=0.00 loops=1000)
-                       AQO: rows=1, error=100%
                        Filter: (x = (t.x + 22))
                        Rows Removed by Filter: 1000
+                       AQO: rows=1, error=100%
          SubPlan 2
            ->  Aggregate (actual rows=1.00 loops=1000)
                  AQO not used
                  ->  Seq Scan on t t0_1 (actual rows=0.00 loops=1000)
-                       AQO: rows=1, error=100%
                        Filter: (x = (t.x + 23))
                        Rows Removed by Filter: 1000
+                       AQO: rows=1, error=100%
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -367,30 +367,30 @@ SELECT count(*) FROM
  Aggregate (actual rows=1.00 loops=1)
    AQO not used
    ->  Hash Join (actual rows=42550.00 loops=1)
-         AQO: rows=42550, error=0%
          Hash Cond: ((t_1.x + 1) = t.x)
+         AQO: rows=42550, error=0%
          ->  Seq Scan on t t_1 (actual rows=1000.00 loops=1)
-               AQO: rows=1000, error=0%
                Filter: (((x % 3))::numeric < (SubPlan 2))
+               AQO: rows=1000, error=0%
                SubPlan 2
                  ->  Aggregate (actual rows=1.00 loops=1000)
                        AQO not used
                        ->  Seq Scan on t t0_1 (actual rows=950.10 loops=1000)
-                             AQO: rows=950, error=-0%
                              Filter: (x <> t_1.x)
                              Rows Removed by Filter: 50
+                             AQO: rows=950, error=-0%
          ->  Hash (actual rows=851.00 loops=1)
                ->  Seq Scan on t (actual rows=851.00 loops=1)
-                     AQO: rows=851, error=0%
                      Filter: (((x % 3))::numeric < (SubPlan 1))
                      Rows Removed by Filter: 149
+                     AQO: rows=851, error=0%
                      SubPlan 1
                        ->  Aggregate (actual rows=1.00 loops=1000)
                              AQO not used
                              ->  Seq Scan on t t0 (actual rows=49.90 loops=1000)
-                                   AQO: rows=50, error=0%
                                    Filter: (x = t.x)
                                    Rows Removed by Filter: 950
+                                   AQO: rows=50, error=0%
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1
@@ -405,22 +405,22 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
  Aggregate (actual rows=1.00 loops=1)
    AQO not used
    ->  Seq Scan on t (actual rows=1000.00 loops=1)
-         AQO not used
          Filter: ((SubPlan 1) = (SubPlan 2))
+         AQO not used
          SubPlan 1
            ->  Aggregate (actual rows=1.00 loops=1000)
                  AQO not used
                  ->  Seq Scan on t t0 (actual rows=49.90 loops=1000)
-                       AQO not used
                        Filter: (x = t.x)
                        Rows Removed by Filter: 950
+                       AQO not used
          SubPlan 2
            ->  Aggregate (actual rows=1.00 loops=1000)
                  AQO not used
                  ->  Seq Scan on t t0_1 (actual rows=49.90 loops=1000)
-                       AQO not used
                        Filter: (x = t.x)
                        Rows Removed by Filter: 950
+                       AQO not used
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -434,22 +434,22 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF, BUFFERS OFF)
  Aggregate (actual rows=1.00 loops=1)
    AQO not used
    ->  Seq Scan on t (actual rows=1000.00 loops=1)
-         AQO: rows=1000, error=0%
          Filter: ((SubPlan 1) = (SubPlan 2))
+         AQO: rows=1000, error=0%
          SubPlan 1
            ->  Aggregate (actual rows=1.00 loops=1000)
                  AQO not used
                  ->  Seq Scan on t t0 (actual rows=49.90 loops=1000)
-                       AQO: rows=50, error=0%
                        Filter: (x = t.x)
                        Rows Removed by Filter: 950
+                       AQO: rows=50, error=0%
          SubPlan 2
            ->  Aggregate (actual rows=1.00 loops=1000)
                  AQO not used
                  ->  Seq Scan on t t0_1 (actual rows=49.90 loops=1000)
-                       AQO: rows=50, error=0%
                        Filter: (x = t.x)
                        Rows Removed by Filter: 950
+                       AQO: rows=50, error=0%
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -476,15 +476,15 @@ SELECT * FROM
                    QUERY PLAN                   
 ------------------------------------------------
  Nested Loop (actual rows=0.00 loops=1)
-   AQO: rows=1, error=100%
    Join Filter: (t.x = t_1.x)
+   AQO: rows=1, error=100%
    ->  Seq Scan on t (actual rows=0.00 loops=1)
-         AQO: rows=1, error=100%
          Filter: (x < 0)
          Rows Removed by Filter: 1000
+         AQO: rows=1, error=100%
    ->  Seq Scan on t t_1 (never executed)
-         AQO: rows=1
          Filter: (x > 20)
+         AQO: rows=1
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -513,12 +513,12 @@ EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF)
  Aggregate (actual rows=1.00 loops=1)
    AQO not used
    ->  Index Only Scan using ind1 on t (actual rows=50.00 loops=1)
-         AQO: rows=50, error=0%
          Index Cond: (x < 3)
          Filter: (mod(x, 3) = 1)
          Rows Removed by Filter: 99
          Heap Fetches: 149
          Index Searches: 1
+         AQO: rows=50, error=0%
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -540,13 +540,13 @@ WHERE str NOT LIKE '%Heap Blocks%';
                                 str                                 
 --------------------------------------------------------------------
  Aggregate (actual rows=1.00 loops=1)
-   AQO not used
    Output: count(*)
+   AQO not used
    ->  Bitmap Heap Scan on public.t (actual rows=50.00 loops=1)
-         AQO: rows=50, error=0%
          Recheck Cond: (mod(t.x, 3) = 1)
          Filter: (t.x < 3)
          Rows Removed by Filter: 300
+         AQO: rows=50, error=0%
          ->  Bitmap Index Scan on ind2 (actual rows=350.00 loops=1)
                Index Cond: (mod(t.x, 3) = 1)
                Index Searches: 1
@@ -564,9 +564,9 @@ EXPLAIN (COSTS OFF)
  Aggregate
    AQO not used
    ->  Index Only Scan using ind1 on t
-         AQO: rows=50
          Index Cond: (x < 3)
          Filter: (mod(x, 3) = 1)
+         AQO: rows=50
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0

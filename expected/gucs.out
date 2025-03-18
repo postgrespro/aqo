@@ -35,8 +35,8 @@ SELECT regexp_replace(
                         str                        
 ---------------------------------------------------
  Seq Scan on public.t (actual rows=100.00 loops=1)
-   AQO not used
    Output: x
+   AQO not used
  Query Identifier: N
  Using aqo: true
  AQO mode: LEARN
@@ -51,8 +51,8 @@ SELECT regexp_replace(
                         str                        
 ---------------------------------------------------
  Seq Scan on public.t (actual rows=100.00 loops=1)
-   AQO: rows=100, error=0%
    Output: x
+   AQO: rows=100, error=0%
  Query Identifier: N
  Using aqo: true
  AQO mode: LEARN

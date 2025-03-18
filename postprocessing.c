@@ -979,15 +979,18 @@ ExtractFromQueryEnv(QueryDesc *queryDesc)
 }
 
 void
-print_node_explain(ExplainState *es, PlanState *ps, Plan *plan)
+print_node_explain(PlanState *ps, List *ancestors,
+				   const char *relationship, const char *plan_name,
+				   struct ExplainState *es)
 {
+	Plan		   *plan = ps->plan;
 	int				wrkrs = 1;
 	double			error = -1.;
 	AQOPlanNode	   *aqo_node;
 
 	/* Extension, which took a hook early can be executed early too. */
-	if (prev_ExplainOneNode_hook)
-		prev_ExplainOneNode_hook(es, ps, plan);
+	if (prev_explain_per_node_hook)
+		prev_explain_per_node_hook(ps, ancestors, relationship, plan_name, es);
 
 	if (IsQueryDisabled() || !plan || es->format != EXPLAIN_FORMAT_TEXT)
 		return;
@@ -1019,44 +1022,58 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan)
 	}
 
 explain_print:
-	appendStringInfoChar(es->str, '\n');
-	if (es->str->len == 0 || es->str->data[es->str->len - 1] == '\n')
-		appendStringInfoSpaces(es->str, es->indent * 2);
-
-	if (aqo_node->prediction > 0.)
+	if (es->format == EXPLAIN_FORMAT_TEXT)
 	{
-		appendStringInfo(es->str, "AQO: rows=%.0lf", aqo_node->prediction);
+		ExplainIndentText(es);
 
-		if (ps->instrument && ps->instrument->nloops > 0.)
+		if (aqo_node->prediction > 0.)
 		{
-			double rows = ps->instrument->ntuples / ps->instrument->nloops;
+			appendStringInfo(es->str, "AQO: rows=%.0lf", aqo_node->prediction);
 
-			error = 100. * (aqo_node->prediction - (rows*wrkrs))
-									/ aqo_node->prediction;
-			appendStringInfo(es->str, ", error=%.0lf%%", error);
+			if (ps->instrument && ps->instrument->nloops > 0.)
+			{
+				double rows = ps->instrument->ntuples / ps->instrument->nloops;
+
+				error = 100. * (aqo_node->prediction - (rows*wrkrs))
+										/ aqo_node->prediction;
+				appendStringInfo(es->str, ", error=%.0lf%%", error);
+			}
+			appendStringInfoChar(es->str, '\n');
 		}
+		else
+			appendStringInfo(es->str, "AQO not used\n");
 	}
 	else
-		appendStringInfo(es->str, "AQO not used");
+	{
+		/* TODO */
+	}
 
 explain_end:
 	/* XXX: Do we really have situations when the plan is a NULL pointer? */
-	if (plan && aqo_show_hash)
-		appendStringInfo(es->str, ", fss=%d", aqo_node->fss);
+	if (es->format == EXPLAIN_FORMAT_TEXT)
+	{
+		if (plan && aqo_show_hash)
+		{
+			ExplainIndentText(es);
+			appendStringInfo(es->str, ", fss=%d\n", aqo_node->fss);
+		}
+	}
+	else
+	{
+		/* TODO */
+	}
 }
 
 /*
  * Prints if the plan was constructed with AQO.
  */
 void
-print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
+print_into_explain(PlannedStmt *ps, IntoClause *into,
 				   ExplainState *es, const char *queryString,
-				   ParamListInfo params, const instr_time *planduration,
-				   QueryEnvironment *queryEnv)
+				   ParamListInfo params, QueryEnvironment *queryEnv)
 {
-	if (prev_ExplainOnePlan_hook)
-		prev_ExplainOnePlan_hook(plannedstmt, into, es, queryString,
-								 params, planduration, queryEnv);
+	if (prev_explain_per_plan_hook)
+		prev_explain_per_plan_hook(ps, into, es, queryString, params, queryEnv);
 
 	if (IsQueryDisabled() || !aqo_show_details)
 		return;

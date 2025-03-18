@@ -66,9 +66,9 @@ SELECT str FROM expln('
                             str                            
 -----------------------------------------------------------
  Foreign Scan on public.frgn (actual rows=1.00 loops=1)
-   AQO not used
    Output: x
    Remote SQL: SELECT x FROM public.local WHERE ((x < 10))
+   AQO not used
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -81,9 +81,9 @@ SELECT str FROM expln('
                             str                            
 -----------------------------------------------------------
  Foreign Scan on public.frgn (actual rows=1.00 loops=1)
-   AQO: rows=1, error=0%
    Output: x
    Remote SQL: SELECT x FROM public.local WHERE ((x < 10))
+   AQO: rows=1, error=0%
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -108,8 +108,8 @@ SELECT str FROM expln('
                               str                              
 ---------------------------------------------------------------
  Merge Join (actual rows=1.00 loops=1)
-   AQO not used
    Merge Cond: (a.x = b.x)
+   AQO not used
    ->  Sort (actual rows=1.00 loops=1)
          Sort Key: a.x
          ->  Foreign Scan on frgn a (actual rows=1.00 loops=1)
@@ -131,10 +131,10 @@ SELECT str FROM expln('
                                                   str                                                   
 --------------------------------------------------------------------------------------------------------
  Foreign Scan (actual rows=1.00 loops=1)
-   AQO: rows=1, error=0%
    Output: a.x, b.x
    Relations: (public.frgn a) INNER JOIN (public.frgn b)
    Remote SQL: SELECT r1.x, r2.x FROM (public.local r1 INNER JOIN public.local r2 ON (((r1.x = r2.x))))
+   AQO: rows=1, error=0%
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -153,8 +153,8 @@ WHERE a.aid = b.aid AND b.bval like 'val%';
                   QUERY PLAN                   
 -----------------------------------------------
  Foreign Scan (actual rows=1000.00 loops=1)
-   AQO not used
    Relations: (frgn_a a) INNER JOIN (frgn_b b)
+   AQO not used
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -166,8 +166,8 @@ WHERE a.aid = b.aid AND b.bval like 'val%';
                   QUERY PLAN                   
 -----------------------------------------------
  Foreign Scan (actual rows=1000.00 loops=1)
-   AQO: rows=1000, error=0%
    Relations: (frgn_a a) INNER JOIN (frgn_b b)
+   AQO: rows=1000, error=0%
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -207,17 +207,17 @@ WHERE str NOT LIKE '%Memory%';
  Append (actual rows=1000.00 loops=1)
    AQO not used
    ->  Foreign Scan (actual rows=400.00 loops=1)
-         AQO not used
          Relations: (main_p0 a_1) INNER JOIN (ref_p0 b_1)
+         AQO not used
    ->  Foreign Scan (actual rows=300.00 loops=1)
-         AQO not used
          Relations: (main_p1 a_2) INNER JOIN (ref_p1 b_2)
-   ->  Hash Join (actual rows=300.00 loops=1)
          AQO not used
+   ->  Hash Join (actual rows=300.00 loops=1)
          Hash Cond: (b_3.aid = a_3.aid)
+         AQO not used
          ->  Seq Scan on ref_p2 b_3 (actual rows=300.00 loops=1)
-               AQO not used
                Filter: (bval ~~ 'val%'::text)
+               AQO not used
          ->  Hash (actual rows=38.00 loops=1)
                ->  Seq Scan on main_p2 a_3 (actual rows=38.00 loops=1)
                      AQO not used
@@ -237,17 +237,17 @@ WHERE str NOT LIKE '%Memory%';
  Append (actual rows=1000.00 loops=1)
    AQO not used
    ->  Foreign Scan (actual rows=400.00 loops=1)
-         AQO: rows=400, error=0%
          Relations: (main_p0 a_1) INNER JOIN (ref_p0 b_1)
+         AQO: rows=400, error=0%
    ->  Foreign Scan (actual rows=300.00 loops=1)
-         AQO: rows=300, error=0%
          Relations: (main_p1 a_2) INNER JOIN (ref_p1 b_2)
-   ->  Hash Join (actual rows=300.00 loops=1)
          AQO: rows=300, error=0%
+   ->  Hash Join (actual rows=300.00 loops=1)
          Hash Cond: (b_3.aid = a_3.aid)
+         AQO: rows=300, error=0%
          ->  Seq Scan on ref_p2 b_3 (actual rows=300.00 loops=1)
-               AQO: rows=300, error=0%
                Filter: (bval ~~ 'val%'::text)
+               AQO: rows=300, error=0%
          ->  Hash (actual rows=38.00 loops=1)
                ->  Seq Scan on main_p2 a_3 (actual rows=38.00 loops=1)
                      AQO: rows=38, error=0%
@@ -266,14 +266,14 @@ SELECT * FROM frgn AS a, frgn AS b WHERE a.x<b.x;
                           QUERY PLAN                           
 ---------------------------------------------------------------
  Nested Loop (actual rows=0.00 loops=1)
-   AQO not used
    Join Filter: (a.x < b.x)
    Rows Removed by Join Filter: 1
+   AQO not used
    ->  Foreign Scan on frgn a (actual rows=1.00 loops=1)
          AQO not used
    ->  Materialize (actual rows=1.00 loops=1)
-         AQO not used
          Storage: Memory  Maximum Storage: 17kB
+         AQO not used
          ->  Foreign Scan on frgn b (actual rows=1.00 loops=1)
                AQO not used
  Using aqo: true
@@ -288,10 +288,10 @@ SELECT str FROM expln('
                                                   str                                                   
 --------------------------------------------------------------------------------------------------------
  Foreign Scan (actual rows=0.00 loops=1)
-   AQO: rows=1, error=100%
    Output: a.x, b.x
    Relations: (public.frgn a) INNER JOIN (public.frgn b)
    Remote SQL: SELECT r1.x, r2.x FROM (public.local r1 INNER JOIN public.local r2 ON (((r1.x < r2.x))))
+   AQO: rows=1, error=100%
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0

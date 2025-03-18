@@ -47,9 +47,9 @@ WHERE str NOT LIKE '%Worker%';
          ->  Partial Aggregate (actual rows=1.00 loops=3)
                AQO not used
                ->  Parallel Seq Scan on t (actual rows=333.33 loops=3)
-                     AQO: rows=1000, error=0%
                      Filter: ((id % '100'::numeric) = '0'::numeric)
                      Rows Removed by Filter: 33000
+                     AQO: rows=1000, error=0%
  Using aqo: true
  AQO mode: LEARN
  JOINS: 0
@@ -81,37 +81,37 @@ WHERE str NOT LIKE '%Workers%' AND str NOT LIKE '%Sort Method%'
  Aggregate (actual rows=1.00 loops=1)
    AQO not used
    ->  Merge Join (actual rows=0.00 loops=1)
-         AQO not used
          Merge Cond: (t.id = q2.id)
+         AQO not used
          ->  Group (actual rows=1000.00 loops=1)
-               AQO not used
                Group Key: t.id
+               AQO not used
                      AQO: rows=914, error=-9%
                      ->  Sort (actual rows=333.33 loops=3)
-                           AQO: rows=914, error=64%
                            Sort Key: t.id
+                           AQO: rows=914, error=64%
                            ->  Parallel Seq Scan on t (actual rows=333.33 loops=3)
-                                 AQO: rows=914, error=-9%
                                  Filter: ((id % '100'::numeric) = '0'::numeric)
                                  Rows Removed by Filter: 33000
+                                 AQO: rows=914, error=-9%
          ->  Sort (actual rows=1.00 loops=1)
                Sort Key: q2.id
                ->  Subquery Scan on q2 (actual rows=1.00 loops=1)
                      AQO not used
                      ->  Finalize GroupAggregate (actual rows=1.00 loops=1)
-                           AQO not used
                            Group Key: t_1.payload
+                           AQO not used
                                  AQO not used
                                  ->  Partial GroupAggregate (actual rows=1.00 loops=3)
-                                       AQO not used
                                        Group Key: t_1.payload
+                                       AQO not used
                                        ->  Sort (actual rows=330.00 loops=3)
-                                             AQO not used
                                              Sort Key: t_1.payload
+                                             AQO not used
                                              ->  Parallel Seq Scan on t t_1 (actual rows=330.00 loops=3)
-                                                   AQO: rows=914, error=-8%
                                                    Filter: ((id % '101'::numeric) = '0'::numeric)
                                                    Rows Removed by Filter: 33003
+                                                   AQO: rows=914, error=-8%
  Using aqo: true
  AQO mode: LEARN
  JOINS: 1

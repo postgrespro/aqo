@@ -115,8 +115,8 @@ set_baserel_rows_estimate_hook_type			prev_set_baserel_rows_estimate_hook;
 get_parameterized_baserel_size_hook_type	prev_get_parameterized_baserel_size_hook;
 set_joinrel_size_estimates_hook_type		prev_set_joinrel_size_estimates_hook;
 get_parameterized_joinrel_size_hook_type	prev_get_parameterized_joinrel_size_hook;
-ExplainOnePlan_hook_type					prev_ExplainOnePlan_hook;
-ExplainOneNode_hook_type					prev_ExplainOneNode_hook;
+explain_per_plan_hook_type					prev_explain_per_plan_hook = NULL;
+explain_per_node_hook_type					prev_explain_per_node_hook = NULL;
 static shmem_request_hook_type				prev_shmem_request_hook = NULL;
 static object_access_hook_type				prev_object_access_hook;
 
@@ -480,10 +480,10 @@ _PG_init(void)
 	create_plan_hook							= aqo_create_plan_hook;
 
 	/* Service hooks. */
-	prev_ExplainOnePlan_hook					= ExplainOnePlan_hook;
-	ExplainOnePlan_hook							= print_into_explain;
-	prev_ExplainOneNode_hook					= ExplainOneNode_hook;
-	ExplainOneNode_hook							= print_node_explain;
+	prev_explain_per_plan_hook					= explain_per_plan_hook;
+	explain_per_plan_hook						= print_into_explain;
+	prev_explain_per_node_hook					= explain_per_node_hook;
+	explain_per_node_hook						= print_node_explain;
 
 	prev_create_upper_paths_hook				= create_upper_paths_hook;
 	create_upper_paths_hook						= aqo_store_upper_signature_hook;
