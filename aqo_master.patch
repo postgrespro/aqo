@@ -1,49 +1,3 @@
-diff --git a/src/backend/commands/explain.c b/src/backend/commands/explain.c
-index 22616cf7add..8a28b783f72 100644
---- a/src/backend/commands/explain.c
-+++ b/src/backend/commands/explain.c
-@@ -29,6 +29,7 @@
- #include "nodes/extensible.h"
- #include "nodes/makefuncs.h"
- #include "nodes/nodeFuncs.h"
-+#include "optimizer/cost.h"
- #include "parser/analyze.h"
- #include "parser/parsetree.h"
- #include "rewrite/rewriteHandler.h"
-@@ -45,6 +46,12 @@
- #include "utils/typcache.h"
- #include "utils/xml.h"
- 
-+/* Hook for plugins to get control in ExplainOnePlan() */
-+ExplainOnePlan_hook_type ExplainOnePlan_hook = NULL;
-+
-+/* Hook for plugins to get control in ExplainOnePlan() */
-+ExplainOneNode_hook_type ExplainOneNode_hook = NULL;
-+
- 
- /* Hook for plugins to get control in ExplainOneQuery() */
- ExplainOneQuery_hook_type ExplainOneQuery_hook = NULL;
-@@ -690,6 +697,10 @@ ExplainOnePlan(PlannedStmt *plannedstmt, CachedPlan *cplan,
- 		ExplainPropertyFloat("Execution Time", "ms", 1000.0 * totaltime, 3,
- 							 es);
- 
-+	if (ExplainOnePlan_hook)
-+		ExplainOnePlan_hook(plannedstmt, into, es,
-+							queryString, params, planduration, queryEnv);
-+
- 	ExplainCloseGroup("Query", NULL, true, es);
- }
- 
-@@ -1884,6 +1895,9 @@ ExplainNode(PlanState *planstate, List *ancestors,
- 		}
- 	}
- 
-+	if (ExplainOneNode_hook)
-+		ExplainOneNode_hook(es, planstate, plan);
-+
- 	/* in text format, first line ends here */
- 	if (es->format == EXPLAIN_FORMAT_TEXT)
- 		appendStringInfoChar(es->str, '\n');
 diff --git a/src/backend/optimizer/path/costsize.c b/src/backend/optimizer/path/costsize.c
 index 256568d05a2..914f6124e67 100644
 --- a/src/backend/optimizer/path/costsize.c
@@ -520,29 +474,6 @@ index 5b35debc8ff..06a7bebe4f8 100644
  /*
   * estimate_num_groups		- Estimate number of groups in a grouped query
   *
-diff --git a/src/include/commands/explain.h b/src/include/commands/explain.h
-index e8e92f966a1..323b3391b35 100644
---- a/src/include/commands/explain.h
-+++ b/src/include/commands/explain.h
-@@ -49,6 +49,18 @@ extern PGDLLIMPORT explain_per_node_hook_type explain_per_node_hook;
- typedef const char *(*explain_get_index_name_hook_type) (Oid indexId);
- extern PGDLLIMPORT explain_get_index_name_hook_type explain_get_index_name_hook;
- 
-+/* Hook for plugins to get control in ExplainOnePlan() */
-+typedef void (*ExplainOnePlan_hook_type) (PlannedStmt *plannedstmt, IntoClause *into,
-+			   struct ExplainState *es, const char *queryString,
-+			   ParamListInfo params, const instr_time *planduration,
-+			   QueryEnvironment *queryEnv);
-+extern PGDLLIMPORT ExplainOnePlan_hook_type ExplainOnePlan_hook;
-+
-+/* Explain a node info */
-+typedef void (*ExplainOneNode_hook_type) (struct ExplainState *es,
-+										 PlanState *ps,
-+										 Plan *plan);
-+extern PGDLLIMPORT ExplainOneNode_hook_type ExplainOneNode_hook;
- 
- extern void ExplainQuery(ParseState *pstate, ExplainStmt *stmt,
- 						 ParamListInfo params, DestReceiver *dest);
 diff --git a/src/include/nodes/pathnodes.h b/src/include/nodes/pathnodes.h
 index fbf05322c75..8fcb1fadda6 100644
 --- a/src/include/nodes/pathnodes.h
