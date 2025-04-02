@@ -16,7 +16,9 @@ To avoid compatibility issues, the following branches in the git-repository are 
 * `stable13` - for PG v13.
 * `stable14` - for PG v14.
 * `stable15` - for PG v15.
-* the `master` branch of the AQO repository correctly works with PGv15 and the PostgreSQL `master` branch.
+* `stable16` - for PG v16.
+* `stable17` - for PG v17.
+* the `master` branch of the AQO repository correctly works with PGv17 and the PostgreSQL `master` branch.
 
 The module contains a patch and an extension. Patch has to be applied to the
 sources of PostgresSQL. Patch affects header files, that is why PostgreSQL
@@ -26,7 +28,7 @@ Extension has to be unpacked into contrib directory and then to be compiled and
 installed with `make install`.
 
 ```
-cd postgresql-9.6                                                # enter postgresql source directory
+cd postgresql-{major_version}                                               # enter postgresql source directory
 git clone https://github.com/postgrespro/aqo.git contrib/aqo        # clone aqo into contrib
 patch -p1 --no-backup-if-mismatch < contrib/aqo/aqo_pg<version>.patch  # patch postgresql
 make clean && make && make install                               # recompile postgresql
