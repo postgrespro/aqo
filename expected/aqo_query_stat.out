@@ -68,7 +68,7 @@ SELECT count(*) FROM A JOIN B ON (A.x > B.y) WHERE A.x > 19 AND B.y < 9;
 SELECT round_array(cardinality_error_with_aqo) AS error_aqo, round_array(cardinality_error_without_aqo) AS error_no_aqo, executions_with_aqo, executions_without_aqo FROM aqo_query_stat;
      error_aqo      | error_no_aqo | executions_with_aqo | executions_without_aqo 
 --------------------+--------------+---------------------+------------------------
- {0.22,0.362,0.398} | {0.392,0.21} |                   3 |                      2
+ {0.22,0.243,0.416} | {0.392,0.21} |                   3 |                      2
 (1 row)
 
 SELECT true AS success from aqo_reset();
@@ -141,9 +141,9 @@ SELECT count(*) FROM A JOIN B ON (A.x > B.y) WHERE A.x > 18 AND B.y < 8;
 (1 row)
 
 SELECT round_array(cardinality_error_with_aqo) AS error_aqo, round_array(cardinality_error_without_aqo) AS error_no_aqo, executions_with_aqo, executions_without_aqo FROM aqo_query_stat;
-                              error_aqo                              |                       error_no_aqo                       | executions_with_aqo | executions_without_aqo 
----------------------------------------------------------------------+----------------------------------------------------------+---------------------+------------------------
- {5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,0.392,0.344,0.34,0.362} | {2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,0.218} |                 104 |                     51
+                              error_aqo                               |                       error_no_aqo                       | executions_with_aqo | executions_without_aqo 
+----------------------------------------------------------------------+----------------------------------------------------------+---------------------+------------------------
+ {5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,0.392,0.134,0.173,0.243} | {2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,0.218} |                 104 |                     51
 (1 row)
 
 SET aqo.mode TO DEFAULT;
