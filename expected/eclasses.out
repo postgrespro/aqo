@@ -377,7 +377,7 @@ WHERE str NOT LIKE '%Memory%';
 SELECT count(*) FROM aqo_data;
  count 
 -------
-    13
+    10
 (1 row)
 
 SELECT true AS success FROM aqo_reset();
