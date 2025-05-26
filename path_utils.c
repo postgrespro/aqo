@@ -605,6 +605,7 @@ is_appropriate_path(Path *path)
 		case T_SortPath:
 		case T_IncrementalSortPath:
 		case T_MemoizePath:
+		case T_MaterialPath:
 		case T_GatherPath:
 		case T_GatherMergePath:
 			appropriate = false;
