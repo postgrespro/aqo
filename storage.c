@@ -97,7 +97,7 @@ static void data_load(const char *filename, deform_record_t callback, void *ctx)
 static size_t _compute_data_dsa(const DataEntry *entry);
 
 static bool _aqo_stat_remove(uint64 queryid);
-static bool _aqo_queries_remove(uint64 queryid);
+static bool _aqo_queries_remove(uint64 queryid, bool lock);
 static bool _aqo_qtexts_remove(uint64 queryid);
 static bool _aqo_data_remove(data_key *key);
 static bool nearest_neighbor(double **matrix, int old_rows, double *neighbor, int cols);
@@ -1186,7 +1186,7 @@ aqo_qtext_store(uint64 queryid, const char *query_string, bool *dsa_valid)
 			 * that caller recognize it and don't try to call us more.
 			 */
 			(void) hash_search(qtexts_htab, &queryid, HASH_REMOVE, NULL);
-			_aqo_queries_remove(queryid);
+			_aqo_queries_remove(queryid, true);
 			LWLockRelease(&aqo_state->qtexts_lock);
 			if (dsa_valid)
 				*dsa_valid = false;
@@ -1284,12 +1284,19 @@ _aqo_stat_remove(uint64 queryid)
 }
 
 static bool
-_aqo_queries_remove(uint64 queryid)
+_aqo_queries_remove(uint64 queryid, bool lock)
 {
 	bool	found;
 
-	Assert(!LWLockHeldByMe(&aqo_state->queries_lock));
-	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
+	if (lock)
+	{
+		LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
+	}
+	else
+	{
+		Assert(LWLockHeldByMeInMode(&aqo_state->queries_lock, LW_EXCLUSIVE));
+	}
+
 	(void) hash_search(queries_htab, &queryid, HASH_FIND, &found);
 
 	if (found)
@@ -1298,7 +1305,8 @@ _aqo_queries_remove(uint64 queryid)
 		aqo_state->queries_changed = true;
 	}
 
-	LWLockRelease(&aqo_state->queries_lock);
+	if (lock)
+		LWLockRelease(&aqo_state->queries_lock);
 	return found;
 }
 
@@ -2324,10 +2332,7 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 	*fs_num = 0;
 	*fss_num = 0;
 
-	/*
-	 * It's a long haul. So, make seq scan without any lock. It is possible
-	 * because only this operation can delete data from hash table.
-	 */
+	LWLockAcquire(&aqo_state->queries_lock, LW_EXCLUSIVE);
 	hash_seq_init(&hash_seq, queries_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
@@ -2338,6 +2343,7 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 		ListCell	   *lc;
 
 		/* Scan aqo_data for any junk records related to this FS */
+		LWLockAcquire(&aqo_state->data_lock, LW_SHARED);
 		hash_seq_init(&hash_seq2, data_htab);
 		while ((dentry = hash_seq_search(&hash_seq2)) != NULL)
 		{
@@ -2346,8 +2352,6 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 			if (entry->fs != dentry->key.fs)
 				/* Another FS */
 				continue;
-
-			LWLockAcquire(&aqo_state->data_lock, LW_SHARED);
 
 			Assert(DsaPointerIsValid(dentry->data_dp));
 			ptr = dsa_get_address(data_dsa, dentry->data_dp);
@@ -2388,9 +2392,9 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 						 UINT64_FORMAT" fss=%d",
 						dentry->key.fs, (int32) dentry->key.fss)));
 			}
-
-			LWLockRelease(&aqo_state->data_lock);
 		}
+
+		LWLockRelease(&aqo_state->data_lock);
 
 		/*
 		 * In forced mode remove all child FSSes even some of them are still
@@ -2419,9 +2423,11 @@ cleanup_aqo_database(bool gentle, int *fs_num, int *fss_num)
 			_aqo_qtexts_remove(entry->queryid);
 
 			/* Query class preferences */
-			(*fs_num) += (int) _aqo_queries_remove(entry->queryid);
+			(*fs_num) += (int) _aqo_queries_remove(entry->queryid, false);
 		}
 	}
+
+	LWLockRelease(&aqo_state->queries_lock);
 
 	/*
 	 * The best place to flush updated AQO storage: calling the routine, user
@@ -2504,7 +2510,7 @@ aqo_drop_class(PG_FUNCTION_ARGS)
 			 "id = "INT64_FORMAT", fs = "UINT64_FORMAT".", (int64) queryid, fs);
 
 	/* Now, remove all data related to the class */
-	_aqo_queries_remove(queryid);
+	_aqo_queries_remove(queryid, true);
 	_aqo_stat_remove(queryid);
 	_aqo_qtexts_remove(queryid);
 	cnt = _aqo_data_clean(fs);
