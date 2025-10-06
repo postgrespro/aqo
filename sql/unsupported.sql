@@ -7,6 +7,15 @@ SET max_parallel_workers_per_gather = 1;
 SET aqo.force_collect_stat = OFF;
 SET aqo.join_threshold = 0;
 
+-- Same as SET enable_extra_transformations = off, but supports vanilla
+-- Needed to alleviate plan changes in Ent due to subquery flattening
+SELECT count(*) >= 0 AS success
+FROM (
+	SELECT set_config(name, 'off', false) FROM pg_settings
+	WHERE name = 'enable_extra_transformations'
+		OR name = 'enable_any_to_lateral_transformation'
+) tmp;
+
 -- Utility tool. Allow to filter system-dependent strings from an explain output.
 CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
 BEGIN
