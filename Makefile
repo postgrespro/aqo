@@ -11,10 +11,29 @@ OBJS = $(WIN32RES) \
 
 TAP_TESTS = 1
 
-# Use an empty dummy test to define the variable REGRESS and therefore run all
-# regression tests. regress_schedule contains the full list of real tests.
-REGRESS = aqo_dummy_test
-REGRESS_OPTS = --schedule=$(srcdir)/regress_schedule
+REGRESS =	aqo_disabled \
+			aqo_controlled \
+			aqo_intelligent \
+			aqo_forced \
+			aqo_learn \
+			schema \
+			aqo_fdw \
+			aqo_CVE-2020-14350 \
+			gucs \
+			forced_stat_collection \
+			unsupported \
+			clean_aqo_data \
+			parallel_workers \
+			plancache	\
+			update_functions \
+			temp_tables \
+			top_queries \
+			relocatable\
+			look_a_like \
+			feature_subspace \
+			eclasses \
+			eclasses_mchar \
+			aqo_query_stat
 
 # Set default values of some gucs to be stable on custom settings during
 # a kind of installcheck
