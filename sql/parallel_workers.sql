@@ -4,6 +4,11 @@
 CREATE EXTENSION IF NOT EXISTS aqo;
 SELECT true AS success FROM aqo_reset();
 
+-- For the tests stability
+SET max_parallel_maintenance_workers = 1;
+SET aqo.force_collect_stat = OFF;
+SET aqo.join_threshold = 0;
+
 -- Utility tool. Allow to filter system-dependent strings from explain output.
 CREATE OR REPLACE FUNCTION expln(query_string text) RETURNS SETOF text AS $$
 BEGIN

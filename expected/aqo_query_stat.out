@@ -7,6 +7,11 @@ SELECT true AS success FROM aqo_reset();
  t
 (1 row)
 
+-- For the tests stability
+SET max_parallel_maintenance_workers = 1;
+SET max_parallel_workers_per_gather = 1;
+SET aqo.force_collect_stat = OFF;
+SET aqo.join_threshold = 0;
 DROP TABLE IF EXISTS A;
 NOTICE:  table "a" does not exist, skipping
 CREATE TABLE A AS SELECT x FROM generate_series(1, 20) as x;
@@ -64,7 +69,7 @@ SELECT count(*) FROM A JOIN B ON (A.x > B.y) WHERE A.x > 19 AND B.y < 9;
      8
 (1 row)
 
--- Ignore unstable time-related columns 
+-- Ignore unstable time-related columns
 SELECT round_array(cardinality_error_with_aqo) AS error_aqo, round_array(cardinality_error_without_aqo) AS error_no_aqo, executions_with_aqo, executions_without_aqo FROM aqo_query_stat;
      error_aqo      | error_no_aqo | executions_with_aqo | executions_without_aqo 
 --------------------+--------------+---------------------+------------------------
