@@ -1,6 +1,12 @@
 CREATE EXTENSION IF NOT EXISTS aqo;
 SELECT true AS success FROM aqo_reset();
 
+-- For the tests stability
+SET max_parallel_maintenance_workers = 1;
+SET max_parallel_workers_per_gather = 1;
+SET aqo.force_collect_stat = OFF;
+SET aqo.join_threshold = 0;
+
 -- The function just copied from stats_ext.sql
 create function check_estimated_rows(text) returns table (estimated int, actual int)
 language plpgsql as

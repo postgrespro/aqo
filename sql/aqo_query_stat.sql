@@ -3,6 +3,12 @@
 CREATE EXTENSION IF NOT EXISTS aqo;
 SELECT true AS success FROM aqo_reset();
 
+-- For the tests stability
+SET max_parallel_maintenance_workers = 1;
+SET max_parallel_workers_per_gather = 1;
+SET aqo.force_collect_stat = OFF;
+SET aqo.join_threshold = 0;
+
 DROP TABLE IF EXISTS A;
 CREATE TABLE A AS SELECT x FROM generate_series(1, 20) as x;
 ANALYZE A;
@@ -34,7 +40,7 @@ SELECT aqo_enable_class(queryid) FROM aqo_queries WHERE queryid != 0;
 SELECT count(*) FROM A JOIN B ON (A.x > B.y) WHERE A.x > 17 AND B.y < 7;
 SELECT count(*) FROM A JOIN B ON (A.x > B.y) WHERE A.x > 18 AND B.y < 8;
 SELECT count(*) FROM A JOIN B ON (A.x > B.y) WHERE A.x > 19 AND B.y < 9;
--- Ignore unstable time-related columns 
+-- Ignore unstable time-related columns
 SELECT round_array(cardinality_error_with_aqo) AS error_aqo, round_array(cardinality_error_without_aqo) AS error_no_aqo, executions_with_aqo, executions_without_aqo FROM aqo_query_stat;
 
 SELECT true AS success from aqo_reset();
