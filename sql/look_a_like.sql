@@ -2,6 +2,12 @@
 CREATE EXTENSION IF NOT EXISTS aqo;
 SELECT true AS success FROM aqo_reset();
 
+-- For the tests stability
+SET max_parallel_maintenance_workers = 1;
+SET max_parallel_workers_per_gather = 1;
+SET aqo.force_collect_stat = OFF;
+SET aqo.join_threshold = 0;
+
 SET aqo.wide_search = 'on';
 
 SET aqo.mode = 'learn';

@@ -9,6 +9,13 @@ FROM pg_available_extensions WHERE name = 'mchar' \gset
 \endif
 
 CREATE EXTENSION IF NOT EXISTS aqo;
+
+-- For the tests stability
+SET max_parallel_maintenance_workers = 1;
+SET max_parallel_workers_per_gather = 1;
+SET aqo.force_collect_stat = OFF;
+SET aqo.join_threshold = 0;
+
 SET aqo.show_details = 'on';
 SET aqo.show_hash = 'off';
 SET aqo.mode = 'forced';
