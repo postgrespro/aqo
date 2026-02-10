@@ -1,0 +1,60 @@
+-- Test for early reset of AQOCache memory context by ATX
+SELECT (count(*) = 0) AS skip_test FROM pg_settings
+WHERE name = 'max_autonomous_transactions' \gset
+
+\if :skip_test
+\quit
+\endif
+
+CREATE EXTENSION IF NOT EXISTS aqo;
+SELECT true AS success FROM aqo_reset();
+
+CREATE TABLE t1 (a int, b text, c int);
+CREATE unique index on t1 (a, b);
+
+CREATE TABLE t2 AS SELECT 0 AS a, 'cero' AS b, 1 AS c;
+
+CREATE FUNCTION t1_update_func() RETURNS trigger AS $$
+BEGIN
+	PERFORM * FROM t2 WHERE a >= 0;
+	RETURN new;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER t1_update
+AFTER UPDATE ON t1
+FOR EACH STATEMENT
+EXECUTE PROCEDURE t1_update_func();
+
+CREATE FUNCTION f2()
+RETURNS int AS $$
+BEGIN
+	BEGIN AUTONOMOUS
+		INSERT INTO t1 SELECT a,b,c FROM t2 WHERE t2.a >= 0
+			ON conflict (a,b) do UPDATE SET c = t1.c + 1;
+		SELECT 1/0;
+	EXCEPTION WHEN division_by_zero THEN
+		NULL;
+	END;
+
+	INSERT INTO t1 SELECT a,b,c FROM t2 WHERE t2.a >= 0
+		ON conflict (a,b) do UPDATE SET c = t1.c + 1;
+
+	RETURN 0;
+END;
+$$ LANGUAGE plpgsql security definer;
+
+SET aqo.join_threshold = 0;
+SET aqo.mode = learn;
+
+PREPARE prep1 AS SELECT f2();
+EXECUTE prep1;
+EXECUTE prep1;
+EXECUTE prep1;
+EXECUTE prep1;
+EXECUTE prep1;
+
+DROP TABLE t1, t2 CASCADE;
+DROP FUNCTION t1_update_func, f2;
+
+DROP EXTENSION aqo;

@@ -1,0 +1,5 @@
+-- Test for early reset of AQOCache memory context by ATX
+SELECT (count(*) = 0) AS skip_test FROM pg_settings
+WHERE name = 'max_autonomous_transactions' \gset
+\if :skip_test
+\quit
