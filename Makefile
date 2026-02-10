@@ -16,6 +16,7 @@ REGRESS =	aqo_disabled \
 			aqo_intelligent \
 			aqo_forced \
 			aqo_learn \
+			aqo_atx \
 			schema \
 			aqo_fdw \
 			aqo_CVE-2020-14350 \

@@ -12,6 +12,7 @@
 
 #include "access/relation.h"
 #include "access/table.h"
+#include "access/xact.h"
 #include "catalog/pg_extension.h"
 #include "commands/extension.h"
 #include "miscadmin.h"
@@ -114,7 +115,11 @@ aqo_free_callback(ResourceReleasePhase phase,
 	if (phase != RESOURCE_RELEASE_AFTER_LOCKS)
 		return;
 
-	if (isTopLevel)
+	if (isTopLevel
+#ifdef PGPRO_EE
+		&& getNestLevelATX() == 0
+#endif
+		)
 	{
 		MemoryContextReset(AQOCacheMemCtx);
 		cur_classes = NIL;
