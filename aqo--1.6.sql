@@ -208,3 +208,38 @@ CREATE VIEW aqo_data AS SELECT * FROM aqo_data();
 CREATE VIEW aqo_queries AS SELECT * FROM aqo_queries();
 CREATE VIEW aqo_query_stat AS SELECT * FROM aqo_query_stat();
 CREATE VIEW aqo_query_texts AS SELECT * FROM aqo_query_texts();
+
+-- -----------------------------------------------------------------------------
+--
+-- NODE CONTEXT EXTRACTOR
+--
+-- Table to store extracted plan node context (clauses, selectivities,
+-- cardinality estimates) for analysis and debugging.
+--
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE aqo_node_context (
+    id                    SERIAL PRIMARY KEY,
+    query_hash            bigint NOT NULL,
+    space_hash            integer NOT NULL,
+    node_type             text NOT NULL,
+    join_type             text,
+    clause_text           text,
+    selectivities         double precision[],
+    estimated_cardinality double precision,
+    actual_cardinality    double precision,
+    relations             text[],
+    collected_at          timestamptz DEFAULT now()
+);
+
+CREATE INDEX ON aqo_node_context (query_hash);
+CREATE INDEX ON aqo_node_context (space_hash);
+
+COMMENT ON TABLE aqo_node_context IS
+'Stores extracted plan node context: clause conditions, selectivities, and cardinality estimates.';
+
+CREATE FUNCTION aqo_node_context_reset() RETURNS void
+AS 'MODULE_PATHNAME', 'aqo_node_context_reset'
+LANGUAGE C VOLATILE;
+COMMENT ON FUNCTION aqo_node_context_reset() IS
+'Truncate the aqo_node_context table, removing all collected node context data.';

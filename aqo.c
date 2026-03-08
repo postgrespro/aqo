@@ -19,6 +19,7 @@
 
 #include "aqo.h"
 #include "aqo_shared.h"
+#include "node_context.h"
 #include "path_utils.h"
 #include "storage.h"
 
@@ -316,6 +317,20 @@ _PG_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	DefineCustomBoolVariable(
+							 "aqo.nce_enabled",
+							 "Enable Node Context Extractor to collect clause and cardinality data.",
+							 "When enabled, AQO captures clause text, selectivities, estimated and actual "
+							 "cardinality for each plan node into the aqo_node_context table.",
+							 &aqo_nce_enabled,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL
+	);
 
 	aqo_shmem_init();
 	aqo_preprocessing_init();

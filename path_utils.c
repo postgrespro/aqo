@@ -26,6 +26,7 @@
 
 #include "aqo.h"
 #include "hash.h"
+#include "node_context.h"
 
 #include "postgres_fdw.h"
 
@@ -730,6 +731,10 @@ aqo_create_plan(PlannerInfo *root, Path *src, Plan **dest)
 	}
 
 	node->had_path = true;
+
+	/* Node Context Extractor: collect clause/selectivity/cardinality data */
+	if (aqo_nce_enabled)
+		nce_collect_plan_node(root, src, *dest, node);
 }
 
 static void
