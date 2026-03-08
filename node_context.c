@@ -98,6 +98,275 @@ nce_join_type_str(JoinType jt)
 }
 
 /*
+ * Helper: check if character is a valid SQL identifier character
+ * (letter, digit, underscore).
+ */
+static inline bool
+is_ident_char(char c)
+{
+	return ((c >= 'a' && c <= 'z') ||
+			(c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') ||
+			c == '_');
+}
+
+/*
+ * Helper: check if a substring matches a keyword at position, as a whole word.
+ * Returns true if src matches kw at the given position and is not part of
+ * a larger identifier.
+ */
+static bool
+is_keyword_at(const char *src, int pos, int srclen, const char *kw, int kwlen)
+{
+	if (pos + kwlen > srclen)
+		return false;
+	if (pg_strncasecmp(src + pos, kw, kwlen) != 0)
+		return false;
+	/* Must not be preceded by an ident char */
+	if (pos > 0 && is_ident_char(src[pos - 1]))
+		return false;
+	/* Must not be followed by an ident char */
+	if (pos + kwlen < srclen && is_ident_char(src[pos + kwlen]))
+		return false;
+	return true;
+}
+
+/*
+ * nce_tokenize_literals
+ *
+ * Post-process a deparsed clause string to replace concrete literal values
+ * with semantic tokens:
+ *   <NUM>        — numeric/integer literals
+ *   <STR>        — text/varchar/name string literals
+ *   <DATE>       — date literals
+ *   <TIMESTAMP>  — timestamp/timestamptz/interval literals
+ *   <BOOL_TRUE>  — boolean true
+ *   <BOOL_FALSE> — boolean false
+ *   <NULL>       — NULL literals
+ *
+ * Handles patterns like:
+ *   'value'::type   → token based on type
+ *   bare integers   → <NUM>
+ *   true/false       → <BOOL_TRUE>/<BOOL_FALSE>
+ *   NULL::type       → <NULL>
+ *
+ * Returns a palloc'd string (caller must pfree the input if desired).
+ */
+static char *
+nce_tokenize_literals(const char *src)
+{
+	StringInfoData buf;
+	int			srclen;
+	int			i;
+
+	if (src == NULL || src[0] == '\0')
+		return pstrdup("");
+
+	srclen = strlen(src);
+	initStringInfo(&buf);
+
+	for (i = 0; i < srclen; )
+	{
+		/*
+		 * Pattern 1: Quoted literal  'xxx'  possibly followed by  ::type
+		 * Handles escaped quotes inside: 'O''Brien'
+		 */
+		if (src[i] == '\'')
+		{
+			int		start = i;
+			int		end_quote;
+
+			/* Find the closing quote, handling '' escapes */
+			i++;	/* skip opening quote */
+			while (i < srclen)
+			{
+				if (src[i] == '\'')
+				{
+					if (i + 1 < srclen && src[i + 1] == '\'')
+						i += 2;	/* escaped quote, skip both */
+					else
+						break;	/* closing quote */
+				}
+				else
+					i++;
+			}
+
+			if (i >= srclen)
+			{
+				/* Unterminated quote — just copy the rest literally */
+				appendStringInfoString(&buf, src + start);
+				break;
+			}
+
+			end_quote = i;	/* position of closing quote */
+			i++;			/* skip closing quote */
+
+			/* Check for ::type suffix */
+			if (i + 1 < srclen && src[i] == ':' && src[i + 1] == ':')
+			{
+				int		type_start = i + 2;
+				int		type_end = type_start;
+				const char *token = "<STR>";
+
+				/*
+				 * Consume the type name; it may contain spaces
+				 * (e.g. "timestamp without time zone"),
+				 * letters, digits, underscores, and trailing [].
+				 */
+				while (type_end < srclen &&
+					   (is_ident_char(src[type_end]) || src[type_end] == ' '))
+					type_end++;
+
+				/* Consume trailing [] for array types */
+				if (type_end + 1 < srclen &&
+					src[type_end] == '[' && src[type_end + 1] == ']')
+					type_end += 2;
+
+				/* Determine token based on type name */
+				{
+					int		tlen = type_end - type_start;
+					char	typename_buf[128];
+					int		copy_len = (tlen < 127) ? tlen : 127;
+
+					memcpy(typename_buf, src + type_start, copy_len);
+					typename_buf[copy_len] = '\0';
+
+					/* Trim trailing spaces */
+					while (copy_len > 0 && typename_buf[copy_len - 1] == ' ')
+						typename_buf[--copy_len] = '\0';
+
+					/* Classify by type name */
+					if (pg_strncasecmp(typename_buf, "timestamp", 9) == 0)
+						token = "<TIMESTAMP>";
+					else if (pg_strcasecmp(typename_buf, "interval") == 0)
+						token = "<TIMESTAMP>";
+					else if (pg_strcasecmp(typename_buf, "date") == 0)
+						token = "<DATE>";
+					else if (pg_strcasecmp(typename_buf, "text") == 0 ||
+							 pg_strcasecmp(typename_buf, "text[]") == 0 ||
+							 pg_strcasecmp(typename_buf, "character varying") == 0 ||
+							 pg_strcasecmp(typename_buf, "character varying[]") == 0 ||
+							 pg_strcasecmp(typename_buf, "name") == 0 ||
+							 pg_strcasecmp(typename_buf, "bpchar") == 0 ||
+							 pg_strcasecmp(typename_buf, "char") == 0)
+						token = "<STR>";
+					else if (pg_strcasecmp(typename_buf, "numeric") == 0 ||
+							 pg_strcasecmp(typename_buf, "integer") == 0 ||
+							 pg_strcasecmp(typename_buf, "bigint") == 0 ||
+							 pg_strcasecmp(typename_buf, "smallint") == 0 ||
+							 pg_strcasecmp(typename_buf, "real") == 0 ||
+							 pg_strcasecmp(typename_buf, "double precision") == 0 ||
+							 pg_strcasecmp(typename_buf, "money") == 0)
+						token = "<NUM>";
+					else if (pg_strcasecmp(typename_buf, "boolean") == 0)
+						token = "<STR>"; /* deparsed bool literal in quotes is rare */
+					/* else: unknown type — default <STR> */
+				}
+
+				appendStringInfoString(&buf, token);
+				i = type_end;  /* advance past the type */
+			}
+			else
+			{
+				/*
+				 * Quoted string without ::type cast.
+				 * Default to <STR>.
+				 */
+				appendStringInfoString(&buf, "<STR>");
+			}
+
+			continue;
+		}
+
+		/*
+		 * Pattern 2: NULL::type or bare NULL keyword
+		 */
+		if (is_keyword_at(src, i, srclen, "NULL", 4))
+		{
+			int		null_end = i + 4;
+
+			/* Check for ::type after NULL */
+			if (null_end + 1 < srclen &&
+				src[null_end] == ':' && src[null_end + 1] == ':')
+			{
+				int type_end = null_end + 2;
+				while (type_end < srclen &&
+					   (is_ident_char(src[type_end]) || src[type_end] == ' '))
+					type_end++;
+				if (type_end + 1 < srclen &&
+					src[type_end] == '[' && src[type_end + 1] == ']')
+					type_end += 2;
+				null_end = type_end;
+			}
+
+			appendStringInfoString(&buf, "<NULL>");
+			i = null_end;
+			continue;
+		}
+
+		/*
+		 * Pattern 3: Boolean keywords true / false
+		 */
+		if (is_keyword_at(src, i, srclen, "true", 4))
+		{
+			appendStringInfoString(&buf, "<BOOL_TRUE>");
+			i += 4;
+			continue;
+		}
+		if (is_keyword_at(src, i, srclen, "false", 5))
+		{
+			appendStringInfoString(&buf, "<BOOL_FALSE>");
+			i += 5;
+			continue;
+		}
+
+		/*
+		 * Pattern 4: Bare numeric literals (integer or decimal).
+		 * Must not be preceded by an identifier character (to avoid
+		 * matching digits inside identifiers like "t2" or "col3").
+		 */
+		if (src[i] >= '0' && src[i] <= '9')
+		{
+			/* Check preceding character is not an ident char */
+			if (i == 0 || !is_ident_char(src[i - 1]))
+			{
+				int		num_start = i;
+
+				/* Consume digits */
+				while (i < srclen && src[i] >= '0' && src[i] <= '9')
+					i++;
+
+				/* Consume decimal part if present */
+				if (i < srclen && src[i] == '.')
+				{
+					i++;
+					while (i < srclen && src[i] >= '0' && src[i] <= '9')
+						i++;
+				}
+
+				/* If followed by ident char, it was part of an identifier;
+				 * copy literally instead */
+				if (i < srclen && is_ident_char(src[i]))
+				{
+					appendBinaryStringInfo(&buf, src + num_start, i - num_start);
+				}
+				else
+				{
+					appendStringInfoString(&buf, "<NUM>");
+				}
+				continue;
+			}
+		}
+
+		/* Default: copy character as-is */
+		appendStringInfoChar(&buf, src[i]);
+		i++;
+	}
+
+	return buf.data;
+}
+
+/*
  * Helper: Try to produce human-readable SQL from a clause expression.
  * Uses deparse_expression with the provided context.
  * Falls back to nodeToString if deparsing fails.
@@ -230,6 +499,13 @@ nce_collect_plan_node(PlannerInfo *root, Path *src, Plan *plan,
 
 		/* Deparse clause to human-readable text using full context */
 		clause_str = nce_deparse_clause(clause->clause, dpcontext);
+
+		/* Tokenize literal values into semantic markers */
+		{
+			char *tokenized = nce_tokenize_literals(clause_str);
+			pfree(clause_str);
+			clause_str = tokenized;
+		}
 
 		/* Copy result into TopMemoryContext */
 		oldctx = MemoryContextSwitchTo(TopMemoryContext);
