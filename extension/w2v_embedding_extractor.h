@@ -1,14 +1,13 @@
-#ifndef W2V_EMBEDDING_EXTRACTOR_H
-#define W2V_EMBEDDING_EXTRACTOR_H
+#ifndef W2V_ENCODER_H
+#define W2V_ENCODER_H
 
-#include <stdbool.h>
+typedef struct {
+    float *aggregate_vector;
+    int num_words;
+    int word_dim;
+} W2VEmbeddingResult;
 
-bool init_embedding_extractor(const char *v_path, const char *e_path, int k, int d);
-void free_embedding_extractor(void);
-int extractor_get_word_id(const char *word);
-const float* extractor_get_word_embedding(int word_id);
-
-int extractor_get_dim(void);
-bool extractor_is_loaded(void);
+W2VEmbeddingResult* w2v_extract_sql_embedding(const char *sql_query, float sigma);
+void w2v_free_embedding_result(W2VEmbeddingResult *eq);
 
 #endif

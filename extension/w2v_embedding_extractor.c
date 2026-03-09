@@ -1,60 +1,78 @@
 #include "../utils/pg_compat.h"
+#include "w2v_inference.h"
 #include "w2v_embedding_extractor.h"
-#include <stdint.h>
-#include <stdio.h>
+#include "../utils/sql_preprocessor.h"
+#include <math.h>
 #include <string.h>
+//  w_j = e^(-(cw - j)^2 / (2 * sigma^2))
+static float calculate_positional_weight(int current_pos, float center_pos, float sigma) {
+    float diff = center_pos - (float)current_pos;
+    return expf(-(diff * diff) / (2.0f * sigma * sigma));
+}
 
-typedef struct { char *word; int id; } VocabEntry;
-static VocabEntry *g_v = NULL;
-static float *g_e = NULL;
-static int g_size = 0, g_k = 0, g_d = 0;
-static bool g_init = false;
+W2VEmbeddingResult* w2v_extract_sql_embedding(const char *sql, float sigma) {
+    if (!w2v_inference_is_ready()) return NULL;
 
-bool init_embedding_extractor(const char *v_p, const char *e_p, int k, int d) {
-    if (g_init) return true;
-    FILE *fv = fopen(v_p, "rb");
-    if (!fv) return false;
-    int32_t n; fread(&n, 4, 1, fv);
-    g_v = palloc0(n * sizeof(VocabEntry));
-    for (int i = 0; i < n; i++) {
-        int32_t wl; fread(&wl, 4, 1, fv);
-        g_v[i].word = palloc(wl + 1);
-        fread(g_v[i].word, 1, wl, fv);
-        g_v[i].word[wl] = '\0';
-        fread(&g_v[i].id, 4, 1, fv);
+    SQLPreprocessingResult *prep = preprocess_sql_query(sql);
+    if (!prep || !prep->tokens || prep->tokens->count == 0) return NULL;
+
+    int D = w2v_inference_get_dim();
+    size_t M = prep->tokens->count;
+    float cw = (M - 1) / 2.0f;
+
+    float *query_vector = palloc0(D * sizeof(float));
+    float weight_sum = 0.0f;
+    int valid_words = 0;
+
+    for (size_t j = 0; j < M; j++) {
+        int wid = extractor_get_word_id(prep->tokens->tokens[j]);
+        if (wid < 0) continue;
+
+        const float *emb = extractor_get_word_embedding(wid);
+        if (!emb) continue;
+
+        bool is_clean = true;
+        for (int d = 0; d < D; d++) {
+            if (!isfinite(emb[d])) {
+                is_clean = false;
+                break;
+            }
+        }
+        if (!is_clean) continue;
+
+        float w_j = calculate_positional_weight((int)j, cw, sigma);
+
+        for (int d = 0; d < D; d++) {
+            query_vector[d] += w_j * emb[d];
+        }
+        weight_sum += w_j;
+        valid_words++;
     }
-    fclose(fv);
-    FILE *fe = fopen(e_p, "rb");
-    if (!fe) return false;
-    int32_t tr, fd; fread(&tr, 4, 1, fe); fread(&fd, 4, 1, fe);
-    g_k = k; g_d = d; g_size = n;
-    g_e = palloc0((size_t)n * d * sizeof(float));
-    float *tmp = palloc(d * sizeof(float));
-    for (int r = 0; r < tr; r++) {
-        int32_t wl; fread(&wl, 4, 1, fe); fseek(fe, wl, SEEK_CUR);
-        int32_t sid; fread(&sid, 4, 1, fe); fread(tmp, 4, d, fe);
-        int wid = r / k;
-        /* Chỉ lấy sense đầu tiên (sid == 0) để tránh đa nghĩa */
-        if (wid < n && sid == 0) memcpy(g_e + (wid * d), tmp, d * sizeof(float));
+
+    if (weight_sum > 0.0f) {
+        for (int d = 0; d < D; d++) {
+            query_vector[d] /= weight_sum;
+        }
     }
-    pfree(tmp); fclose(fe);
-    g_init = true; return true;
+
+    if (valid_words == 0) {
+        pfree(query_vector);
+        if (prep) free_sql_preprocessing_result(prep);
+        return NULL;
+    }
+
+    W2VEmbeddingResult *res = palloc(sizeof(W2VEmbeddingResult));
+    res->aggregate_vector = query_vector;
+    res->num_words = valid_words;
+    res->word_dim = D;
+
+    free_sql_preprocessing_result(prep);
+    return res;
 }
 
-int extractor_get_word_id(const char *w) {
-    for (int i = 0; i < g_size; i++) if (strcmp(g_v[i].word, w) == 0) return i;
-    return -1;
+void w2v_free_embedding_result(W2VEmbeddingResult *eq) {
+    if (eq) {
+        if (eq->aggregate_vector) pfree(eq->aggregate_vector);
+        pfree(eq);
+    }
 }
-
-const float* extractor_get_word_embedding(int wid) {
-    return (wid < 0 || wid >= g_size) ? NULL : g_e + (wid * g_d);
-}
-
-void free_embedding_extractor() {
-    if (!g_init) return;
-    for (int i = 0; i < g_size; i++) pfree(g_v[i].word);
-    pfree(g_v); pfree(g_e); g_init = false;
-}
-
-int extractor_get_dim() { return g_d; }
-bool extractor_is_loaded() { return g_init; }
