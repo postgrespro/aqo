@@ -1,0 +1,1 @@
+from sensate.config.global_config import global_config

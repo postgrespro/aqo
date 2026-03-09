@@ -1,0 +1,10 @@
+/log/
+/tmp_check/
+venv
+__pycache__
+output/model
+.env
+.bin
+
+checkpoints/
+cache

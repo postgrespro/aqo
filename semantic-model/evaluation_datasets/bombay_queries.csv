@@ -1,0 +1,630 @@
+id	label	query
+0_1_1	1	select course.course_id,course.title from course
+0_1_2	1	select course_id from course
+0_1_3	1	select distinct course_id,title from course
+0_1_4	1	select course_id,title from course
+0_2_1	2	select course_id,title from course where dept_name='comp. sci.'
+0_2_2	2	select distinct course.course_id,course.title from course where course.dept_name='comp. sci.'
+0_2_3	2	select course.course_id,course.title from course where dept_name='comp. sci.'
+0_2_4	2	select course_id,title from course where course.dept_name = 'comp. sci.'
+0_2_5	2	select course_id,title from course where course.dept_name='comp. sci.'
+0_2_6	2	select * from course where dept_name = 'comp. sci.'
+0_2_7	2	select course_id,title from course where dept_name = 'comp. sci.'
+0_2_8	2	select course_id,title from department,course where department.dept_name = course.dept_name and department.dept_name = 'comp. sci.'
+0_2_9	2	select course.course_id,course.title from course where dept_name = 'comp. sci.'
+0_2_10	2	select course.course_id,course.title from course where course.dept_name = 'comp. sci.'
+0_3_1	3	select course_id,title,id from course natural join instructor natural join teaches where semester = 'spring' and year = 2010
+0_3_2	3	select course.course_id,course.title,teaches.id from course,teaches where course.course_id = teaches.course_id and teaches.year = 2010 and teaches.semester = 'spring'
+0_3_3	3	select course.course_id,title,id from course join teaches on course.course_id = teaches.course_id and teaches.semester = 'spring' and teaches.year = '2010'
+0_3_4	3	select teaches.course_id,title,id as professor_id,semester from teaches,course where teaches.course_id = course.course_id and semester = 'spring' and year = '2010'
+0_3_5	3	select course.course_id,course.title,id from course natural join teaches where semester = 'spring' and year = 2010
+0_3_6	3	select course.course_id,title,id from course,teaches where semester='spring' and year='2010' and teaches.course_id=course.course_id
+0_3_7	3	select teaches.course_id,title,id from teaches,course where semester = 'spring' and year = 2010 and teaches.course_id = course.course_id
+0_3_8	3	select teaches.course_id,course.title,teaches.id from teaches,course where course.course_id=teaches.course_id and teaches.year='2010' and teaches.semester='spring'
+0_3_9	3	select section.course_id,course.title,teaches.id from section,course,teaches where section.course_id = teaches.course_id and section.sec_id = teaches.sec_id and section.semester = teaches.semester and section.year = teaches.year and section.course_id = course.course_id and section.semester = 'spring' and section.year = 2010
+0_3_10	3	select course.course_id,course.title,teaches.id from course,teaches where teaches.course_id=course.course_id and teaches.semester='spring' and teaches.year='2010'
+0_3_11	3	select distinct course.course_id,course.title,teaches.id from course,section,teaches where course.course_id = section.course_id and section.course_id = teaches.course_id and section.sec_id = teaches.sec_id and section.year = teaches.year and section.semester = teaches.semester and section.semester = 'spring' and section.year = 2010
+0_3_12	3	select teaches.course_id,course.title,teaches.id from teaches,course where (teaches.course_id = course.course_id) and (teaches.year = '2010' and teaches.semester = 'spring')
+0_3_13	3	select course.course_id,course.title,instructor.id from course,instructor,takes where course.dept_name=instructor.dept_name and takes.course_id=course.course_id and takes.semester='spring' and takes.year='2010'
+0_3_14	3	select section.course_id,course.title,teaches.id from course,section,teaches where section.course_id=course.course_id and section.course_id=teaches.course_id and section.sec_id=teaches.sec_id and section.semester=teaches.semester and section.year=teaches.year and section.semester='spring' and section.year='2010'
+0_3_15	3	select course.course_id,title,teaches.id from course,teaches where semester = 'spring' and year = 2010 and course.course_id = teaches.course_id
+0_3_16	3	select course.course_id,teaches.id,course.title from course,teaches where teaches.semester='spring' and teaches.year='2010'
+0_3_17	3	select section.course_id,teaches.id,course.title from section,course,teaches where section.year = 2010 and section.semester = 'spring' and section.course_id = course.course_id and section.course_id = teaches.course_id
+0_3_18	3	select course_id,title,instructor.id from teaches,course where teaches.course_id = course.course_id and teaches.semester ='spring' and teaches.year = '2010'
+0_3_19	3	select distinct course.course_id,title,id from course,teaches,section where section.year = 2010 and section.course_id = course.course_id and teaches.course_id = course.course_id and teaches.semester= 'spring'
+0_3_20	3	select teaches.course_id,course.title,teaches.id from teaches,course,section where course.course_id=section.course_id and section.course_id=teaches.course_id and section.sec_id=teaches.sec_id and section.semester=teaches.semester and section.year=teaches.year and section.semester='spring' and section.year=2010
+0_3_21	3	select teaches.course_id,course.title,teaches.id from teaches,course where teaches.semester = 'spring' and teaches.year = '2010' and teaches.course_id = course.course_id
+0_3_22	3	select course.course_id,title,id from course,teaches where semester = 'spring' and year = '2010'and course.course_id=teaches.course_id
+0_3_23	3	select course.course_id,course.title,instructor.id from teaches,course,instructor where course.course_id=teaches.course_id and instructor.id= teaches.id and teaches.semester='spring' and teaches.year=2010
+0_3_24	3	select distinct teaches.course_id,course.title,teaches.id as instructor_id from course,instructor,teaches,section where teaches.course_id = section.course_id and section.course_id = course.course_id and instructor.id = teaches.id and teaches.year = '2010' and teaches.semester = 'spring'
+0_3_25	3	select course.course_id,course.title,teaches.id from teaches,course where teaches.year = '2010' and teaches.semester = 'spring' and teaches.course_id = course.course_id
+0_3_26	3	select distinct course.course_id,course.title,teaches.id from course,teaches where course.course_id=teaches.course_id and teaches.semester='spring' and teaches.year=2010
+0_3_27	3	select teaches.course_id,course.title,teaches.id as instructorid from course,instructor,teaches where teaches.id = instructor.id and teaches.course_id = course.course_id and teaches.semester = 'spring' and teaches.year = '2010'
+0_3_28	3	select course_id,title,id from course natural join teaches natural join section where semester='spring' and year='2010'
+0_3_29	3	select distinct course.course_id,title,id from course,teaches,section where section.year=2010 and teaches.semester='spring' and section.course_id = course.course_id and teaches.course_id=course.course_id
+0_3_30	3	select distinct teaches.course_id,course.title,teaches.id from teaches,course,takes where teaches.semester='spring' and teaches.year='2010' and course.course_id = teaches.course_id
+0_3_31	3	select course.course_id,title,id instructor_id from teaches,course where course.course_id=teaches.course_id and teaches.year=2010 and teaches.semester='spring'
+0_3_32	3	select distinct course.course_id,title,id from course,teaches where course.course_id=teaches.course_id and year = 2010 and semester='spring'
+0_3_33	3	select course.course_id,course.title,teaches.id from course,teaches where course.course_id = teaches.course_id and semester='spring' and year=2010
+0_3_34	3	select teaches.course_id,course.title,teaches.id from course,teaches where (teaches.semester = 'spring' and teaches.year = 2010) and (course.course_id = teaches.course_id)
+0_3_35	3	select teaches.course_id,title,id from teaches,course where course.course_id = teaches.course_id and teaches.semester = 'spring' and teaches.year = 2010
+0_3_36	3	select course.course_id,title,instructor.id from course,instructor,teaches where teaches.id=instructor.id and course.course_id=teaches.course_id and teaches.semester='spring' and teaches.year=2010
+0_3_37	3	select section.course_id,course.title,teaches.id from section,course,teaches where section.semester = 'spring' and section.year = 2010 and teaches.course_id = section.course_id and course.course_id = section.course_id
+0_3_38	3	select course_id,course.title,id instructor_id from course natural join teaches where semester = 'spring' and year = 2010
+0_3_39	3	select course.course_id,title,teaches.id from course,teaches where course.course_id=teaches.course_id and teaches.semester='spring' and teaches.year='2010'
+0_3_40	3	select teaches.course_id,course.title,teaches.id from course,teaches where course.course_id = teaches.course_id and teaches.year = 2010 and teaches.semester = 'spring'
+0_3_41	3	select teaches.course_id,title,id from teaches,course where teaches.course_id = course.course_id and semester = 'spring' and year = '2010'
+0_3_42	3	select distinct course.course_id,course.title,teaches.id from course,teaches where course.course_id=teaches.course_id and teaches.semester='spring' and teaches.year='2010'
+0_3_43	3	select teaches.id,teaches.course_id,course.title from teaches,course where teaches.semester='spring' and teaches.year='2010' and teaches.course_id=course.course_id
+0_3_44	3	select course.course_id,title,teaches.id from course,teaches where semester = 'spring' and year = '2010' and course.course_id = teaches.course_id
+0_3_45	3	select teaches.course_id,course.title,teaches.id from teaches,section,course where teaches.course_id = section.course_id and section.course_id = course.course_id and teaches.year = section.year and teaches.sec_id = section.sec_id and teaches.semester = section.semester and teaches.semester = 'spring' and teaches.year = 2010
+0_3_46	3	select teaches.course_id,title,id from course,teaches where year = '2010' and semester = 'spring' and teaches.course_id = course.course_id
+0_3_47	3	select course.course_id,course.title,instructor.id from instructor,teaches,section,course where instructor.id = teaches.id and teaches.course_id = section.course_id and teaches.sec_id = section.sec_id and teaches.semester = section.semester and teaches.year = section.year and section.course_id = course.course_id and section.year = 2010 and section.semester = 'spring'
+0_3_48	3	select course.course_id,course.title,teaches.id from course,teaches where course.course_id = teaches.course_id and teaches.semester = 'spring' and teaches.year= 2010
+0_3_49	3	select course.course_id,course.title,teaches.id from course,section,teaches where course.course_id=section.course_id and section.sec_id=teaches.sec_id and teaches.course_id = section.course_id and section.semester = teaches.semester and section.year = teaches.year and course.course_id = teaches.course_id and section.semester = 'spring' and section.year = 2010
+0_3_50	3	select course.course_id,course.title,teaches.id from section,teaches,course where course.course_id = section.course_id and teaches.course_id = section.course_id and teaches.sec_id = section.sec_id and teaches.semester = section.semester and teaches.year = section.year and section.semester = 'spring' and section.year = 2010
+0_3_51	3	select course.course_id,course.title,instructor.id from course,instructor,section where section.year=2010 and section.semester='spring'
+0_3_52	3	select teaches.course_id,title,id instructor_id from teaches,course where semester = 'spring' and year = 2010 and teaches.course_id = course.course_id
+0_3_53	3	select course.course_id,course.title,teaches.id from course,teaches where course.course_id = teaches.course_id and teaches.semester = 'spring' and teaches.year = '2010'
+0_3_54	3	select distinct course.course_id,course.title,teaches.id from course,section,teaches where section.year=2010 and section.semester='spring' and section.course_id=course.course_id and teaches.course_id=section.course_id and teaches.sec_id=section.sec_id and teaches.semester=section.semester and teaches.year=section.year
+0_3_55	3	select course_id,title,id from course natural join teaches where semester='spring' and year=2010
+0_3_56	3	select teaches.id,teaches.course_id,course.course_id from teaches,course where teaches.course_id = course.course_id and year = 2010 and semester = 'spring'
+0_3_57	3	select course.course_id,course.title,teaches.id from course,teaches where course.course_id = teaches.course_id and teaches.semester = 'spring' and teaches.year = 2010
+0_3_58	3	select section.course_id,course.course_id,teaches.id from section,course,teaches where section.semester = 'spring' and section.year = '2010' and course.course_id = section.course_id and teaches.course_id = section.course_id and teaches.sec_id = section.sec_id and teaches.semester = 'spring' and teaches.year = '2010'
+0_3_59	3	select course.course_id,course.title,teaches.id from course,teaches where course.course_id=teaches.course_id and teaches.semester='spring' and teaches.year='2010'
+0_3_60	3	select course.course_id,course.title,teaches.id from course,teaches where course.course_id = teaches.course_id and semester = 'spring' and year = '2010'
+0_3_61	3	select teaches.course_id,title,id from course,teaches where teaches.course_id = course.course_id and year = 2010 and semester = 'spring'
+0_3_62	3	select course.course_id,course.title,teaches.id from teaches,course where teaches.semester='spring' and teaches.year=2010 and teaches.course_id=course.course_id
+0_3_63	3	select teaches.course_id,course.title,instructor.name from course,instructor,teaches where course.course_id = teaches.course_id and teaches.year = 2010 and teaches.semester = 'spring' and teaches.id=instructor.id
+0_3_64	3	select course_id,title,id as instructor_id from course natural join teaches where semester='spring' and year='2010'
+0_3_65	3	select course_id,title,id from teaches natural join section natural join course where semester = 'spring' and year = 2010
+0_3_66	3	select course.course_id,course.title,takes.id from course,section,takes where course.course_id = section.course_id and section.year = 2010 and section.semester = 'spring' and course.course_id = takes.course_id and takes.semester = 'spring'
+0_4_1	4	select distinct takes.id,student.name from takes,student where takes.id = student.id and takes.course_id = 'cs-101'
+0_4_2	4	select id,name from takes natural join student where course_id = 'cs-101'
+0_4_3	4	select takes.id,student.name from takes,student where takes.course_id = 'cs-101' and takes.id = student.id
+0_4_4	4	select student.id,student.name from student,takes where takes.course_id = 'cs-101' and takes.id = student.id
+0_4_5	4	select student.id,name from student,course,takes where (student.id=takes.id and course.course_id=takes.course_id) and takes.course_id='cs-101'
+0_4_6	4	select distinct id,name from student natural join takes where course_id='cs-101'
+0_4_7	4	select distinct student.id,student.name from student,takes where student.id=takes.id and course_id='cs-101'
+0_4_8	4	select distinct id,name from student natural join takes where takes.course_id= 'cs-101'
+0_4_9	4	select distinct student.id,name from student,takes where takes.course_id = 'cs-101' and student.id = takes.id
+0_4_10	4	select distinct student.id,student.name from takes,student where student.id=takes.id and course_id='cs-101'
+0_4_11	4	select distinct id,name from student natural join takes where course_id = 'cs-101'
+0_4_12	4	select student.id,name from student,takes where student.id = takes.id and takes.course_id = 'cs-101'
+0_4_13	4	select student.id,student.name from student,takes where student.id=takes.id and takes.course_id='cs-101' and takes.year < 2011
+0_4_14	4	select student.id,student.name from takes,student where takes.course_id='cs-101' and takes.id=student.id
+0_4_15	4	select student.id,student.name from takes,student where takes.id=student.id and takes.course_id='cs-101'
+0_4_16	4	select distinct id,name from student natural join takes where takes.course_id = 'cs-101'
+0_4_17	4	select student.id,student.name from student,takes where student.id = takes.id and course_id = 'cs-101'
+0_4_18	4	select distinct student.id,student.name from student,takes where student.id = takes.id and takes.course_id = 'cs-101'
+0_4_19	4	select student.id,name from student,takes where student.id=takes.id and course_id='cs-101'
+0_4_20	4	select student.id,student.name from student,takes where student.id = takes.id and takes.course_id = 'cs-101'
+0_4_21	4	select distinct id,name from (student natural join takes ) where course_id = 'cs-101'
+0_4_22	4	select takes.id,name from student,takes where takes.id=student.id and takes.course_id='cs-101'
+0_4_23	4	select distinct student.id,name from student,takes where takes.id=student.id and takes.course_id='cs-101'
+0_4_24	4	select distinct takes.id,student.name from student,takes where student.id = takes.id and takes.course_id='cs-101'
+0_4_25	4	select id,name from student natural join takes where course_id='cs-101'
+0_4_26	4	select distinct takes.id,student.name from takes,student where takes.id=student.id and takes.course_id='cs-101'
+0_4_27	4	select * from (select id from takes where course_id ='cs-101') arbit join (select name,id from student) arbit1 on arbit.id=arbit1.id
+0_4_28	4	select distinct id,name from (student natural join takes) where course_id = 'cs-101'
+0_4_29	4	select student.id,name from student,takes where course_id = 'cs-101'and student.id = takes.id
+0_4_30	4	select distinct student.id,student.name from student,takes where takes.id = student.id and takes.course_id = 'cs-101'
+0_4_31	4	select distinct takes.id,student.name from takes,student where takes.course_id = 'cs-101' and takes.id = student.id
+0_4_32	4	select distinct id,name from student natural join takes where takes.course_id='cs-101'
+0_4_33	4	select distinct student.id,name from student,takes where course_id='cs-101' and student.id=takes.id
+0_4_34	4	select distinct student.id,name from student,takes where takes.id = student.id and course_id = 'cs-101'
+0_4_35	4	select distinct student.name from student,takes where student.id=takes.id and takes.course_id='cs-101'
+0_4_36	4	select student.id,student.name from student,takes where student.id=takes.id and course_id='cs-101'
+0_4_37	4	select student.id,student.name from takes,student where takes.id = student.id and takes.course_id = 'cs-101'
+0_4_38	4	select distinct student.id,student.name from student,takes where student.id=takes.id and takes.course_id='cs-101'
+0_4_39	4	select distinct student.id,student.name from takes,student where takes.course_id = 'cs-101' and takes.id = student.id
+0_4_40	4	select distinct id,name from takes natural join student where course_id='cs-101'
+0_4_41	4	select distinct id,name from takes natural join student where course_id = 'cs-101'
+0_4_42	4	select distinct student.id,student.name from student,takes where takes.course_id='cs-101' and takes.id = student.id
+0_4_43	4	select distinct student.id,student.name from takes,student where takes.course_id='cs-101' and takes.id=student.id
+0_4_44	4	select distinct takes.id,student.name from student,takes where takes.id = student.id and takes.course_id = 'cs-101'
+0_4_45	4	select student.id,name from student,takes where student.id=takes.id and takes.course_id='cs-101'
+0_4_46	4	select distinct student.id,student.name from student,takes where takes.course_id='cs-101' and student.id=takes.id
+0_4_47	4	select distinct takes.id,name from takes,student where student.id=takes.id and course_id='cs-101'
+0_4_48	4	select distinct student.id,student.name from student,takes where takes.course_id='cs-101'
+0_4_49	4	select id,name from student natural join takes where course_id = 'cs-101'
+0_4_50	4	select student.id,student.name from student,takes where takes.id=student.id and takes.course_id='cs-101'
+0_4_51	4	select id from (student natural join takes) where course_id = 'cs-101'
+0_5_1	5	select distinct course.dept_name from course,takes where course.course_id=takes.course_id and takes.semester='spring' and takes.year='2010'
+0_5_2	5	select distinct course.dept_name from course,section where section.semester= 'spring' and section.course_id = course.course_id and section.year = '2010'
+0_5_3	5	select distinct department.dept_name from department,section where section.year = 2010 and section.semester = 'spring'
+0_5_4	5	select distinct dept_name from teaches,course where teaches.course_id = course.course_id and semester = 'spring' and year = 2010
+0_5_5	5	select distinct course.dept_name from course,section where section.semester = 'spring' and section.year = '2010' and course.course_id = section.course_id
+0_5_6	5	select distinct dept_name from section,course where section.course_id = course.course_id and section.year = 2010 and section.semester = 'spring'
+0_5_7	5	select distinct instructor.dept_name from teaches,instructor where teaches.semester='spring' and teaches.year='2010' and teaches.id=instructor.id
+0_5_8	5	select distinct dept_name from course,section where course.course_id = section.course_id and semester = 'spring' and year = '2010'
+0_5_9	5	select distinct dept_name from course,section where semester='spring' and year='2010' and course.course_id=section.course_id
+0_5_10	5	select distinct course.dept_name from course,section where (section.semester = 'spring' and year=2010 ) and (course.course_id = section.course_id)
+0_5_11	5	select distinct course.dept_name from course,section where section.year = 2010 and section.semester = 'spring' and section.course_id=course.course_id
+0_5_12	5	select distinct department.dept_name from department,course,teaches where teaches.semester = 'spring' and teaches.year = 2010 and department.dept_name = course.dept_name and teaches.course_id = course.course_id
+0_5_13	5	select distinct dept_name from course natural join section where semester = 'spring' and year = '2010'
+0_5_14	5	select distinct department.dept_name from department,course,teaches where course.course_id=teaches.course_id and semester='spring' and year='2010'
+0_5_15	5	select distinct course.dept_name from course,section where course.course_id = section.course_id and section.semester='spring' and section.year='2010'
+0_5_16	5	select distinct department.dept_name from section,course,department where section.course_id = course.course_id and course.dept_name = department.dept_name and section.year = '2010' and section.semester = 'spring'
+0_5_17	5	select distinct course.dept_name from section,course where semester='spring' and year=2010 and course.course_id=section.course_id
+0_5_18	5	select distinct dept_name from instructor,teaches where teaches.semester = 'spring' and teaches.year = 2010 and teaches.id = instructor.id
+0_5_19	5	select distinct course.dept_name from section,course where section.course_id = course.course_id and section.year = 2010 and section.semester = 'spring'
+0_5_20	5	select distinct course.dept_name from course,teaches where course.course_id = teaches.course_id and teaches.semester = 'spring' and teaches.year = '2010'
+0_5_21	5	select course.dept_name from course,section where course.course_id=section.course_id and semester='spring' and year=2010
+0_5_22	5	select distinct dept_name from section,course where course.course_id=section.course_id and (section.year=2010 and section.semester='spring')
+0_5_23	5	select distinct dept_name from course,section where course.course_id=section.course_id and year = 2010 and semester = 'spring'
+0_5_24	5	select distinct course.dept_name from course,section where semester='spring' and year='2010' and course.course_id=section.course_id
+0_5_25	5	select distinct dept_name from course natural join section where semester = 'spring' and year = 2010
+0_5_26	5	select distinct course.dept_name from section,course where section.year = '2010' and section.semester = 'spring' and section.course_id = course.course_id
+0_5_27	5	select distinct dept_name from section natural join course where semester='spring' and year='2010'
+0_5_28	5	select distinct dept_name from section,course where section.year = '2010' and section.semester = 'spring' and section.course_id = course.course_id
+0_5_29	5	select distinct dept_name from (select course.dept_name,section.course_id from course,section where section.semester= 'spring' and section.year='2010' and section.course_id=course.course_id ) as s
+0_5_30	5	select dept_name from department,section where year='2010' and semester='spring'
+0_5_31	5	select distinct course.dept_name from course,section where course.course_id=section.course_id and section.semester='spring' and section.year=2010
+0_5_32	5	select distinct dept_name from section natural join course natural join department where semester='spring' and year='2010'
+0_5_33	5	select distinct department.dept_name from course,department,section where course.dept_name = department.dept_name and course.course_id = section.course_id and section.semester = 'spring' and section.year = 2010
+0_5_34	5	select distinct instructor.dept_name from teaches,instructor where teaches.id = instructor.id and teaches.semester = 'spring' and teaches.year = '2010'
+0_5_35	5	select distinct course.dept_name from section,course where section.course_id = course.course_id and section.semester = 'spring' and section.year = 2010
+0_5_36	5	select distinct course.dept_name from course,section where section.semester='spring' and section.course_id=course.course_id and section.year=2010
+0_5_37	5	select distinct dept_name from course,section where course.course_id = section.course_id and year = 2010 and semester = 'spring'
+0_5_38	5	select distinct course.dept_name from section,course where section.course_id = course.course_id and section.year = '2010' and section.semester = 'spring'
+0_5_39	5	select distinct teaches.course_id from course,teaches where teaches.course_id = course.course_id and teaches.semester = 'spring' and teaches.year = '2010'
+0_5_40	5	select distinct course.dept_name from course,section where course.course_id=section.course_id and section.semester='spring' and section.year='2010'
+0_5_41	5	select distinct dept_name from teaches,instructor where teaches.semester='spring' and teaches.year='2010' and teaches.id=instructor.id
+0_5_42	5	select department.dept_name from department,section,course where course.dept_name = department.dept_name and section.course_id = course.course_id and section.semester = 'spring'
+0_5_43	5	select distinct dept_name from course,section where section.semester='spring' and section.year=2010 and section.course_id = course.course_id
+0_5_44	5	select distinct dept_name from section,course where section.course_id = course.course_id and semester = 'spring' and year = '2010'
+0_5_45	5	select department.dept_name from department,course,section where section.course_id = course.course_id and course.dept_name = department.dept_name and section.semester = 'spring' and section.year = 2010
+0_5_46	5	select distinct dept_name from section,course where course.course_id = section.course_id and section.semester = 'spring' and section.year = 2010
+0_5_47	5	select distinct department.dept_name from section,course,department where section.course_id = course.course_id and course.dept_name = department.dept_name and semester = 'spring' and year = 2010
+0_5_48	5	select distinct course.dept_name from course,section where course.course_id = section.course_id and section.semester = 'spring' and section.year = 2010
+0_5_49	5	select distinct dept_name from course where course_id in (select course_id from takes where semester = 'spring' and year = 2010)
+0_5_50	5	select distinct dept_name from section,course where section.course_id=course.course_id and semester='spring' and year= '2010'
+0_5_51	5	select distinct course.dept_name from course,section where section.year='2010' and section.semester='spring'
+0_5_52	5	select distinct instructor.dept_name from instructor join teaches on instructor.id = teaches.id and teaches.semester = 'spring' and teaches.year = '2010'
+0_5_53	5	select distinct dept_name from course,section where course.course_id = section.course_id and semester = 'spring' and year='2010'
+0_5_54	5	select distinct department.dept_name from section,course,department where section.semester='spring' and section.year=2010 and section.course_id=course.course_id and course.dept_name=department.dept_name
+0_5_55	5	select distinct department.dept_name from department,course,section where section.course_id=course.course_id and course.dept_name=department.dept_name and section.semester='spring' and section.year=2010
+0_5_56	5	select distinct department.dept_name from course,department where course.dept_name=department.dept_name
+0_5_57	5	select distinct course.dept_name from course,section where section.semester = 'spring' and section.year = '2010' and section.course_id = course.course_id
+0_5_58	5	select distinct course.dept_name from course,section where section.course_id = course.course_id and section.semester = 'spring' and section.year = 2010
+0_5_59	5	select distinct dept_name from course,section where section.course_id=course.course_id and section.semester='spring' and section.year='2010'
+0_5_60	5	select distinct course.dept_name from course,teaches where course.course_id = teaches.course_id and teaches.semester = 'spring' and teaches.year = 2010
+0_5_61	5	select distinct dept_name from course,section where course.course_id = section.course_id and section.semester = 'spring'and section.year = 2010
+0_5_62	5	select distinct course.dept_name from course,teaches where teaches.semester = 'spring' and teaches.year ='2010' and teaches.course_id = course.course_id
+0_5_63	5	select distinct course.dept_name from course,section where course.course_id = section.course_id and section.year = 2010 and section.semester = 'spring'
+0_5_64	5	select distinct department.dept_name from department,section where section.semester='spring' and section.year='2010'
+0_5_65	5	select distinct course.dept_name from course,section where section.course_id = course.course_id and section.semester = 'spring' and year = '2010'
+0_5_66	5	select distinct course.dept_name from course,section where course.course_id = section.course_id and section.semester = 'spring' and section.year = '2010'
+0_5_67	5	select distinct course.dept_name from section,course where section.course_id = course.course_id and semester = 'spring' and year = '2010'
+1_1_1	6	select course.course_id,course.title from course where course.credits > 3
+1_1_2	6	select course_id,title from course where credits >3
+1_1_3	6	select course.course_id,course.title from course where credits >3
+1_1_4	6	select course_id,title from course where course.credits > 3
+1_1_5	6	select course_id,title from course where credits > 3
+1_1_6	6	select course_id,title from course where credits>3
+1_1_7	6	select course_id,title,credits from course where credits > 3
+1_1_8	6	select course_id,title from course where credits < 3
+1_1_9	6	select course_id,title from course where course.credits >3
+1_1_10	6	select course_id,title from course where credit > 3
+1_1_11	6	select id,title from course where credits > 3
+1_2_1	7	(select course_id,count( course_id) from takes group by course_id ) union (select course_id,0 zero from course ) ) except (select distinct course_id,0 zero from takes
+1_2_2	7	select course_id,count(*) from (select distinct id,course_id from takes) a group by course_id) union ((select course_id,0 from course) except (select distinct course_id,0 from takes)
+1_2_3	7	select course_id,count(*) from (select distinct course_id,takes.id from takes natural join section) a group by course_id) union (select course_id,0 from ((select course_id from course) except (select distinct course_id from (select distinct course_id,takes.id from takes natural join section) b) ) c
+1_2_4	7	select course_id,count(course_id) from (select distinct id,course_id from takes) a group by course_id) union (select course_id,0 from ((select course_id from course) except (select distinct course_id from takes)) b
+1_2_5	7	select takes.course_id,count (distinct takes.id) from takes group by takes.course_id) union ( (select course.course_id,0 from course) except (select course_id,0 from (select takes.course_id,count(distinct takes.id) from takes group by takes.course_id) a )
+1_2_6	7	select course.course_id,(select count(distinct id) from takes where course.course_id=takes.course_id) from course
+1_2_7	7	select course_id,count(*) from takes group by course_id) union ((select course_id,0 from course) except (select course_id,0 from takes)
+1_2_8	7	select course_id,count(distinct id) from takes group by course_id) union (select distinct course_id,0 from course except select distinct course_id,0 from takes
+1_2_9	7	select course_id,count(distinct id) from takes group by course_id) union (select course.course_id,0 from course where course.course_id not in (select course_id from takes)
+1_2_10	7	select distinct course_id,count(*) as count from takes group by course_id) union select course_id,0 as count from (select course_id from course except select distinct course_id from takes)
+1_2_11	7	select distinct course_id,count(id) from takes group by course_id) union (select course_id,0 from course) except (select distinct course_id,0 from takes
+1_2_12	7	select distinct course.course_id,(select count (distinct takes.id) from takes,student where takes.course_id=course.course_id and takes.id=student.id) from course
+1_2_13	7	select course.course_id,count(distinct id) from takes right outer join course on (takes.course_id = course.course_id) group by course.course_id
+1_2_14	7	select course.course_id,(select count(distinct takes.id) from takes where course.course_id=takes.course_id ) from course
+1_2_15	7	select course_id,count(id) from course left outer join takes using (course_id) group by course_id
+1_2_16	7	select course_id,count(distinct id) from takes group by course_id) union (select distinct course_id,0 from course where course_id not in (select course_id from takes)
+1_2_17	7	with dis as (select distinct takes.course_id,count(distinct takes.id) from takes group by takes.course_id) select course.course_id,0 from course where course.course_id not in (select course_id from dis) union select * from dis
+1_2_18	7	select course_id,0 from course except select course_id,0 from (select course.course_id,student.id from course,takes,student where course.course_id = takes.course_id and takes.id = student.id) a union select course_id,count(distinct id) from (select course.course_id,student.id from course,takes,student where course.course_id = takes.course_id and takes.id = student.id) a group by(course_id)
+1_2_19	7	with selected as (select course_id,count (distinct id) from takes group by (course_id)) select * from selected union (select course_id,0 from ((select course_id from course) except (select course_id from selected)) a)
+1_2_20	7	select course_id,count (*) from (select distinct student.id id,takes.course_id course_id from student,takes where takes.id = student.id) a group by course_id ) union (select course.course_id,0 from course) except (select course_id,0 from ( select course_id,count (*) from (select distinct student.id id,takes.course_id course_id from student,takes where takes.id = student.id) b group by course_id ) c
+1_2_21	7	select course.course_id,(select count(takes.course_id) from takes where course.course_id = takes.course_id) as num_students from course
+1_2_22	7	select course_id,count(distinct id) from takes group by (course_id)) union (select course_id,0 from ((select course_id from course) except (select distinct course_id from takes)) a
+1_2_23	7	select a.course_id,count ( distinct a.id ) as students_in_course from takes a group by a.course_id) union (select course_id,0 from ( (select course_id from course) except (select course_id from takes) ) b
+1_2_24	7	select course_id,count(distinct id) from student natural join takes group by course_id) union (select course_id,0 from (select course_id from course except select course_id from takes) a
+1_2_25	7	select course_id,count(distinct id) from student natural join takes group by course_id) union ( select course_id,0 from ((select course_id from course) except (select course_id from takes)) a
+1_2_26	7	select course.course_id,(select count(distinct takes.id) from takes where course.course_id=takes.course_id) from course
+1_2_27	7	select distinct course_id,count(id) as total_students from (select * from section natural join takes) t group by course_id union select distinct course.course_id,0 total_students from course where course.course_id not in (select distinct section.course_id from section )
+1_2_28	7	with t as (select distinct id,course_id from takes natural join section) select course.course_id,count(distinct id) from course left outer join t on (t.course_id = course.course_id) group by course.course_id
+1_2_29	7	with data as (select course.title,student.id from course,takes,student where takes.id = student.id and takes.course_id = course.course_id) select distinct data.id,(select count(id) from data d where d.title = data.title) students from data
+1_2_30	7	with t as (select distinct id,course_id from takes natural join section) select course.course_id,count(*) from t right outer join course on (t.course_id = course.course_id) group by course.course_id
+1_2_31	7	select course_id,count(course_id) from takes group by course_id) union ( (select course_id,0 zero from course ) except (select course_id,0 zero from takes)
+1_2_32	7	select takes.course_id,count (distinct takes.id) from takes group by takes.course_id ) union ((select course_id,0 from course) except (select course_id,0 from (select takes.course_id,count (distinct takes.id) from takes group by takes.course_id ) a)
+1_2_33	7	select course_id,count(distinct id) from takes group by course_id) union (select course_id,0 credits from course where course_id not in (select course_id from takes)
+1_2_34	7	with taken_courses as (select course_id,count(*) from (select distinct id,course_id from takes) a group by course_id) (select * from taken_courses) union (select distinct course.course_id,0 from course where course.course_id not in (select course_id from taken_courses))
+1_2_35	7	select course_id,count(id) from (select distinct course.course_id,id from takes right outer join course on (takes.course_id = course.course_id)) a group by course_id
+1_2_36	7	select course.course_id,count(distinct id) from takes right outer join course on(course.course_id = takes.course_id) group by course.course_id
+1_2_37	7	select course_id,count (course_id) from takes group by course_id) union (select course_id,0 from course where course_id not in (select course_id from takes)
+1_2_38	7	select course_id,count(distinct id) from takes group by course_id) union select course_id,0 from ( (select course_id from course) except (select course_id from takes) )
+1_2_39	7	select course.course_id,(select count(*) from takes where course.course_id = takes.course_id and takes.grade <> 'f') as num_students from course
+1_2_40	7	select course_id,count (id) from (select distinct id,course_id from takes natural join course) a group by course_id
+1_2_41	7	select course_id,count(distinct id) from takes group by course_id union select distinct course_id,0 from course except select distinct course_id,0 from takes
+1_2_42	7	select course_id,count(id) from takes group by course_id) union ((select course_id,0 as count from course) except (select course_id,0 as count from takes)
+1_2_43	7	with tab as (select course_id as course_id from course natural join takes natural join student) (select distinct course_id,count(*) from tab group by course_id) union (select course.course_id,0 from course,tab where course.course_id not in (select course_id from tab))
+1_2_44	7	select course_id,count(distinct id) id from takes group by course_id union select course_id,0 id from course where course_id not in (select course_id from takes)
+1_2_45	7	select * from (select course_id,count(id) count from takes group by course_id) a) union (select course_id,0 count from ((select course_id from course) except (select course_id from (select course_id,count(id) count from takes group by course_id) b)) c
+1_2_46	7	select course_id,count(course_id) from (select distinct id,course_id from takes) a group by course_id) union (select course_id,0 from ( (select course_id from course) except (select distinct course_id from takes)) b
+1_2_47	7	select course_id,count(distinct id) as no_of_students from takes group by course_id) union (select course_id,0 from course where course_id not in (select course_id from takes )
+1_2_48	7	select course_id,count(distinct id) as a from takes group by course_id) union (select course_id,0 from course where course_id not in (select course_id from takes))
+1_2_49	7	with coursestaken as( select course_id,count(*) from (select distinct id,course_id from takes) a group by course_id) (select * from coursestaken ) union (select course.course_id,0 from course where course.course_id not in(select course_id from coursestaken))
+1_2_50	7	select course_id,count(distinct id) from takes group by course_id union select course_id,0 credits from course where course_id not in (select course_id from takes)
+1_2_51	7	select course_id,count(course_id) from (select distinct course_id,id from takes) a group by course_id
+1_2_52	7	select course_id,no_student from (select course_id,count(*) no_student from takes group by course_id) a
+1_2_53	7	select distinct course.course_id,(select count(distinct takes.id) from takes where takes.course_id = course.course_id) count_val from course
+1_2_54	7	select course_id,0 count from course except select course_id,0 count from (select * from takes natural join section) a group by course_id union ( select course_id,count(distinct id) from (select * from takes natural join section) b group by course_id )
+1_2_55	7	select course_id,0 from (select distinct course_id,0 from course) a except select course_id,0 from (select course_id,0,count(distinct id) from (select course.course_id,takes.year,student.id,0 from course,takes,student where course.course_id=takes.course_id and takes.id=student.id) b group by course_id) c union (select course_id,count(distinct id) from (select course.course_id,takes.year,student.id from course,takes,student where course.course_id=takes.course_id and takes.id=student.id) d group by course_id)
+1_2_56	7	select course_id,count(distinct id) student_count from student natural join takes group by course_id) union ((select course_id,0 from course) except (select course_id,0 from takes)
+1_2_57	7	select course_id,count( *) students from takes group by course_id) union (select course_id,0 students from course where course_id not in (select course_id from takes)
+1_2_58	7	select course_id,case when count(distinct id) is not null then count(distinct id) when count(distinct id) is null then 0 end number_of_students from takes group by course_id) union (select course_id,0 number_of_students from course where course_id not in (select course_id from takes)
+1_2_59	7	select course_id,count(distinct id) from takes group by course_id) union select course_id,0 from ((select course_id from course) except (select course_id from takes))
+1_2_60	7	select distinct course_id,(select count(a.id) from takes a where a.course_id=b.course_id) from takes b) union ( (select distinct course_id,0 from course) except (select distinct course_id,0 from takes)
+1_2_61	7	select a.course_id,count( distinct a.id ) as students_in_course from takes a group by a.course_id) union (select course_id,0 from ( (select course_id from course) except (select course_id from takes) ) b
+1_3_1	8	select distinct course_id,course.title from course natural join section where section.semester = 'spring' and section.year = 2010) except (select course_id,course.title from course natural join prereq
+1_3_2	8	select distinct course_id,title from course natural join section where semester='spring' and year=2010) intersect ((select course_id,title from course)except(select course.course_id,course.title from course,prereq where course.course_id=prereq.course_id)
+1_3_3	8	select course_id,title from course natural join section where year=2010 and semester='spring' and course_id not in (select course_id from prereq)
+1_3_4	8	select course.course_id,course.title from section,course where section.course_id = course.course_id and section.year = '2010' and section.semester = 'spring') except (select course.course_id,course.title from section,course,prereq where section.course_id = course.course_id and course.course_id = prereq.course_id and section.year = '2010' and section.semester = 'spring'
+1_3_5	8	select course_id,title from course natural join takes where semester= 'spring' and year = '2010' and course_id not in (select course_id from prereq)
+1_3_6	8	select distinct course_id,title from section natural join course where semester='spring' and year=2010 and course_id not in (select distinct course_id from prereq)
+1_3_7	8	select section.course_id,course.title from section,course where section.course_id=course.course_id and section.year=2010 and section.semester='spring') intersect ((select course.course_id,course.title from course) except (select course.course_id,course.title from course,prereq where course.course_id=prereq.course_id)
+1_3_8	8	select course.course_id,title from course,section where course.course_id=section.course_id and semester='spring' and year=2010) except (select course.course_id,title from course,prereq,section where course.course_id=prereq.course_id and course.course_id=section.course_id and semester='spring' and year=2010
+1_3_9	8	select course_id,title from course natural join section where semester = 'spring' and year = '2010' and course_id not in (select course_id from prereq)
+1_3_10	8	select course_id,title from course natural join section where semester = 'spring' and year = 2010) except (select course_id,title from prereq natural join course
+1_3_11	8	select course.course_id,course.title from course,section,prereq where section.year = 2010 and section.semester = 'spring' and section.course_id = course.course_id) except (select course_id,title from (select * from course natural join prereq) a
+1_3_12	8	select section.course_id,course.title from section,course where section.course_id = course.course_id and section.semester = 'spring' and section.year = 2010) except (select section.course_id,course.title from section,course,prereq where section.course_id = course.course_id and section.course_id = prereq.course_id and prereq.prereq_id is not null
+1_3_13	8	select course_id,title from course except select course_id,title from course natural join prereq
+1_3_14	8	select course_id,title from course natural join section where year=2010 and semester = 'spring') except (select course_id,title from course natural join prereq natural join section where year=2010 and semester = 'spring'
+1_3_15	8	select course_id,title from course natural join section where semester = 'spring' and year = 2010 except (select course_id,title from course natural join prereq)
+1_3_16	8	select course.course_id,title from course,section where section.course_id=course.course_id and year='2010' and semester='spring') except (select course.course_id,title from section,course,prereq where section.course_id=course.course_id and course.course_id = prereq.course_id and section.year='2010' and section.semester='spring'
+1_3_17	8	select course_id from course) except (select course_id from prereq
+1_3_18	8	select course.course_id,course.title from course) except (select course.course_id,course.title from course,prereq where course.course_id = prereq.course_id
+1_3_19	8	select course.course_id,title from course,section where section.semester='spring' and section.year=2010 and section.course_id=course.course_id) except (select course.course_id,title from course,prereq where course.course_id=prereq.course_id
+1_3_20	8	select course_id,title from course natural join section where semester='spring' and year='2010' and course_id not in (select course_id from prereq)
+1_3_21	8	select course.course_id,course.title from course,section where course.course_id = section.course_id and semester = 'spring' and year = 2010 except select course.course_id,course.title from course,prereq where course.course_id = prereq.course_id
+1_3_22	8	select course.course_id,course.title from course,takes where course.course_id = takes.course_id and takes.year = 2010 and takes.semester = 'spring') except (select distinct course.course_id,course.title from course,takes,prereq where course.course_id = prereq.course_id and course.course_id = takes.course_id and takes.year = 2010 and takes.semester = 'spring'
+1_3_23	8	select course_id,title from course natural join section where year='2010' and semester='spring') except (select course_id,title from course natural join section natural join prereq where year='2010' and semester='spring'
+1_3_24	8	select distinct section.course_id,course.title from course,section,prereq where course.course_id=section.course_id and section.course_id not in (select prereq.course_id from prereq) and section.semester='spring' and section.year=2010
+1_3_25	8	with a as (select course_id as course_id,title as title from course where course.course_id not in (select distinct course_id from prereq) ) select a.course_id,a.title from section,a where a.course_id = section.course_id and year = '2010' and semester = 'spring'
+1_3_26	8	select course.course_id,course.title from section,course where section.course_id = course.course_id and section.semester = 'spring' and section.year = '2010' and section.course_id not in (select prereq.course_id from prereq,course,section where course.course_id = prereq.course_id and section.course_id = course.course_id and section.semester = 'spring' and year = '2010')
+1_3_27	8	select course_id,title from section natural join course where semester = 'spring' and year = 2010 and course_id not in (select course_id from prereq)
+1_3_28	8	select distinct course.course_id,course.title from course,section,prereq where section.semester = 'spring' and section.year = '2010' and course.course_id = section.course_id and course.course_id not in (select course_id from prereq)
+1_3_29	8	select course.course_id,course.title from course where course.course_id not in (select course_id from prereq)
+1_3_30	8	select course_id from course except select course_id from course natural join prereq
+1_3_31	8	select distinct section.course_id,course.title from section,course where section.semester = 'spring' and section.year = '2010'and section.course_id = course.course_id except select prereq.course_id,course.title from prereq,course
+1_3_32	8	select distinct section.course_id,course.title from section,course where course.course_id=section.course_id and semester='spring' and year='2010' and course.course_id not in(select course_id from prereq)
+1_3_33	8	select distinct course.course_id,course.title from section,course where section.semester = 'spring' and section.year = '2010' and section.course_id = course.course_id except select distinct prereq.course_id,course.title from prereq,course
+1_3_34	8	select course.course_id,course.title from course,section where course.course_id=section.course_id and section.year='2010' and semester = 'spring') except (select prereq.course_id,course.title from prereq,course where prereq.course_id=course.course_id
+1_3_35	8	select distinct course.course_id,course.title from course,takes where course.course_id = takes.course_id and takes.semester='spring' and takes.year='2010') except (select distinct course.course_id,course.title from course,prereq where course.course_id=prereq.course_id
+1_3_36	8	select course.course_id,title from course,section where course.course_id not in (select course_id from prereq) and course.course_id = section.course_id and semester = 'spring' and year = 2010
+1_3_37	8	select course.course_id,course.title from section,course where section.semester = 'spring' and section.year = '2010' and section.course_id = course.course_id) except (select course.course_id,course.title from section,course,prereq where section.semester = 'spring' and section.year = '2010' and section.course_id = course.course_id and course.course_id = prereq.course_id
+1_3_38	8	select course.course_id,course.title from section,course,prereq where section.semester='spring' and section.year='2010' and section.course_id = course.course_id ) except (select course.course_id,course.title from section,course,prereq where section.semester='spring' and section.year='2010' and section.course_id = course.course_id and prereq.course_id=course.course_id
+1_3_39	8	select course.course_id,course.title from course,section,prereq where course.course_id= course.title and section.semester = 'spring' and section.year = '2010' and course.course_id not in (select course_id from prereq)
+1_3_40	8	select course.course_id,course.title from course,section where course.course_id=section.course_id and section.semester='spring' and section.year=2010) except (select course.course_id,course.title from course,section,prereq where course.course_id=section.course_id and section.semester='spring' and prereq.course_id= section.course_id and section.year=2010
+1_3_41	8	select course.course_id,course.title from section,course where section.course_id = course.course_id and section.semester='spring' and section.year = 2010) except (select course.course_id,course.title from section,course,prereq where section.course_id = course.course_id and section.course_id = prereq.course_id and section.semester='spring' and section.year = 2010
+1_3_42	8	select course.course_id,course.title from course,section where course.course_id = section.course_id and section.semester = 'spring' and section.year = '2010') except (select course.course_id,course.title from course,prereq where course.course_id = prereq.course_id
+1_3_43	8	select course.course_id,course.title from takes,course where takes.course_id = course.course_id and takes.semester = 'spring' and takes.year = '2010' except select course.course_id,course.title from prereq,course where prereq.course_id = course.course_id
+1_3_44	8	select * from (select distinct course_id from teaches where year=2010) arbit1 join (select distinct course_id from prereq) arbit2 on arbit1.course_id=arbit2.course_id
+1_3_45	8	select distinct course_id from section where semester='spring' and year='2010') except (select course_id from prereq
+1_3_46	8	select course.course_id from (course join section on course.course_id=section.course_id) where section.semester = 'spring' and section.year = 2010) except (select course_id from prereq
+1_3_47	8	select course_id,title from course natural join teaches where semester = 'spring' and year = 2010) except (select course_id,title from course natural join teaches natural join prereq where semester = 'spring' and year = 2010
+1_3_48	8	select distinct course_id,title from course natural join section where semester = 'spring' and year = 2010 and course_id not in (select course_id from prereq)
+1_3_49	8	select course.course_id from course,section where section.semester='spring' and section.year='2010' and course.course_id=section.course_id except select prereq.course_id from prereq
+1_3_50	8	select course_id from (section natural join course) where semester = 'spring' and year='2010') except (select course_id from prereq
+1_3_51	8	select distinct course.course_id,title from course,prereq,section where not(course.course_id=prereq.course_id) and section.course_id=course.course_id and section.semester='spring' and section.year='2010'
+1_3_52	8	select course_id,title from course join teaches using (course_id) where semester='spring' and year='2010' and course_id not in (select course_id from prereq)
+1_3_53	8	select course.course_id,title from course,section where course.course_id=section.course_id and semester='spring' and year='2010') except (select course.course_id,title from course,prereq where course.course_id=prereq.course_id
+1_3_54	8	select course.course_id,course.title from course,section where course.course_id=section.course_id and section.year='2010' and section.semester='spring' intersect (select course.course_id,course.title from course except (select course.course_id,course.title from prereq,course where prereq.course_id=course.course_id))
+1_3_55	8	select distinct course_id,title from (course natural join section) where year = '2010' and semester = 'spring' and course_id not in (select course_id from prereq)
+1_3_56	8	select course_id,title from course natural join section where semester='spring' and year=2010) except (select course_id,title from course natural join prereq
+1_3_57	8	select distinct course.course_id,course.title from course,section,prereq where course.course_id = section.course_id and section.semester = 'spring' and section.year = 2010 and course.course_id not in (select prereq.course_id from prereq)
+1_3_58	8	select section.course_id,course.title from section,course,prereq where section.semester = 'spring' and section.course_id = course.course_id and section.year=2010 except select distinct course.course_id,course.title from course,prereq where prereq.course_id=course.course_id
+1_3_59	8	select course.course_id,course.title from course,teaches where teaches.semester='spring' and teaches.year='2010' and teaches.course_id=course.course_id) except (select course.course_id,course.title from course,prereq where course.course_id = prereq.course_id
+1_3_60	8	select course.course_id,course.title from teaches,course where teaches.course_id = course.course_id and teaches.year = 2010 and teaches.semester = 'spring' and not exists ( select * from prereq where prereq.course_id = course.course_id )
+1_3_61	8	select course_id,title from course natural join section where year = '2010' and semester = 'spring') except (select course_id,title from course natural join prereq
+1_3_62	8	select course_id,title from course natural join section where semester = 'spring' and year = 2010) except (select course.course_id,title from course,prereq where course.course_id = prereq.course_id
+1_3_63	8	select course.course_id,course.title from course,section where section.semester = 'spring' and section.year = '2010' and section.course_id = course.course_id ) except (select course.course_id,course.title from course,prereq,section where section.semester = 'spring' and section.year = '2010' and section.course_id = course.course_id and course.course_id = prereq.course_id
+1_3_64	8	select distinct course_id,title from teaches natural join course where semester = 'spring' and year ='2010') except (select distinct course_id,title from course natural join (teaches natural join prereq) where semester = 'spring' and year = 2010
+1_4_1	9	select distinct id,name from (select * from student natural join takes natural join section natural join time_slot) a where (select count(b.id) from (select * from student natural join takes natural join section natural join time_slot) b where a.id=b.id and a.course_id!=b.course_id and a.time_slot_id=b.time_slot_id and a.semester=b.semester and a.year=b.year)>1
+1_4_2	9	with try as (select id,name,time_slot_id,semester,year from student natural join takes natural join section) select id,name from try group by id,name,time_slot_id,semester,year having count(*)>1
+1_4_3	9	select id,name from student where id in (select distinct s.id from (select * from takes natural join section ) s,(select * from takes natural join section ) t where s.id=t.id and s.time_slot_id = t.time_slot_id and s.course_id <> t.course_id)
+1_4_4	9	select distinct b.id,b.name from (select * from section natural join takes natural join student) a,(select * from section natural join takes natural join student) b where a.id = b.id and a.semester = b.semester and a.year = b.year and a.time_slot_id = b.time_slot_id and a.course_id <> b.course_id
+1_4_5	9	select distinct first.id,first.name from (select * from student natural join takes natural join section) first,(select * from student natural join takes natural join section) second where first.name = second.name and first.course_id != second.course_id and first.time_slot_id = second.time_slot_id and first.semester = second.semester and first.year = second.year
+1_4_6	9	with data1 as (select student.name,takes.id,section.course_id,section.time_slot_id,section.year,section.semester from takes,section,student where takes.course_id=section.course_id and student.id=takes.id),data2 as (select student.name,takes.id,section.course_id,section.time_slot_id,section.year,section.semester from takes,section,student where takes.course_id=section.course_id and student.id=takes.id) select data1.id,data1.name from data1,data2 where data1.id=data2.id and data1.time_slot_id=data2.time_slot_id and data1.year=data2.year and data1.semester=data2.semester and data1.course_id<>data2.course_id
+1_4_7	9	select distinct a.id from takes a,takes b,section c,section d where a.id = b.id and a.semester = c.semester and a.sec_id = c.sec_id and a.year = c. year and b.year = d.year and b.semester = d.semester and b.sec_id = d.sec_id and a.course_id = c.course_id and b.course_id = d.course_id and c.time_slot_id = d.time_slot_id and c.course_id <> d.course_id
+1_4_8	9	with tab_new as (select id,name,year,semester,time_slot_id,course_id from student natural join takes natural join section) select a1.id,a1.name from tab_new a1,tab_new a2 where a1.course_id<>a2.course_id and a1.id = a2.id and a1.year = a2.year and a1.semester = a2.semester and a1.time_slot_id = a2.time_slot_id
+1_4_9	9	select id,name from (select id,semester,year,time_slot_id,count(*) no_of_courses from takes natural join section group by id,semester,year,time_slot_id) a natural join student where no_of_courses>1
+1_4_10	9	select s.id,s.name from (select * from student natural join takes natural join section natural join time_slot) s,(select * from student natural join takes natural join section natural join time_slot) t where s.id = t.id and s.semester = t.semester and s.year = t.year and s.sec_id = t.sec_id and s.time_slot_id = t.time_slot_id and s.course_id <> t.course_id
+1_4_11	9	select id,name from (select id,student.name,semester,year,section.time_slot_id,count(*) as abc from student natural join takes natural join section group by id,student.name,semester,year,section.time_slot_id) a where abc > 1
+1_4_12	9	select student.id,name,s1.time_slot_id,s2.time_slot_id,t1.course_id,t2.course_id from student,takes t1,section s1,takes t2,section s2 where student.id=t1.id and student.id=t2.id and t1.course_id=s1.course_id and t1.sec_id=s1.sec_id and t1.semester=s1.semester and t1.year=s1.year and t2.course_id=s2.course_id and t2.sec_id=s2.sec_id and t2.semester=s2.semester and t2.year=s2.year and t1.course_id <> t2.course_id and t1.semester=t2.semester and t1.year = t2.year and s1.time_slot_id = s2.time_slot_id
+1_4_13	9	select student.id,student.name from student where student.id in (select takes.id from takes,section where takes.course_id = section.course_id and takes.sec_id = section.sec_id and takes.semester = section.semester and takes.year = section.year group by takes.id,takes.semester,takes.year,section.time_slot_id having count(*) > 1)
+1_4_14	9	select student.id,student.name from section s1,section s2,takes t1,takes t2,student where s1.sec_id = s2.sec_id and s1.semester = s2.semester and s1.year = s2.year and not (s1.course_id = s2.course_id) and t1.id = student.id and s1.time_slot_id = s2.time_slot_id and s1.sec_id = t1.sec_id and s1.semester = t1.semester and s1.year = t1.year and s1.course_id = t1.course_id and s2.course_id = t2.course_id and t1.id = t2.id
+1_4_15	9	select distinct student.id,student.name from section s1,section s2,student,takes t1,takes t2 where t1.id = t2.id and s1.course_id = t1.course_id and s2.course_id = t2.course_id and s1.sec_id = t1.sec_id and s2.sec_id = t2.sec_id and s1.semester = t1.semester and s2.semester = t2.semester and s1.year = t1.year and s2.year = t2.year and t1.id = student.id and not(s1.course_id = s2.course_id) and s1.time_slot_id = s2.time_slot_id
+1_4_16	9	with timeslotids as (select * from student natural join takes natural join section) select distinct a.id,a.name from timeslotids a,timeslotids b where a.year=b.year and a.course_id<>b.course_id and a.semester=b.semester and a.id=b.id and a.time_slot_id=b.time_slot_id
+1_4_17	9	with newrel as (select * from (student natural join takes) natural join section) select a.id,a.name from newrel a,newrel b where a.id = b.id and a.time_slot_id = b.time_slot_id and a.year = b.year and a.semester = b.semester and a.course_id <> b.course_id
+1_4_18	9	select distinct student1.id,student1.name from (select *from student natural join takes natural join section) student1,(select *from student natural join takes natural join section) student2 where student1.name = student2.name and student1.course_id != student2.course_id and student1.time_slot_id = student2.time_slot_id and student1.semester = student2.semester and student1.year = student2.year
+1_4_19	9	select id from (select id,semester,year,time_slot_id,count(*) from student natural join takes natural join section group by id,semester,year,time_slot_id having count(*) > 1) a
+1_4_20	9	select distinct student.name,takes.id,s1.course_id,s2.course_id from section s1,section s2,takes,student where takes.course_id = s1.course_id and s1.course_id <> s2.course_id and s1.time_slot_id = s2.time_slot_id and s1.semester = s2.semester and s1.year = s2.year and takes.sec_id = s1.sec_id and s1.semester = takes.semester and s1.year = takes.year and student.id = takes.id and s2.time_slot_id = s2.time_slot_id and takes.sec_id = s2.sec_id and s2.semester = takes.semester and s2.year = takes.year
+1_4_21	9	with rel as (select * from (select id,name,start_hr,start_min,course_id,year,semester from (((student natural join takes) natural join section ) natural join time_slot))a ) select distinct a.id,a.name from rel a,rel b where a.name = b.name and a.start_hr = b.start_hr and a.start_min = b.start_min and a.year = b.year and a.semester = b.semester and a.course_id <> b.course_id
+1_4_22	9	with x as (select * from takes natural join section) select distinct a.id,student.name from (select * from x) a,student where a.id = student.id and exists (select * from x b where a.semester=b.semester and a.year=b.year and a.id=b.id and a.course_id!=b.course_id and a.time_slot_id=b.time_slot_id)
+1_4_23	9	with compare as (select * from student natural join takes natural join section) select t.id,t.name from compare t,compare s where t.time_slot_id = s.time_slot_id and t.semester = s.semester and t.year = s.year and t.id = s.id and t.course_id <> s.course_id
+1_4_24	9	select distinct a.id,a.name from (select * from student natural join takes natural join section) a,(select * from section natural join takes natural join student) b where a.name = b.name and a.time_slot_id = b.time_slot_id and a.course_id <> b.course_id
+1_4_25	9	select distinct t.id,t.name from (select distinct name,id,time_slot_id,course_id from student natural join takes natural join section) t,(select distinct name,id,time_slot_id,course_id from student natural join takes natural join section) n where t.name=n.name and t.time_slot_id=n.time_slot_id and t.course_id!=n.course_id
+1_4_26	9	select student.id,student.name from student where student.id in( select distinct a.id from takes a,takes b where a.id=b.id and a.course_id <> b.course_id and a.year =b.year and a.semester=b.semester and a.course_id in (select c.course_id from section c,section d where c.time_slot_id=d.time_slot_id and c.course_id <> d.course_id and a.course_id=c.course_id and b.course_id=d.course_id ))
+1_4_27	9	select abc.id,abc.name from (select course_id,sec_id,semester,year,id,name,time_slot_id from (student natural join takes) natural join section) abc,(select course_id,sec_id,semester,year,name,id,time_slot_id from (student natural join takes) natural join section) pqr where abc.course_id <> pqr.course_id and abc.id = pqr.id and abc.semester = pqr.semester and abc.year = pqr.year and abc.time_slot_id = pqr.time_slot_id
+1_4_28	9	with rel as (select * from (select id,name,start_hr,start_min,course_id,year,semester from (((student natural join takes) natural join section ) natural join time_slot)) a ) select distinct a.id,a.name from rel a,rel b where a.name = b.name and a.start_hr = b.start_hr and a.start_min = b.start_min and a.year = b.year and a.semester = b.semester and a.course_id<> b.course_id
+1_4_29	9	select distinct a.id,a.name from (select * from student natural join takes natural join section) a,(select * from student natural join takes natural join section) b where a.name = b.name and a.time_slot_id = b.time_slot_id and a.course_id <> b.course_id
+1_4_30	9	with same_course as (select a.id,a.course_id course1,b.course_id course2,a.year,a.semester from takes a,takes b where a.id = b.id and a.semester = b.semester and a.year = b.year and a.course_id < b.course_id) select distinct student.id,student.name from same_course c,section a,section b,student where a.course_id = course1 and b.course_id = course2 and a.semester = b.semester and a.semester = c.semester and a.year = b.year and a.year = c.year and a.time_slot_id = b.time_slot_id and c.id = student.id
+1_4_31	9	select distinct s.id,s.name from (select * from student natural join section natural join takes) s,(select * from student natural join section natural join takes) t where s.id=t.id and s.semester=t.semester and s.year=t.year and s.time_slot_id=t.time_slot_id and s.sec_id<>t.sec_id
+1_4_32	9	with required as (select * from section natural join takes) select r1.id,r1.course_id from required r1,required r2 where r1.course_id <> r2.course_id and r1. semester=r2.semester and r1.year=r2.year and r1.time_slot_id = r2.time_slot_id and r1.id = r2. id
+1_4_33	9	with table_new as (select id,name,semester,year,time_slot_id,course_id from student natural join takes natural join section) select id,name from table_new n where (select count(*) from table_new m where n.id = m.id and n.name = m.name and n.semester = m.semester and n.year = m.year and n.time_slot_id = m.time_slot_id) > 1
+1_4_34	9	select distinct student.id,student.name from student,takes,section where takes.semester = section.semester and takes.year= section.year and takes.id = student.id and takes.course_id = section.course_id and exists ( select * from takes t_in,section sec_in where takes.course_id <> t_in.course_id and takes.id = t_in.id and section.time_slot_id = sec_in.time_slot_id and sec_in.course_id = t_in.course_id and sec_in.year = t_in.year and sec_in.semester = t_in.semester and sec_in.semester = section.semester and sec_in.year = section.year )
+1_4_35	9	with a as (select id,name,semester,year,time_slot_id from student natural join takes natural join section) select distinct id,name from a group by id,name,semester,year,time_slot_id having count (*) > 1
+1_4_36	9	select id,name from (select id,student.name,semester,year,section.time_slot_id,count(*) as num from student natural join takes natural join section group by id,student.name,semester,year,section.time_slot_id) a where num>1
+1_4_37	9	with joint_table as (select distinct id,course_id,sec_id,semester,year,time_slot_id from takes natural join section ),conflict as (select a.id from joint_table a,joint_table b where a.id=b.id and not(a.course_id=b.course_id) and a.time_slot_id = b.time_slot_id and a.year=b.year and a.semester = b.semester) select distinct student.id,name from student,conflict where conflict.id=student.id
+1_4_38	9	with conflict_ids as ( select id,time_slot_id,count(time_slot_id) from takes natural join section group by id,time_slot_id having count(time_slot_id) > 1 ) select id,name from conflict_ids natural join student
+1_4_39	9	select id,name from section natural join takes natural join student group by id,name,semester,year,time_slot_id having count(*)>1
+1_4_40	9	select * from (select id,name,time_slot_id from (select * from (select * from student natural join takes) b1) a,section where a.course_id = section.course_id) a1 except select distinct * from (select id,name,time_slot_id from (select * from (select * from student natural join takes) b2) a,section where a.course_id = section.course_id) a2
+1_4_41	9	select id,name from (select id,name,semester,year,time_slot_id,count(*) from student natural join takes natural join section group by id,name,semester,year,time_slot_id having count (*) > 1) a
+1_4_42	9	select id,name from student where id in (select a.id from takes a,takes b,section c,section d,time_slot where b.id = a.id and b.semester = a.semester and b.year = a.year and a.course_id <> b.course_id and c.course_id = a.course_id and d.course_id = b.course_id and d.time_slot_id = c.time_slot_id)
+1_4_43	9	select student.id,count(id) from (section join takes using (course_id)) natural join student group by id,name having count(id) = 2
+1_4_44	9	select id,name from section natural join takes natural join student group by id,semester,year,time_slot_id,name having count(*)>1
+1_4_45	9	select id,name from (select id,name,course_id,semester,year,sec_id,time_slot_id,count (*) from student natural join takes natural join section group by semester,year,id,name,time_slot_id having count(*) > 1) a
+1_4_46	9	select * from (select * from student natural join takes natural join section) a,(select * from student natural join takes natural join section) b where a.id = b.id and a.year = b.year and a.semester = b.semester and a.time_slot_id = b.time_slot_id and a.course_id != b.course_id
+1_4_47	9	with tab_new as (select id,name,year,semester,time_slot_id,course_id from student natural join takes natural join section) select a1.id,a1.name from tab_new a1,tab_new a2 where a1.course_id <> a2.course_id and a1.id = a2.id and a1.year = a2.year and a1.semester = a2.semester and a1.time_slot_id = a2.time_slot_id
+1_4_48	9	select id,name from student where id in (select distinct b.id from takes a,takes b,section c,section d where a.id = b.id and a.course_id <> b.course_id and a.course_id = c.course_id and a.sec_id = c.sec_id and d.sec_id = b.sec_id and a.semester = c.semester and d.semester = b.semester and a.year = c.year and d.year = b.year and b.course_id = d.course_id and c.time_slot_id = d.time_slot_id )
+1_4_49	9	select distinct s.id,s.name from student s,takes t1,takes t2,section s1,section s2 where s.id=t1.id and s.id=t2.id and t1.id=t2.id and not t1.course_id=t2.course_id and t2.sec_id=t1.sec_id and t2.year=t1.year and t2.semester=t1.semester and s1.sec_id=t1.sec_id and s1.year=t1.year and s1.semester=t1.semester and s1.course_id=t1.course_id and s2.sec_id=t2.sec_id and s2.year=t2.year and s2.semester=t2.semester and s2.course_id=t2.course_id and s1.time_slot_id=s2.time_slot_id
+1_4_50	9	select distinct a.id,a.name from (select * from student natural join takes natural join section) a,(select * from student natural join takes natural join section) b where a.name = b.name and a.year = b.year and a.semester = b.semester and a.time_slot_id = b.time_slot_id and a.course_id <> b.course_id
+1_4_51	9	select distinct student.id,student.name from student,takes,section a,section b where student.id = takes.id and takes.course_id = a.course_id and takes.course_id = b.course_id and a.course_id <> b.course_id and a.time_slot_id = b.time_slot_id
+1_4_52	9	with new1 as (select * from (student natural join (takes natural join section)) a ) select s.id,s.name from new1 s,new1 t where s.id = t.id and s.year = t.year and s.semester = t.semester and s.time_slot_id = t.time_slot_id and s.course_id <> t.course_id
+1_4_53	9	select distinct student.id,student.name from takes t1,takes t2,student,section s1,section s2 where student.id = t1.id and student.id = t2.id and t1.course_id = s1.course_id and t1.sec_id = s1.sec_id and t1.semester = s1.semester and t1.year = s1.year and t2.course_id = s2.course_id and t2.sec_id = s2.sec_id and t2.semester = s2.semester and t2.year = s2.year and s1.time_slot_id = s2.time_slot_id and t1.year=t2.year and t1.semester=t2.semester and t1.course_id != t2.course_id
+1_4_54	9	with rel as (select * from student natural join takes natural join section) select a.id,a.name from rel a,rel b where a.id = b.id and a.semester = b.semester and a.year = b.year and a.time_slot_id = b.time_slot_id and not a.sec_id = b.sec_id
+1_4_55	9	with t1 as (select student.name,student.id,takes.course_id,section.year,section.semester,section.time_slot_id from student,takes,section where student.id = takes.id and takes.year = section.year and takes.semester = section.semester and section.course_id = takes.course_id ),t2 as (select student.name,student.id,takes.course_id,section.year,section.semester,section.time_slot_id from student,takes,section where student.id = takes.id and takes.year = section.year and takes.semester = section.semester and section.course_id = takes.course_id ) select t1.id,t1.name from t1,t2 where t1.name = t2.name and t1.id = t2.id and t1.year = t2.year and t1.semester = t2.semester and t1.time_slot_id = t2.time_slot_id and t1.course_id <> t2.course_id
+1_4_56	9	select distinct student.id,student.name from student,takes,section s,section t where student.id = takes.id and takes.semester=s.semester and takes.semester=t.semester and takes.year=s.year and takes.year=t.year and takes.course_id=s.course_id and takes.course_id=t.course_id and takes.sec_id=s.sec_id and takes.sec_id=t.sec_id and s.course_id <> t.course_id and s.time_slot_id = t.time_slot_id
+1_4_57	9	select distinct id,name,time_slot_id,count(id) from (student natural join takes) join section using (course_id,sec_id,semester,year) group by id,name,time_slot_id,semester,year having count(id)=2
+1_4_58	9	with new as (select * from student natural join takes natural join section) select t.id,t.name from new t,new s where s.year = t.year and s.semester = t.semester and s.id = t.id and s.course_id <> t.course_id and s.time_slot_id = t.time_slot_id
+1_4_59	9	with tab as(select student.id,name,section.course_id,time_slot_id from student,takes,section where takes.id=student.id and takes.course_id=section.course_id) select distinct t.id,t.name from tab t,tab s where t.name=s.name and t.time_slot_id=s.time_slot_id and t.course_id!=s.course_id
+1_4_60	9	with clash as (select t1.id id,t1.time_slot_id ts from (select * from section natural join takes t) t1 where t1.time_slot_id in (select s1.time_slot_id from (select * from section natural join takes s) s1 where s1.id=t1.id and s1.course_id != t1.course_id and t1.semester=s1.semester and t1.year=s1.year)) select distinct student.id,student.name,clash.ts from student,clash where clash.id=student.id
+1_4_61	9	select id,name from section natural join takes natural join student group by id,semester,year,time_slot_id,name having count(*) > 1
+1_4_62	9	select id,name from student where id in (select distinct s.id from (select * from takes natural join section ) s,(select * from takes natural join section ) t where s.id=t.id and s.time_slot_id = t.time_slot_id and not(s.course_id = t.course_id) )
+1_4_63	9	with viewer as (select * from (student natural join (takes natural join section))) select a.id,a.name from viewer a,viewer b where a.id = b.id and a.year = b.year and a.semester = b.semester and a.time_slot_id = b.time_slot_id and a.course_id <> b.course_id
+1_4_64	9	select student.id,student.name from student,takes,section s,section t where student.id=takes.id and takes.course_id=s.course_id and takes.sec_id=s.sec_id and takes.semester=s.semester and takes.year=s.year and takes.course_id=t.course_id and takes.sec_id=t.sec_id and takes.semester=t.semester and takes.year=t.year and t.course_id <> s.course_id and t.time_slot_id=s.time_slot_id
+1_4_65	9	select distinct student.id,student.name from section s1,section s2,student,takes t1,takes t2 where t1.course_id = s1.course_id and t1.sec_id = s1.sec_id and t1.semester = s1.semester and t1.year = s1.year and t2.course_id = s2.course_id and t2.sec_id = s2.sec_id and t2.semester = s2.semester and t2.year = s2.year and s1.time_slot_id = s2.time_slot_id and t1.course_id != t2.course_id and student.id = t1.id and student.id = t2.id
+1_4_66	9	select abc.id,bdc.name from (select name,id,course_id,year,time_slot_id,semester from takes natural join section natural join student) abc,(select name,id,course_id,year,time_slot_id,semester from takes natural join section natural join student) bdc where abc.year = bdc.year and abc.time_slot_id = bdc.time_slot_id and abc.semester = bdc.semester and abc.course_id <> bdc.course_id and abc.id = bdc.id
+1_4_67	9	select distinct student.id,student.name from student,takes s,takes t,section m,section n where student.id = t.id and student.id = s.id and not s.course_id = t.course_id and m.course_id = s.course_id and n.course_id = t.course_id and m.time_slot_id = n.time_slot_id and m.semester = n.semester and m.year = n.year
+1_4_68	9	select distinct student1.id,student1.name from (select *from student natural join takes natural join section) student1,(select *from student natural join takes natural join section) student2 where student1.name = student2.name and student1.course_id != student2.course_id and student1.time_slot_id = student2.time_slot_id
+1_4_69	9	select tab1.id,tab1.name from (select id,name,course_id,time_slot_id,semester,year from (takes natural join student) natural join section) tab1,(select id,name,course_id,time_slot_id,semester,year from (takes natural join student) natural join section) tab2 where tab1.time_slot_id=tab2.time_slot_id and tab1.id = tab2.id and tab1.semester=tab2.semester and tab1.year=tab2.year and tab1.course_id!=tab2.course_id
+1_4_70	9	select distinct first.id,first.name from (select * from student natural join takes natural join section) first,(select * from student natural join takes natural join section) second where first.name = second.name and first.course_id != second.course_id and first.time_slot_id = second.time_slot_id
+1_5_1	10	select distinct dept_name from course natural join department where credits = (select max(credits) from course)
+1_5_2	10	with max_value as (select max(credits) from course) select distinct dept_name from course where credits = (select * from max_value)
+1_5_3	10	select distinct course.dept_name from course where course.credits = (select max(course.credits) from course)
+1_5_4	10	select distinct dept_name from course where credits=(select max (credits) from course)
+1_5_5	10	select distinct dept_name from course where credits = (select max( credits) from course)
+1_5_6	10	select distinct t.dept_name from course t where t.credits = (select max(credits) from course)
+1_5_7	10	select distinct dept_name from course where credits in (select max(credits) from course )
+1_5_8	10	with max_credits as (select max(credits) from course) select distinct s.dept_name from (select * from course natural join department) s,max_credits where s.credits = (select * from max_credits)
+1_5_9	10	with rel as (select max(credits) credit from course) select distinct course.dept_name from rel,course where rel.credit=course.credits
+1_5_10	10	with max_credit as (select max (credits) cred from course) select distinct dept_name from course,max_credit where course.credits=max_credit.cred
+1_5_11	10	select distinct dept_name from course where credits>=all(select credits from course)
+1_5_12	10	select distinct dept_name from course where course.credits = (select max(credits) from course )
+1_5_13	10	select distinct department.dept_name from department,course where course.dept_name = department.dept_name and (course.credits) in (select max(course.credits) maximum from course )
+1_5_14	10	select distinct department.dept_name from course,department where department.dept_name=course.dept_name and credits= (select max (course.credits) from course)
+1_5_15	10	select distinct dept_name from course where credits in (select max(credits) from course)
+1_5_16	10	select distinct dept_name from course,(select max (credits) as max_credits from course) a where course.credits = max_credits
+1_5_17	10	with newtab as (select * from department natural join course),maxi as (select max(credits) as maximum from course) select distinct dept_name from newtab,maxi where newtab.credits = maxi.maximum
+1_5_18	10	select distinct dept_name from course where credits = (select max(credits) from course)
+1_5_19	10	select distinct dept_name from course,(select max(credits) as max_credits from course) a where course.credits = max_credits
+1_5_20	10	select distinct dept_name from course where credits = (select max(credits) from course )
+1_5_21	10	select distinct dept_name from (course natural join department) where credits = (select max(credits) from course)
+1_5_22	10	select distinct course.dept_name from course where course.credits=(select max(course.credits) from course)
+1_5_23	10	select distinct dept_name from course where (select max(credits) from course) = credits
+1_5_24	10	select distinct dept_name from course u1 where credits = (select max(credits) from course u2)
+1_5_25	10	select distinct dept_name from course where credits=(select max(credits) from course)
+1_5_26	10	select distinct dept_name from (select * from (select max(credits) as maxcred from course) a,course where maxcred=credits) b group by dept_name
+1_5_27	10	select distinct dept_name from course where credits = (select max (credits) from course)
+1_5_28	10	select distinct dept_name from course where course.credits = (select max (credits) from course)
+1_5_29	10	select distinct course.dept_name from course where course.credits = (select max(credits) from course)
+1_5_30	10	select distinct department.dept_name from department,course where course.dept_name=department.dept_name and credits=(select max(credits) from course)
+1_5_31	10	with max_credits as(select max(credits) max_credit from course) select distinct dept_name from course,max_credits where credits=max_credit
+1_5_32	10	select distinct dept_name from department natural join course where course.credits = (select max(credits) from course)
+1_5_33	10	with max_credits as (select max(credits) as value from course) select distinct course.dept_name from course,max_credits where course.credits = max_credits.value
+1_5_34	10	with max_credits as (select max(credits) as value from course) select distinct dept_name from course,max_credits where course.credits = max_credits.value
+1_5_35	10	select distinct dept_name from course where course.credits = (select max (course.credits) from course)
+1_5_36	10	select distinct dept_name from department natural join course where credits = (select max (credits) from course)
+1_5_37	10	select distinct department.dept_name from department,course where department.dept_name = course.dept_name and course.credits = (select max(course.credits) max_credit from course)
+1_5_38	10	select distinct t.dept_name from course t where t.credits = (select max (credits) from course)
+1_5_39	10	select distinct dept_name from course where course_id not in (select course_id from course where credits < some (select credits from course))
+1_5_40	10	select distinct dept_name as maximum from course where credits = (select max(credits) from course)
+1_5_41	10	with max1 as (select max(course.credits) as maximum from course) select distinct course.dept_name from course,max1 where course.credits = max1.maximum
+1_5_42	10	select course_id from course where course.credits = (select max(credits) from course)
+1_5_43	10	select distinct dept_name from ( select * from course where credits = all (select max (credits) from course) ) a
+1_5_44	10	select distinct dept_name from course where credits>=all (select credits from course)
+1_5_45	10	with max_credit as (select max(credits) max_c from course) select distinct dept_name from course,max_credit where course.credits = max_credit.max_c
+1_5_46	10	select distinct dept_name from course,(select max(credits) maximum from course) tablec where course.credits = tablec.maximum
+1_5_47	10	with max_credits as (select max(credits) from course) select distinct dept_name from course where course.credits = (select * from max_credits)
+1_5_48	10	select distinct dept_name from course natural join department where credits = (select max (credits) from course)
+1_5_49	10	select distinct dept_name from course,(select max(credits) max_credits from course) c1 where course.credits=c1.max_credits
+1_5_50	10	select distinct course.dept_name from course where credits = (select max (credits) from course )
+1_5_51	10	select distinct dept_name from course where course.credits = (select max(credits) from course)
+1_5_52	10	select distinct department.dept_name from department,course where course.dept_name=department.dept_name and course.credits in (select max(credits) from course)
+2_1_1	11	select id,name,course_id from instructor left outer join teaches group by id,name,course_id
+2_1_2	11	select id,instructor.name,course_id from instructor left outer join teaches
+2_1_3	11	select distinct id,name,course_id from instructor left join teaches
+2_1_4	11	select id,name,course_id from (instructor left outer join teaches)
+2_1_5	11	select distinct instructor.id,instructor.name,teaches.course_id from instructor left outer join teaches on teaches.id = instructor.id
+2_1_6	11	select distinct id,name,course_id from (instructor natural join teaches) union ((select id,name,null from instructor) except (select id,name,null from (instructor natural join teaches)))
+2_1_7	11	select instructor.id,name,course_id from instructor left outer join teaches on instructor.id = teaches.id
+2_1_8	11	select distinct id,name,course_id from instructor natural join teaches
+2_1_9	11	select distinct instructor.id,instructor.name,teaches.course_id from instructor left outer join teaches on (instructor.id = teaches.id)
+2_1_10	11	select distinct id,instructor.name,teaches.course_id from instructor left outer join teaches
+2_1_11	11	select distinct * from ((select instructor.id,instructor.name from instructor) a left outer join (select teaches.id,teaches.course_id from teaches) b)
+2_1_12	11	select id,name,course_id from instructor left outer join teaches
+2_1_13	11	select distinct id,name,course_id from teaches right outer join instructor
+2_1_14	11	select distinct instructor.id,instructor.name,teaches.course_id from teaches right outer join instructor on instructor.id = teaches.id
+2_1_15	11	select id,name,course_id from instructor left join teaches
+2_1_16	11	select distinct t.id,t.name,t.course_id from (select * from (select * from instructor left outer join teaches) section) t
+2_1_17	11	select distinct id,name,course_id from (instructor left outer join teaches)
+2_1_18	11	select id,name,course_id from instructor natural join teaches
+2_1_19	11	select distinct instructor.id,instructor.name,course_id from instructor left outer join teaches on (instructor.id = teaches.id)
+2_1_20	11	select distinct id,name,course_id from instructor left outer join teaches using (id)
+2_1_21	11	select distinct instructor.id,instructor.name,teaches.course_id from instructor left outer join teaches on instructor.id=teaches.id
+2_1_22	11	select distinct * from ((select id,name from instructor) b left outer join(select id,course_id from teaches) a)
+2_1_23	11	select distinct instructor.id,instructor.name,teaches.course_id from instructor left outer join teaches on instructor.id = teaches.id
+2_1_24	11	select id,name,course_id from instructor full outer join teaches using (id)
+2_1_25	11	select distinct id,name,course_id from (teaches right outer join instructor)
+2_1_26	11	select instructor.id,instructor.name,teaches.course_id from instructor left outer join teaches on (teaches.id=instructor.id )
+2_1_27	11	select distinct id,name,course_id from instructor left outer join teaches
+2_1_28	11	select distinct instructor.id,name,course_id from instructor left outer join teaches on instructor.id = teaches.id
+2_1_29	11	select distinct id,name,teaches.course_id from instructor left outer join teaches
+2_1_30	11	select distinct instructor.id,name,teaches.course_id from instructor left outer join teaches on (instructor.id = teaches.id)
+2_1_31	11	select distinct name,course_id from instructor left outer join teaches
+2_2_1	12	select id,name from student where name like '%sr%' or name like 'sr%'
+2_2_2	12	select id,name from student where name like '%sr%'
+2_2_3	12	select id,name from student where lower(name) like '%sr%'
+2_2_4	12	select id,name from student where name like '%sr%' or name like '%sr%' or name like '%sr%' or name like '%sr%'
+2_2_5	12	select id,name from student where lower( student.name) like '%sr%'
+2_2_6	12	select student.id,student.name from student where (select upper(name) from student stud where stud.id = student.id) like '%sr%'
+2_2_7	12	select student.id,student.name from student where lower(name) like '%sr%'
+2_2_8	12	select id,name from student where lower (name) like '%sr%'
+2_2_9	12	select name from student where upper(name) like '%sr%'
+2_2_10	12	select id,name from student where lower(name) like lower('%sr%')
+2_2_11	12	select student.name from student where student.name like '%sr%'
+2_2_12	12	select student.id,student.name from student where lower (student.name) like '%sr%'
+2_2_13	12	select name from student where lower (name) like '%sr%'
+2_2_14	12	select id,name from student where lower (student.name) like '%sr%'
+2_2_15	12	select id,name from student where upper(name) like '%sr%'
+2_2_16	12	select distinct id,name from student where student.name like '%sr%' or student.name like '%sr%' or student.name like '%sr%' or student.name like '%sr%'
+2_2_17	12	select id,name from student where upper(name) like upper('%sr%')
+2_2_18	12	select student.id,name from student where lower(name) like '%sr%'
+2_2_19	12	select s.id,s.name from student s where lower(s.name) like '%sr%'
+2_2_20	12	select id,name from student where lower(name) like ('%sr%')
+2_2_21	12	select student.id,student.name from student where lower(student.name) like '%sr%'
+2_2_22	12	select student.id,student.name from student where lower (student.name) like 'sr%'
+2_3_1	13	with new_tab as (select student.id as id,student.name as name,course_id as course_id from student left outer join takes on student.id = takes.id and semester = 'spring' and year = 2010) select id,name from new_tab where course_id is null
+2_3_2	13	select id,name from (select student.id,name,course_id from student left outer join takes on (student.id = takes.id) and (takes.semester = 'spring') and (takes.year = '2010')) g where g.course_id is null
+2_3_3	13	select id,name from (select student.id,student.name,takes.course_id from student left outer join takes on student.id = takes.id and takes.semester = 'spring' and takes.year = '2010') a where course_id is null
+2_3_4	13	select id,name from student left outer join (select * from takes where semester='spring' and year=2010) a where course_id is null
+2_3_5	13	select student.id,student.name from student where not exists (select id from (select id,course_id from student natural join takes where semester='spring' and year='2010') did where did.id=student.id)
+2_3_6	13	select id,name from (select id,name from student) a left outer join (select distinct id,course_id from takes where semester = 'spring' and year = '2010') b where course_id is null
+2_3_7	13	with takes_spr2010 as (select * from takes where semester = 'spring' and year = '2010') select student.id,student.name from student left outer join takes_spr2010 on student.id = takes_spr2010.id and course_id is null
+2_3_8	13	select id,name from student left outer join takes where course_id is null and semester='spring' and year='2010'
+2_3_9	13	select distinct id,name from student left outer join (select id,course_id from takes where semester='spring' and year = '2010') a where course_id is null
+2_3_10	13	with allstudents as(select student.id,student.name,takes.year from student left outer join takes on (takes.year=2010 and takes.semester='spring' and student.id=takes.id )) select id,name from allstudents where year is null
+2_3_11	13	select distinct id,name from student left outer join (select distinct id,name,course_id from student natural join takes where semester = 'spring' and year = 2010) a where course_id is null
+2_3_12	13	select id,name from student left outer join (select * from takes where semester = 'spring' and year = 2010 ) a where course_id is null
+2_3_13	13	select id,name from (select student.id,student.name,t.course_id from student left outer join (select id,course_id from takes where takes.semester = 'spring' and takes.year = '2010') t on student.id = t.id) a where course_id is null
+2_3_14	13	select id,name from (select student.id,name,course_id from student left outer join (select * from takes where semester='spring' and year='2010') t on student.id=t.id) a where course_id is null
+2_3_15	13	select distinct student.id,name from student left outer join takes on student.id = takes.id and semester = 'spring' and year = 2010 where course_id is null or year is null
+2_3_16	13	with t as (select id,course_id from takes where semester = 'spring' and year =2010) select id,name from student left outer join t where course_id is null
+2_3_17	13	select id,name from student left outer join (select * from takes where semester = 'spring' and year = '2010') a where course_id is null
+2_3_18	13	select t.id,t.name from (select * from student left outer join(select * from takes where takes.semester='spring' and takes.year='2010') a) t where t.course_id is null
+2_3_19	13	select id,name from student left outer join (select * from takes where semester='spring' and year='2010') a where course_id is null
+2_3_20	13	select id,name,course_id,semester,year from student left outer join (select * from takes where (semester='spring' and year=2010)) a where course_id is null
+2_3_21	13	with a as (select * from takes where semester ='spring' and year ='2010') select id,name from student left join a where course_id is null
+2_3_22	13	select distinct student.id,student.name from student left outer join (select distinct id,name,course_id from (student natural join takes) where semester = 'spring' and year = '2010') t on student.id = t.id where course_id is null
+2_3_23	13	with joi as (select id,name,course_id from student natural join takes where semester = 'spring' and year = '2010') select id,name from student left outer join joi where course_id is null
+2_3_24	13	with spring2010 as (select * from student natural join takes where semester='spring' and year=2010) select id,name from student left outer join spring2010 where course_id is null
+2_3_25	13	select id,name from ((select * from takes where semester = 'spring' and year = '2010') a natural join student) where course_id is null
+2_3_26	13	select id,name from(select student.id,student.name, takes.course_id as course from student left outer join takes on takes.semester = 'spring' and takes.id = student.id and takes.year = '2010') a where course is null
+2_3_27	13	select id,name from (select student.id,student.name,takes.course_id from student left outer join takes on student.id=takes.id and takes.semester='spring' and takes.year=2010) a where course_id is null
+2_3_28	13	with t as (select id,course_id from takes where semester = 'spring' and year = '2010') select id,name from student left outer join t where course_id is null
+2_3_29	13	with sem as (select * from takes where semester='spring' and year='2010') select id,name from student left outer join sem where course_id is null
+2_3_30	13	with s as (select distinct id,name,course_id from takes natural join student where semester = 'spring' and year = '2010') select id,name from student left outer join s where course_id is null
+2_3_31	13	select id,name from (select * from (select id,name from student) a left outer join (select id,course_id from takes where semester='spring' and year='2010') b) c where course_id is null
+2_3_32	13	select distinct id,name from (student left outer join(select * from takes where semester = 'spring' and year = 2010) a) where course_id is null
+2_3_33	13	select id,name from ( select name,id,course_id from ( (select id,course_id from takes where semester = 'spring' and year='2010') a right outer join student) b) c where course_id is null
+2_3_34	13	select distinct t.id,t.name from (select * from takes natural join student) t where not exists (select * from takes where t.id=takes.id and semester='spring' and year=2010)
+2_3_35	13	with a as (select distinct id,course_id from takes where semester = 'spring' and year = 2010),b as (select distinct id,name,course_id from student left outer join a) select id,name from b where course_id is null
+2_3_36	13	select id,name from student left outer join (select id,name,course_id from student left outer join takes where year = 2010 and semester = 'spring') a where course_id is null
+2_3_37	13	with mytable as (select * from takes where semester = 'spring' and year = '2010') select distinct id,name from student left outer join mytable where course_id is null
+2_3_38	13	select * from student left outer join (select id,course_id,semester,year from takes where semester = 'spring' and year = '2010') a where course_id is null
+2_3_39	13	select id,name from student left outer join (select id,name,course_id from (student natural join takes) where semester = 'spring' and year = 2010) a where course_id is null
+2_3_40	13	select student.id,student.name from student left outer join (select * from takes where takes.year = 2010 and takes.semester = 'spring') k on student.id = k.id where k.year is null
+2_3_41	13	select distinct id,name from student left outer join (select * from takes where year = '2010' and semester = 'spring' ) a where course_id is null
+2_3_42	13	with a as (select id,semester,year from takes where semester = 'spring' and year = '2010') select student.id,student.name from student left outer join a on student.id = a.id where a.semester is null and a.year is null
+2_3_43	13	select id,name,course_id from student left outer join takes where semester='spring' and year=2010 and course_id=null
+2_3_44	13	select distinct id from student left outer join (select distinct id,1 as test from takes where year='2010' and semester='spring') a where test is null
+2_3_45	13	with mytable as ( select id,course_id from takes where semester = 'spring' and year = 2010 ) select id,name from ( select id,name from student ) a left outer join mytable where course_id is null
+2_3_46	13	select id,name from student left outer join (select id,course_id from takes where semester = 'spring' and year = '2010') a where course_id is null
+2_3_47	13	select distinct t.id,t.name from (select * from takes natural join student) t where not exists (select * from takes s where t.id=s.id and semester='spring' and year=2010)
+2_3_48	13	select id,name from ( (select id,name from student) a left outer join (select id,course_id from takes where takes.semester='spring' and takes.year = 2010) b) where course_id is null
+2_3_49	13	select st.id,st.name from student st where not exists (select * from (select distinct name,id from student natural join takes where semester='spring' and year = 2010 ) tk where tk.id = st.id)
+2_3_50	13	select id,student.name from student left outer join (select id,takes.course_id from student left outer join takes where semester='spring' and year='2010') a where course_id is null
+2_3_51	13	select student.id,name from student left outer join (select * from takes where takes.semester = 'spring' and takes.year = '2010') takes on (student.id = takes.id) where course_id is null
+2_3_52	13	with takes2 as (select * from takes where semester = 'spring' and year = 2010) select id,name from student left outer join takes2 where course_id is null
+2_3_53	13	with mytable as (select id,course_id from takes where semester='spring' and year=2010) select id,name from (select id,name from student) a left outer join mytable where course_id is null
+2_3_54	13	with tab1 as (select id,1 as status from takes where year=2010 and semester='spring') select distinct id,name from student left outer join tab1 where status is null
+2_3_55	13	select arbit.id,arbit.name from (select id,name from student) arbit left outer join (select id,course_id from takes where takes.year = 2010 and takes.semester = 'spring') arbit1 on (arbit.id= arbit1.id) where arbit1.course_id is null
+2_3_56	13	with temp as (select id,name,year,semester from student natural join takes where year = 2010 and semester = 'spring') select id,name from temp left outer join takes where course_id is null
+2_3_57	13	select id,name from student left outer join ( select id,'took' as count from takes where semester='spring' and year='2010' ) a where count is null
+2_3_58	13	with a as (select * from student natural join (select * from takes where takes.semester='spring' and takes.year=2010 ) a) select a.id,a.name from a where course_id is null
+2_3_59	13	select id,name from student left outer join (select id,name,course_id from student natural join takes where semester = 'spring' and year = 2010) a where course_id is null
+2_3_60	13	with t21 as (select id,course_id from takes where semester='spring' and year='2010') select id,name from student left outer join t21 where course_id is null
+2_3_61	13	with t1 as (select * from takes where semester='spring' and year=2010) select id,name from student left outer join t1 where t1.course_id is null
+2_3_62	13	with tab as (select * from takes where takes.year = '2010' and takes.semester = 'spring') select student.id,name from (student left outer join tab on (student.id = tab.id)) where course_id is null
+2_3_63	13	select distinct id,name from student left outer join (select * from takes where year = 2010 and semester = 'spring') a where course_id is null
+2_3_64	13	select id,name from (student left outer join (select * from takes where year='2010' and semester='spring') a) where course_id is null
+2_3_65	13	select id,name,course_id from (student left outer join takes ) where course_id is null and semester='spring' and year=2010
+2_3_66	13	select distinct id,name,course_id,semester,year from student left outer join (select * from takes where semester = 'spring' and year = 2010) a where course_id is null or semester is null or year is null
+2_3_67	13	with a as (select * from takes where semester = 'spring' and year = '2010') select id,name from student left outer join a where course_id is null
+2_3_68	13	with a as ( select * from takes where semester = 'spring' and year = '2010' ) select student.id,student.name from student left outer join a on ( student.id = a.id ) where course_id is null
+2_4_1	14	with failstudents as (select * from takes where grade = 'f'),passlater as (select id,course_id,takes.sec_id,takes.semester,takes.year,takes.grade from takes join failstudents using(id,course_id) where not (takes.grade = 'f')),notselected as (select takes.id,takes.course_id,takes.sec_id,takes.semester,takes.year,takes.grade from takes,passlater where (takes.id = passlater.id and takes.course_id = passlater.course_id and takes.grade <> passlater.grade) or takes.grade is null) select * from (select * from takes) a except (select * from notselected)
+2_4_2	14	select * from takes p where p.grade <> 'f') union (select * from takes t where t.grade = 'f' and (t.id,t.course_id) not in (select s.id,s.course_id from takes s where s.grade <> 'f' )
+2_4_3	14	select * from takes where grade is not null) except (select t.* from takes t,takes s where t.id=s.id and t.course_id=s.course_id and (t.grade='f' and s.grade!='f')
+2_4_4	14	select * from takes) except (select * from takes tk where tk.grade is null or ( grade = 'f' and exists ( select * from takes t1 where t1.semester <> tk.semester and t1.year <> tk.year and t1.grade <> 'f' and tk.id = t1.id and tk.course_id = t1.course_id ) )
+2_4_5	14	select * from takes where grade is not null except select a.id,a.course_id,a.sec_id,a.semester,a.year,a.grade from takes a,takes b where a.grade = 'f' and b.grade <> 'f' and a.id = b.id and a.course_id = b.course_id
+2_4_6	14	select * from takes where grade is not null except select a.id,a.course_id,a.sec_id,a.semester,a.year,a.grade from takes a,takes b where a.grade = 'f' and b.grade <> 'f' and a.course_id = b.course_id and a.id = b.id
+2_4_7	14	select * from takes where grade!='f') union (select * from takes t where grade='f' and t.course_id not in (select s.course_id from takes s where t.id=s.id and s.grade!='f')
+2_4_8	14	select * from takes where grade!='f'
+2_4_9	14	select * from takes where grade is not null and grade != 'f') union ((select * from takes where grade ='f') except (select takes.* from takes,(select * from takes where grade ='f') t where takes.id =t.id and takes.course_id=t.course_id and takes.grade != 'f')
+2_4_10	14	select * from takes a where grade is not null and (grade <> 'f' or not exists (select * from takes b where a.id = b.id and a.course_id = b.course_id and (a.semester <> b.semester or a.year <> b.year) and a.grade <> b.grade))
+2_4_11	14	select * from takes t1 where not((t1.grade='f' and exists (select * from takes t2 where t1.id=t2.id and t1.course_id=t2.course_id and t2.grade <> 'f')) or t1.grade is null)
+2_4_12	14	with s as (select * from takes where grade is not null) select * from s except select s.id,s.course_id,s.sec_id,s.semester,s.year,s.grade from s,s t where s.course_id = t.course_id and s.id = t.id and s.grade = 'f' and t.grade <> 'f'
+2_4_13	14	with a as (select * from takes where grade= 'f') select distinct id from takes except select t1.id from a t1,takes t2 where not exists (select distinct t1.id from a t1,takes t2 where t2.grade <> 'f' and t1.id = t2.id and t1.course_id = t2.course_id and (t1.semester <> t2.semester or t1.year <> t2.year))
+2_4_14	14	with t as (select grade from takes where grade is not null and grade <> 'f') select * from takes where (grade is not null and grade <> 'f') or (grade = 'f' and not exists(select grade from t))
+2_4_15	14	select * from takes where grade is not null except ((select * from takes where grade='f') except (select takes.id,takes.course_id,takes.sec_id,takes.semester,takes.year,takes.grade from (select * from takes where grade='f') t,takes where takes.course_id=t.course_id and takes.id=t.id and takes.grade <> 'f' ))
+2_4_16	14	select * from takes) except ((select * from takes where grade is null) union (select t1.id,t1.course_id,t1.sec_id,t1.semester,t1.year,t1.grade from takes t1,takes t2 where t1.id = t2.id and t1.course_id = t2.course_id and t1.grade = 'f' and not(t2.grade is null) and not(t1.grade = t2.grade))
+2_4_17	14	select * from takes where grade <> 'f') union (select b.id,b.course_id,b.sec_id,b.semester,b.year,b.grade from takes a,takes b where a.grade = 'f' and a.id = b.id and a.course_id = b.course_id and b.grade <> 'f'
+2_4_18	14	select * from takes t1 where t1.grade <> 'f' or (select t2.id from takes t2 where t1.id=t2.id and t1.course_id=t2.course_id and t2.grade <> 'f') is null and t1.grade is not null
+2_4_19	14	select * from takes where grade is not null) except ((select * from takes where grade='f' ) except (select takes.id,takes.course_id,takes.sec_id,takes.semester,takes.year,takes.grade from (select * from takes where grade='f' ) t,takes where t.course_id= takes.course_id and t.id=takes.id and takes.grade <> 'f')
+2_4_20	14	select distinct * from takes t where (grade!='f' or not exists (select id,course_id from takes s where grade!='f' and t.id=s.id and t.course_id=s.course_id)) and t.grade is not null
+2_4_21	14	select id,course_id,semester,year,grade from takes t where grade is not null and (not grade = 'f' or (grade = 'f' and grade in (select grade from takes s where s.course_id = t.course_id and not grade = 'f')))
+2_4_22	14	select * from takes where grade!='f') union (select a.* from takes a,takes b where b.grade='f' and b.id not in (select id from takes c where grade!='f')
+2_4_23	14	select * from takes where grade != 'f') except ( select * from takes where grade = 'f' or grade = null
+2_4_24	14	select * from takes where grade is not null and grade <> 'f') union (select * from takes abc where abc.grade = 'f' and ( (abc.id,abc.course_id) not in ( select q.id,q.course_id from takes q where abc.id=q.id and abc.course_id=q.course_id and q.grade <> 'f' ) )
+2_4_25	14	with a as (select * from takes where grade is not null and grade <> 'f'),b as (select * from takes where grade = 'f') select * from a union select * from b where not exists ( select a.id,a.course_id from a where a.id = b.id and a.course_id = b.course_id)
+2_4_26	14	select * from takes t1 where grade is not null and grade <> 'f') union (select * from takes t1 where grade='f' and not exists(select * from takes t2 where t1.id=t2.id and t1.course_id=t2.course_id and t2.course_id is not null and t2.course_id <> 'f')
+2_4_27	14	select * from takes except (select * from takes a where a.grade = 'f' and exists (select b.id from takes b where b.grade = 'f' and exists(select c.id from takes c where c.grade is not null and c.grade <> 'f' and b.id = c.id and b.course_id = c.course_id) and a.id = b.id and a.course_id = b.course_id) union select * from takes where grade is null)
+2_4_28	14	select * from takes t1 where (t1.grade <> 'f' or (select id from takes t2 where t1.course_id=t2.course_id and t1.id=t2.id and t2.grade <> 'f') is null) and grade is not null
+2_4_29	14	with a as (select distinct * from takes where grade = 'f'),b as (select distinct * from a where exists (select * from takes where takes.id = a.id and takes.course_id = a.course_id and takes.grade is not null and takes.grade <> 'f')),c as (select distinct * from takes where grade is null) select distinct * from takes except (select * from b union select * from c)
+2_4_30	14	select * from takes where grade <> 'f' union select * from takes where (select id from takes where grade = 'f') not in (select id from takes where grade <> 'f') and (select course_id from takes where grade = 'f') not in (select course_id from takes where grade <> 'f')
+2_4_31	14	select * from takes where grade <> 'f' and grade is not null) union (select * from takes t1 where grade = 'f' and not exists (select * from takes t2 where grade <> 'f' and t1.id = t2.id and grade is not null)
+2_4_32	14	with t as (select grade from takes where grade is not null and grade != 'f') select * from takes where (grade is not null and grade != 'f') or (grade = 'f' and not exists(select grade from t))
+2_4_33	14	select * from takes newtakes1 where newtakes1.grade!='f' or (select newtakes1.id from takes newtakes2 where newtakes1.id=newtakes2.id and newtakes1.course_id=newtakes2.course_id and newtakes2.grade!='f') is null and newtakes1.grade is not null
+2_4_34	14	with pass as (select * from takes t where t.grade is not null and t.grade <> 'f') (select * from pass) union (select * from takes t where t.grade = 'f' and t.id not in (select p.id from pass p))
+2_4_35	14	with passed as (select * from takes where grade!='f') select * from passed union select * from takes where grade='f' and course_id not in (select course_id from passed)
+2_4_36	14	select * from takes where grade is not null and ((grade <> 'f') or (not exists(select * from takes take where take.grade is not null and take.grade <> 'f' and take.id = takes.id and take.course_id = takes.course_id)))
+2_4_37	14	select * from takes where grade <> 'null') except (select t.id,t.course_id,t.sec_id,t.semester,t.year,t.grade from takes t,takes s where t.id = s.id and t.course_id = s.course_id and t.grade = 'f' and t.grade <> s.grade
+2_4_38	14	with fail as (select distinct * from takes where grade='f' and id in (select distinct id from takes where grade!='f')) select distinct * from takes where grade is not null except select distinct * from fail
+2_4_39	14	select * from takes except select * from takes where takes.id = (select id from(select id,course_id from takes where takes.grade='f') a) and takes.course_id = (select course_id from(select id,course_id from takes where takes.grade='f') b) and takes.grade ='f'
+2_4_40	14	select * from takes where takes.grade is not null and (takes.grade <> 'f' or (takes.grade = 'f' and takes.id not in (select t.id from takes s,takes t where s.id=t.id and s.grade='f' and t.grade <> 'f'and s.course_id=t.course_id) ) )
+2_4_41	14	select a.* from takes a,takes b where a.id = b.id and a.course_id = b.course_id and ((a.grade <> 'f') or (a.grade = 'f' and b.grade <> 'f')) and a.grade is not null
+2_4_42	14	select * from takes where grade is not null and grade != 'f' ) union (select * from takes p where p.grade = 'f' and (p.id,p.course_id) not in (select q.id,q.course_id from takes q where p.id = q.id and p.course_id = q.course_id and q.grade != 'f')
+2_4_43	14	select * from takes where grade is not null and grade <> 'f') union (select * from takes r where r.grade = 'f' and ((r.course_id,r.id) not in (select q.id,q.course_id from takes q where r.id=q.id and r.course_id=q.course_id and q.grade <> 'f'))
+2_4_44	14	select * from takes) except (select t1.id,t1.course_id,t1.sec_id,t1.semester,t1.year,t1.grade from takes t1,takes t2 where (t1.id = t2.id and t1.course_id = t2.course_id and t1.grade <> t2.grade and t1.grade = 'f')) union (select * from takes where grade is null
+2_4_45	14	with t1 as (select * from takes) select * from takes where (grade is not null) and (grade != 'f' or (grade = 'f' and (select count(*) from t1 where t1.course_id=course_id and t1.id=id and grade !='f') > 0))
+2_4_46	14	with failed_takes as (select * from takes where grade = 'f') select takes.id,takes.course_id,takes.sec_id,takes.semester,takes.year,takes.grade from failed_takes,takes where takes.id = failed_takes.id and takes.grade != 'f'
+2_4_47	14	select * from takes where grade is not null ) except ( select * from (select * from takes where grade ='f') a where (id,course_id) in (select id,course_id from takes where grade <> 'f' and grade is not null)
+2_4_48	14	select * from takes) except ((select s.id,s.course_id,s.sec_id,s.semester,s.year,s.grade from takes s,takes t where s.id = t.id and s.course_id = t.course_id and s.grade = 'f' and t.grade <> s.grade) union (select * from takes where grade is null)
+2_4_49	14	select * from takes) except (select * from takes where (id = (select id from takes where id=(select id from (select id,course_id from (select * from takes where grade='f') a) b) and course_id=(select course_id from (select id,course_id from (select * from takes where grade='f') c) d) and not (grade='f')) and course_id =(select course_id from takes where id=(select id from (select id,course_id from (select * from takes where grade='f') e) f) and course_id=(select course_id from (select id,course_id from (select * from takes where grade='f') g) h) and not(grade='f')) and grade='f') or (grade is null)
+2_4_50	14	with val1 as (select takes.id,takes.course_id from takes where takes.grade = 'f'),val2 as (select val1.id,val1.course_id from takes,val1 where val1.id = takes.id and val1.course_id = takes.course_id and takes.grade <> 'f' ),val3 as (select val1.id id,val1.course_id from val1,val2 where val1.id <> val2.id) select takes.id from takes,val3 where takes.id <> val3.id
+2_4_51	14	select * from takes) except (select * from takes where grade is null) union (select * from (with a as (select * from takes) select t1.id,t1.course_id,t1.sec_id,t1.semester,t1.year,t1.grade from a t1,a t2 where t1.id = t2.id and t1.course_id = t2.course_id and t1.grade = 'f' and t2.grade <> 'f' and (t1.semester <> t2.semester and t1.year <> t2.year)) b
+2_4_52	14	select * from takes where grade is not null except (select a.id,a.course_id,a.sec_id,a.semester,a.year,a.grade from takes a,takes b where a.id=b.id and a.course_id=b.course_id and a.grade='f'and b.grade <> 'f' and (a.semester <> b.semester and a.year<>b.year))

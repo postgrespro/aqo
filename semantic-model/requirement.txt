@@ -1,0 +1,16 @@
+annotated-types==0.7.0
+pydantic==2.11.9
+pydantic_core==2.33.2
+PyYAML==6.0.2
+typing-inspection==0.4.1
+typing_extensions==4.15.0
+gensim>=4.3.0
+pandas>=2.0.0
+tqdm>=4.65.0
+sqlglot>=25.0.0
+protobuf==6.33.0
+scikit-learn==1.7.2
+numpy>=1.24.0
+datasets
+matplotlib
+huggingface_hub

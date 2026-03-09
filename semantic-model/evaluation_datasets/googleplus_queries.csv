@@ -1,0 +1,136 @@
+id	label	query
+121	1	SELECT next_unread_notifications_fetch_param FROM account_status
+28	1	SELECT read_low_notifications_summary FROM account_status
+37	1	SELECT cover_photo_spec FROM account_status
+41	1	SELECT next_unread_low_notifications_fetch_param FROM account_status
+56	1	SELECT unviewed_notifications_count, has_unread_notifications, last_viewed_notification_version, cover_photo_spec, people_view_notification_count FROM account_status
+68	1	SELECT people_last_update_token FROM account_status
+77	1	SELECT next_read_low_notifications_fetch_param FROM account_status
+14	1	SELECT next_read_notifications_fetch_param FROM account_status
+17	1	SELECT unviewed_notifications_count, last_viewed_notification_version FROM account_status
+21	1	SELECT unread_low_notifications_summary FROM account_status
+101	2	SELECT activity_id, modified, data_state FROM activities WHERE activity_id IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+13	1	SELECT people_view_notification_count FROM account_status
+134	2	SELECT activity_id FROM activities WHERE activity_id IN (?)
+15	2	SELECT token, stream_token FROM activities_stream_view WHERE (stream_key=?) ORDER BY sort_index ASC LIMIT 1
+2	2	SELECT activity_id, modified, data_state FROM activities WHERE activity_id IN (?)
+29	2	SELECT 2147483647 AS _id, 0 AS row_type, activity_id, author_id, name, avatar, plus_one_data, total_comment_count, loc, created, event_data, event_type, whats_hot, content_flags, activity_flags, annotation, title, original_author_id, original_author_name, original_author_avatar_url, comment, last_activity, source_name, square_update, square_reshare_update, social_friends_plus_oned, relateds, embed, embed_deep_link, embed_appinvite, source_id, promo, domain, explanation_activity_id, birthday, author_annotation, acl_display, permalink, num_reshares FROM activities_stream_view WHERE (stream_key=?) AND ((activity_flags&64)=0) ORDER BY sort_index ASC
+45	2	SELECT unique_activity_id, modified, data_state FROM activities WHERE unique_activity_id IN (?)
+47	2	SELECT activity_id FROM activity_streams WHERE stream_key=? ORDER BY sort_index ASC LIMIT 20
+48	2	SELECT 2147483647 AS _id, 0 AS row_type, activity_id, acl_display, author_id, name, avatar, total_comment_count, plus_one_data, loc, created, source_id, source_name, data_state, content_flags, activity_flags, annotation, title, original_author_id, original_author_name, permalink, square_update, square_reshare_update, social_friends_plus_oned, whats_hot, relateds, num_reshares, embed, embed_deep_link, embed_appinvite, domain, birthday, original_activity_url FROM activity_view WHERE (activity_id=?)
+53	2	SELECT plus_one_data FROM activities WHERE activity_id=?
+55	2	SELECT embed_appinvite FROM activities WHERE activity_id=?
+65	2	SELECT 2147483647 AS _id, 0 AS row_type, activity_id, author_id, name, avatar_url, plus_one_data, total_comment_count, loc, created, content_flags, activity_flags, annotation, title, original_author_id, original_author_name, original_author_avatar_url, original_comment_count, comment, last_activity, source_name, square_update, square_reshare_update, relateds, embed, embed_deep_link, embed_appinvite, source_id, payload, domain, birthday, author_annotation, acl_display, num_reshares, original_activity_id, context_specific_data, promoted_post_data, unique_activity_id, i_data FROM activities_stream_view WHERE stream_key=? AND (activity_flags&64=0) ORDER BY sort_index ASC
+72	2	SELECT token, stream_token, server_timestamp FROM activities_stream_view WHERE stream_key=? ORDER BY sort_index ASC LIMIT 1
+78	2	SELECT event_id, polling_token, resume_token, event_data, event_type FROM events WHERE end_time > ? AND start_time < ?
+91	2	SELECT unique_activity_id FROM activity_streams WHERE stream_key=? ORDER BY sort_index ASC LIMIT 6
+114	3	SELECT duration FROM metrics WHERE uri = ?
+115	3	SELECT uri FROM metrics
+120	3	SELECT hit_id, hit_string FROM hits2 ORDER BY hit_id ASC LIMIT 40
+20	3	SELECT uri FROM metrics WHERE uri = ?
+32	3	SELECT attempts FROM metrics WHERE uri = ?
+4	3	SELECT rowid, event_data FROM analytics_events
+42	3	SELECT analysis_completed FROM metrics WHERE uri = ?
+5	3	SELECT metrics FROM metrics WHERE uri = ?
+73	3	SELECT event_data FROM analytics_events
+82	3	SELECT metrics, version FROM metrics WHERE uri = ?
+92	3	SELECT hit_id, hit_time, hit_url FROM hits2 ORDER BY hit_url ASC, hit_id ASC LIMIT 40
+79	4	SELECT profile_proto FROM profiles WHERE profile_person_id=?
+1	4	SELECT _id, 2 AS row_type, author_id, name, avatar, comment_id, content, created, plus_one_data, comment_flags FROM comments_view WHERE (activity_id=?) ORDER BY created ASC
+123	4	SELECT name, avatar_url FROM activity_contacts WHERE gaia_id=?
+10	4	SELECT circles.circle_id AS circle_id, circle_name FROM circles ORDER BY show_order ASC, sort_key
+107	4	SELECT circles.rowid AS _id, circles.circle_id AS circle_id, circle_name, contact_count, volume, notifications_enabled FROM circles WHERE (type IN (1,-1) AND circle_id NOT IN ('v.all.circles','v.whatshot','v.nearby')) ORDER BY show_order ASC, sort_key
+108	4	SELECT last_updated_time FROM contacts WHERE person_id=?
+113	4	SELECT gaia_id, avatar FROM contacts WHERE (gaia_id IN (?)) ORDER BY sort_key, UPPER(name)
+116	4	SELECT profile_state, name, profile_type FROM contacts WHERE person_id=?
+126	4	SELECT person_id, last_updated_time FROM contacts WHERE person_id IN (?)
+132	4	SELECT contacts.rowid AS _id, gaia_id FROM contacts WHERE (blocked=1) ORDER BY sort_key, UPPER(name)
+16	4	SELECT circle_id, circle_name, type, contact_count, semantic_hints, volume FROM circles
+25	4	SELECT gaia_id, group_concat(link_circle_id, '|') AS packed_circle_ids FROM contacts LEFT OUTER JOIN circle_contact ON ( circle_contact.link_person_id = contacts.person_id) WHERE (in_my_circles=1) GROUP BY person_id ORDER BY sort_key, UPPER(name)
+26	4	SELECT gaia_id, name, avatar, in_my_circles FROM contacts WHERE gaia_id = ?
+30	4	SELECT gaia_id, avatar FROM contacts WHERE (in_my_circles=1) ORDER BY sort_key, UPPER(name)
+31	4	SELECT circles.circle_id AS circle_id, circle_name, contact_count, for_sharing, volume, notifications_enabled FROM circles WHERE (type IN (1,-1)) ORDER BY show_order ASC, sort_key
+33	4	SELECT circles.circle_id AS circle_id, type, contact_count FROM circles WHERE (semantic_hints&8=0) ORDER BY show_order ASC, sort_key
+36	4	SELECT name, last_updated_time, profile_proto FROM contacts LEFT OUTER JOIN profiles ON (contacts.person_id=profiles.profile_person_id) WHERE (person_id=?) ORDER BY sort_key, UPPER(name)
+52	4	SELECT person_id FROM contacts WHERE blocked=1
+54	4	SELECT contacts.person_id AS person_id, name, contact_proto FROM contacts LEFT OUTER JOIN profiles ON (contacts.person_id=profiles.profile_person_id) WHERE (person_id IN (?)) ORDER BY sort_key, UPPER(name)
+6	4	SELECT gaia_id, avatar FROM contacts WHERE gaia_id=?
+63	4	SELECT circle_id, circle_name, type, contact_count, semantic_hints, volume, for_sharing FROM circles
+69	4	SELECT contacts.person_id AS person_id, name, contact_proto FROM contacts LEFT OUTER JOIN profiles ON (contacts.person_id=profiles.profile_person_id) WHERE (person_id IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)) ORDER BY sort_key, UPPER(name)
+75	4	SELECT person_id, last_updated_time FROM contacts WHERE in_my_circles!=0
+84	4	SELECT contacts.person_id AS person_id, last_updated_time, (CASE WHEN person_id IN (SELECT link_person_id FROM circle_contact WHERE link_circle_id IN (SELECT circle_id FROM circles WHERE for_sharing != 0)) THEN 1 ELSE 0 END) AS for_sharing FROM contacts WHERE (in_my_circles=1 AND profile_type!=2 AND for_sharing!=0) ORDER BY sort_key, UPPER(name)
+94	4	SELECT contacts.person_id AS person_id, name, contact_proto FROM contacts LEFT OUTER JOIN profiles ON (contacts.person_id=profiles.profile_person_id) WHERE (person_id IN (?,?,?,?,?,?)) ORDER BY sort_key, UPPER(name)
+98	5	SELECT _id FROM location_queries ORDER BY _id DESC
+103	5	SELECT photo_id FROM all_tiles WHERE view_id='notification:CgxncGx1c19waG90b3MaFENPTVBPU0lUSU9OLzUzNTgwMTM1'
+112	5	SELECT DISTINCT view_id FROM all_tiles WHERE view_id LIKE 'album:%' AND media_attr & 512 != 0
+128	5	SELECT DISTINCT cluster_id, title, subtitle, cluster_count, media_attr FROM all_tiles WHERE view_id = 'best' AND type = 2 AND view_order > 50100 ORDER BY view_order
+44	5	SELECT DISTINCT timestamp FROM all_tiles WHERE image_url = ? AND type = 4
+46	5	SELECT photo_id FROM all_tiles WHERE view_id='notification:CgxncGx1c19waG90b3MaEzU2NzkxNzA1ODM4MTQ2NDM3OTM'
+49	5	SELECT photo_id FROM all_tiles WHERE view_id='notification:CgxncGx1c19waG90b3MaEzU5MDQ5Nzk3NTQ1MDcyMzYwMTc'
+50	5	SELECT _id FROM all_tiles WHERE view_id = ? AND tile_id = ?  AND media_attr & 512 != 0
+58	5	SELECT data, refresh_timestamp FROM stories WHERE story_id=?
+59	5	SELECT DISTINCT view_id FROM all_tiles WHERE view_id LIKE 'notification:%'
+60	5	SELECT DISTINCT content_url FROM all_tiles WHERE media_attr & 4194304 != 0
+61	5	SELECT photo_id FROM all_tiles WHERE view_id='notification:CgxncGx1c19waG90b3MaEzU5MDI1MDczNDIxNTYxMTQ1NjE'
+62	5	SELECT photo_id FROM all_tiles WHERE view_id='notification:CgxncGx1c19waG90b3MaEzYwNTE5OTk5MjU1MzMxMjE4NTc'
+81	5	SELECT resume_token, last_refresh_time FROM tile_requests WHERE view_id = ?
+86	5	SELECT story_id FROM stories
+87	5	SELECT DISTINCT cluster_id, equivalence_token FROM all_tiles WHERE type = 2 ORDER BY view_order
+88	5	SELECT photo_id FROM all_tiles WHERE view_id='notification:CgxncGx1c19waG90b3MaEzYxMTgxMjc3MzU1NjU1NDc2OTc'
+89	5	SELECT square_id, square_name, tagline, photo_url, about_text, joinability, member_count, membership_status, is_member, list_category, post_visibility, can_see_members, can_see_posts, can_join, can_request_to_join, can_share, can_invite, notifications_enabled, square_streams, sort_index, inviter_gaia_id, inviter_name, inviter_photo_url, last_sync, last_members_sync, auto_subscribe, disable_subscription, unread_count, volume, suggestion_id, restricted_domain, related_links, location FROM squares WHERE is_member!=0 OR membership_status = 5
+99	5	SELECT DISTINCT timestamp FROM all_tiles WHERE view_id = ? AND type = 4 ORDER BY view_order
+110	6	SELECT last_sync FROM sync_status WHERE sync_data_kind = ?
+96	6	SELECT last_sync FROM synclet_status WHERE synclet_name = ?
+102	6	SELECT fingerprint FROM local_fingerprints WHERE content_uri=?
+105	6	SELECT view_name FROM partition_views WHERE partition_name=?
+109	6	SELECT content_uri FROM local_fingerprints INNER JOIN server_fingerprints ON (local_fingerprints.fingerprint=server_fingerprints.fingerprint) WHERE image_url=? AND owner_id=?
+11	6	SELECT COUNT(*) FROM guns
+119	6	SELECT name FROM sqlite_master WHERE type='view'
+127	6	SELECT version FROM table_versions WHERE table_name=?
+129	6	SELECT fingerprint FROM local_fingerprints WHERE content_uri=? LIMIT 1
+131	6	SELECT fingerprint FROM server_fingerprints WHERE owner_id=?
+18	6	SELECT bucket_id FROM local_folders
+22	6	SELECT _id, handle, item_creation_timestamp, item_state, item_data FROM networkqueue_items ORDER BY _id ASC
+3	6	SELECT name FROM SQLITE_MASTER WHERE name=?
+38	6	SELECT name FROM sqlite_master WHERE type='table'
+40	6	SELECT package_name, name, source_name, embed_deep_link, launch_source, embed_appinvite FROM deep_link_installs_view WHERE package_name=?
+70	6	SELECT bucket_id FROM exclude_bucket
+8	6	SELECT table_name FROM partition_tables WHERE partition_name=?
+90	6	SELECT partition_name, version FROM partition_versions
+106	7	SELECT content_url, filename, hash_code, last_access, size, _id FROM files WHERE hash_code=? AND content_url=?
+111	7	SELECT sum(size) FROM files
+12	7	SELECT DISTINCT COUNT(*) FROM media_record WHERE upload_account_id = -1
+100	7	SELECT media_type, volume_name, last_media_id FROM media_tracker
+104	7	SELECT album_id, upload_url, bucket_id, upload_error, resume_token, event_id, fingerprint, component_name, mime_type, media_url, media_id, media_time, media_hash, upload_time, upload_id, bytes_uploaded, retry_end_time, upload_finish_time, bytes_total, upload_account_id, from_camera, upload_reason, upload_state, upload_status, upload_task_state, is_image, allow_full_res, _id FROM media_record WHERE upload_account_id = ? AND upload_state = 100 ORDER BY upload_reason ASC, upload_state ASC, upload_status ASC, is_image DESC, retry_end_time ASC LIMIT 1
+117	7	SELECT album_id, upload_url, bucket_id, upload_error, upload_account, event_id, fingerprint, component_name, plus_page_id, mime_type, media_url, media_time, media_id, media_hash, upload_time, upload_id, retry_end_time, bytes_uploaded, bytes_total, upload_finish_time, from_camera, upload_reason, upload_state, upload_status, upload_task_state, is_image, allow_full_res, _id FROM media_record WHERE upload_account = ? AND upload_state = 100 ORDER BY upload_reason ASC, upload_state ASC, upload_status ASC, is_image DESC, retry_end_time ASC LIMIT 1
+135	7	SELECT album_id, upload_url, bucket_id, upload_error, resume_token, event_id, fingerprint, component_name, mime_type, media_url, media_id, media_time, media_hash, upload_time, upload_id, bytes_uploaded, retry_end_time, upload_finish_time, bytes_total, upload_account_id, from_camera, upload_reason, upload_state, upload_status, upload_task_state, is_image, allow_full_res, _id FROM media_record WHERE media_url = ? AND upload_account_id = -1
+24	7	SELECT album_id, upload_url, bucket_id, upload_error, upload_account, event_id, fingerprint, component_name, plus_page_id, mime_type, media_url, media_time, media_id, media_hash, upload_time, upload_id, retry_end_time, bytes_uploaded, bytes_total, upload_finish_time, from_camera, upload_reason, upload_state, upload_status, upload_task_state, is_image, allow_full_res, _id FROM media_record WHERE media_url = ? AND upload_account IS NULL
+51	7	SELECT image_url, filename, size FROM media_cache WHERE http_status = 200
+64	7	SELECT DISTINCT COUNT(*) FROM media_record WHERE upload_account IS NULL
+66	7	SELECT filename FROM media_cache WHERE http_status = 200
+67	7	SELECT DISTINCT album_id, upload_url, bucket_id, upload_error, resume_token, event_id, fingerprint, component_name, mime_type, media_url, media_id, media_time, media_hash, upload_time, upload_id, bytes_uploaded, retry_end_time, upload_finish_time, bytes_total, upload_account_id, from_camera, upload_reason, upload_state, upload_status, upload_task_state, is_image, allow_full_res, _id FROM media_record WHERE upload_reason = 30 AND upload_state = 400 LIMIT 1
+74	7	SELECT image_url FROM media_cache WHERE filename = ?
+9	7	SELECT album_id, upload_url, bucket_id, upload_error, resume_token, event_id, fingerprint, component_name, mime_type, media_url, media_id, media_time, media_hash, upload_time, upload_id, bytes_uploaded, retry_end_time, upload_finish_time, bytes_total, upload_account_id, from_camera, upload_reason, upload_state, upload_status, upload_task_state, is_image, allow_full_res, _id FROM media_record WHERE upload_account_id != -1 AND upload_state = 100 ORDER BY upload_reason ASC, upload_state ASC, upload_status ASC, is_image DESC, retry_end_time ASC LIMIT 1
+118	8	SELECT fingerprint FROM photos WHERE local_path IS NOT NULL AND cleanup_time < ?
+19	8	SELECT media_store_token FROM all_photos_local_sync WHERE media_store_uri = ?
+124	8	SELECT _id FROM all_photos WHERE fingerprint = ? AND photo_id IS NULL LIMIT 1
+125	8	SELECT local_content_uri FROM all_photos WHERE local_content_uri LIKE ? LIMIT 0, 3000
+130	8	SELECT is_primary, fingerprint FROM all_photos WHERE photo_id = ?
+133	8	SELECT DISTINCT all_photos.image_url, sum(representation_type), media_attr, data, NULL as title FROM all_photos LEFT OUTER JOIN media_cache ON (all_photos.image_url=media_cache.image_url) WHERE all_photos.image_url IS NOT NULL AND is_primary = 1 AND (has_edit_list = 1 OR local_content_uri IS NULL) GROUP BY all_photos.image_url ORDER BY timestamp DESC LIMIT 50
+23	8	SELECT _id, image_url, local_content_uri, media_attr, user_actions, photo_id, has_edit_list, signature FROM all_photos WHERE _id IN (4687)
+27	8	SELECT token FROM photo_requests WHERE token_type = ?
+35	8	SELECT photo_id FROM all_photos WHERE is_primary = 1 AND photo_id IS NOT NULL AND fingerprint = ?
+39	8	SELECT _id, image_url, local_content_uri, media_attr, user_actions, photo_id, has_edit_list, signature FROM all_photos WHERE _id IN (4686)
+43	8	SELECT media_cache.image_url,filename,size,representation_type FROM (SELECT image_url as all_photos_image_url, timestamp as all_photos_timestamp FROM all_photos WHERE all_photos_image_url IS NOT NULL AND is_primary = 1 AND (has_edit_list = 1 OR local_content_uri IS NULL) LIMIT ? OFFSET ?) INNER JOIN media_cache ON (all_photos_image_url = media_cache.image_url) WHERE http_status = 200 AND representation_type & ? != 0 ORDER BY all_photos_timestamp DESC
+57	8	SELECT _id, image_url, local_content_uri, media_attr, user_actions, photo_id, has_edit_list, signature FROM all_photos WHERE _id IN (4685)
+7	8	SELECT _id, image_url, local_content_uri, media_attr, user_actions, photo_id, has_edit_list, signature FROM all_photos WHERE _id IN (4688)
+71	8	SELECT image_url, media_attr, data FROM all_photos WHERE all_photos.image_url IS NOT NULL AND is_primary = 1 AND (has_edit_list = 1 OR local_content_uri IS NULL)
+76	8	SELECT _id, image_url, local_content_uri, media_attr, user_actions, photo_id, has_edit_list, signature FROM all_photos WHERE _id IN (4684)
+80	8	SELECT image_url FROM all_photos WHERE all_photos.image_url IS NOT NULL AND is_primary = 1 AND (has_edit_list = 1 OR local_content_uri IS NULL)
+83	8	SELECT _id FROM all_photos WHERE local_content_uri = ? AND photo_id IS NULL LIMIT 1
+85	8	SELECT _id, user_actions, media_attr, photo_id, data, image_url, timestamp, has_edit_list FROM all_photos WHERE photo_id IS NOT NULL AND fingerprint = ? AND is_primary = 1
+95	8	SELECT _id, image_url, local_content_uri, media_attr, user_actions, photo_id, has_edit_list, signature FROM all_photos WHERE _id IN (4683)
+97	8	SELECT local_file_path, local_content_uri, signature FROM all_photos WHERE fingerprint = ? AND local_file_path IS NOT NULL AND local_content_uri IS NOT NULL
+122	5	SELECT square_id, joinability, membership_status, suggestion_id FROM squares WHERE (1=1) ORDER BY square_name COLLATE LOCALIZED
+34	5	SELECT _id, square_id, square_name, unread_count, membership_status, joinability, photo_url FROM squares WHERE (is_member!=0) ORDER BY square_name COLLATE NOCASE
+93	4	SELECT action_type, person_id, suggestion_id, suggestion_ui, timestamp, action_source, ROWID FROM suggestion_events ORDER BY timestamp

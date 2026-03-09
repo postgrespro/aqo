@@ -1,0 +1,14 @@
+training:
+  window_size: 3
+  embedding_dim: 16
+  num_epochs: 50
+  num_workers: 4
+
+  # Gensim Word2Vec parameters
+  min_count: 1
+  sg: 1                     # 1 = Skip-gram, 0 = CBOW
+  negative: 5              # More negatives for larger vocab
+  sample: 0.001             # Subsampling threshold
+  alpha: 0.00005              # Initial learning rate
+  min_alpha: 0.000001         # Final learning rate
+  seed: 42
