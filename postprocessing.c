@@ -26,6 +26,7 @@
 
 #include "aqo.h"
 #include "hash.h"
+#include "node_context.h"
 #include "path_utils.h"
 #include "machine_learning.h"
 #include "storage.h"
@@ -485,6 +486,10 @@ learnOnPlanState(PlanState *p, void *context)
 	predicted = clamp_row_est(predicted);
 	learn_rows = clamp_row_est(learn_rows);
 
+	/* Node Context Extractor: record actual cardinality for this node */
+	if (aqo_nce_enabled && aqo_node->had_path)
+		nce_update_actual_cardinality(aqo_node->fss, nodeTag(p->plan), learn_rows);
+
 	/* Exclude "not executed" nodes from error calculation to reduce fluctuations. */
 	if (!notExecuted)
 	{
@@ -850,6 +855,10 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 	}
 
 	cur_classes = ldelete_uint64(cur_classes, query_context.query_hash);
+
+	/* Node Context Extractor: flush collected data to aqo_node_context table */
+	if (aqo_nce_enabled)
+		nce_flush_to_table(queryDesc);
 
 end:
 	/* Release all AQO-specific memory, allocated during learning procedure */
