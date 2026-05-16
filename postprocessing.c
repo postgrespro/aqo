@@ -543,12 +543,11 @@ end:
 /*
  * Set up flags to store cardinality statistics.
  */
-bool
+void
 aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 {
 	instr_time	now;
 	bool		use_aqo;
-	bool		plan_valid;
 
 	/*
 	 * If the plan pulled from a plan cache, planning don't needed. Restore
@@ -597,14 +596,12 @@ aqo_ExecutorStart(QueryDesc *queryDesc, int eflags)
 	}
 
 	if (prev_ExecutorStart_hook)
-		plan_valid = prev_ExecutorStart_hook(queryDesc, eflags);
+		prev_ExecutorStart_hook(queryDesc, eflags);
 	else
-		plan_valid = standard_ExecutorStart(queryDesc, eflags);
+		standard_ExecutorStart(queryDesc, eflags);
 
 	if (use_aqo)
 		StorePlanInternals(queryDesc);
-
-	return plan_valid;
 }
 
 #include "utils/timeout.h"
@@ -1009,7 +1006,7 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan)
 
 		for (i = 0; i < ps->worker_instrument->num_workers; i++)
 		{
-			Instrumentation *instrument = &ps->worker_instrument->instrument[i];
+			NodeInstrumentation *instrument = &ps->worker_instrument->instrument[i];
 
 			if (instrument->nloops <= 0)
 				continue;

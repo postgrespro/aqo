@@ -282,7 +282,7 @@ extern double predict_for_relation(List *restrict_clauses, List *selectivities,
 								   List *relsigns, int *fss);
 
 /* Query execution statistics collecting hooks */
-bool aqo_ExecutorStart(QueryDesc *queryDesc, int eflags);
+void aqo_ExecutorStart(QueryDesc *queryDesc, int eflags);
 void aqo_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count);
 void aqo_ExecutorEnd(QueryDesc *queryDesc);
 

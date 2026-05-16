@@ -82,18 +82,21 @@ static PlannedStmt *
 call_default_planner(Query *parse,
 					 const char *query_string,
 					 int cursorOptions,
-					 ParamListInfo boundParams)
+					 ParamListInfo boundParams,
+					 ExplainState *es)
 {
 	if (prev_planner_hook)
 		return prev_planner_hook(parse,
 								 query_string,
 								 cursorOptions,
-								 boundParams);
+								 boundParams,
+								 es);
 	else
 		return standard_planner(parse,
 								query_string,
 								cursorOptions,
-								boundParams);
+								boundParams,
+								es);
 }
 
 /*
@@ -123,7 +126,8 @@ PlannedStmt *
 aqo_planner(Query *parse,
 			const char *query_string,
 			int cursorOptions,
-			ParamListInfo boundParams)
+			ParamListInfo boundParams,
+			ExplainState *es)
 {
 	bool			query_is_stored = false;
 	MemoryContext	oldctx;
@@ -149,7 +153,8 @@ aqo_planner(Query *parse,
 		return call_default_planner(parse,
 									query_string,
 									cursorOptions,
-									boundParams);
+									boundParams,
+									es);
 	}
 
 	selectivity_cache_clear();
@@ -178,7 +183,8 @@ aqo_planner(Query *parse,
 		return call_default_planner(parse,
 									query_string,
 									cursorOptions,
-									boundParams);
+									boundParams,
+									es);
 	}
 
 	elog(DEBUG1, "AQO will be used for query '%s', class "UINT64_FORMAT,
@@ -347,7 +353,7 @@ ignore_query_settings:
 		PlannedStmt *stmt;
 
 		stmt = call_default_planner(parse, query_string,
-												 cursorOptions, boundParams);
+												 cursorOptions, boundParams, es);
 
 		/* Release the memory, allocated for AQO predictions */
 		MemoryContextReset(AQOPredictMemCtx);

@@ -6,7 +6,8 @@
 extern PlannedStmt *aqo_planner(Query *parse,
 								const char *query_string,
 								int cursorOptions,
-								ParamListInfo boundParams);
+								ParamListInfo boundParams,
+								struct ExplainState *es);
 extern void disable_aqo_for_query(void);
 
 #endif /* __PREPROCESSING_H__ */

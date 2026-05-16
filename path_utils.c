@@ -393,10 +393,6 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 			return get_path_clauses(((GroupPath *) path)->subpath, root,
 									selectivities);
 			break;
-		case T_UpperUniquePath:
-			return get_path_clauses(((UpperUniquePath *) path)->subpath, root,
-									selectivities);
-			break;
 		case T_AggPath:
 			return get_path_clauses(((AggPath *) path)->subpath, root,
 									selectivities);

@@ -22,6 +22,8 @@
 #include "funcapi.h"
 #include "miscadmin.h"
 #include "pgstat.h"
+#include "storage/fd.h"
+#include "utils/tuplestore.h"
 
 #include "aqo.h"
 #include "aqo_shared.h"
