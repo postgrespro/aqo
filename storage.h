@@ -137,6 +137,7 @@ extern StatEntry *aqo_stat_store(uint64 queryid, bool use_aqo,
 								 AqoStatArgs *stat_arg, bool append_mode);
 extern void aqo_stat_flush(void);
 extern void aqo_stat_load(void);
+extern const char *aqo_query_learning_state(uint64 queryid);
 
 extern bool aqo_qtext_store(uint64 queryid, const char *query_string);
 extern void aqo_qtexts_flush(void);

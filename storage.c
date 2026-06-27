@@ -363,6 +363,33 @@ aqo_stat_store(uint64 queryid, bool use_aqo, AqoStatArgs *stat_arg,
 }
 
 /*
+ * Returns a human-readable learning state of the given query class, i.e.
+ * whether AQO has finished learning it (cardinality quality has converged).
+ *
+ * The whole computation is done under the shared stat_lock so that the
+ * StatEntry, which lives in shared memory, is not concurrently modified.
+ * aqo_learning_state() returns a static string, hence the result stays valid
+ * after the lock is released.
+ */
+const char *
+aqo_query_learning_state(uint64 queryid)
+{
+	StatEntry  *entry;
+	bool		found;
+	const char *res;
+
+	if (stat_htab == NULL)
+		return "in progress (not enough statistics)";
+
+	LWLockAcquire(&aqo_state->stat_lock, LW_SHARED);
+	entry = (StatEntry *) hash_search(stat_htab, &queryid, HASH_FIND, &found);
+	res = aqo_learning_state(found ? entry : NULL);
+	LWLockRelease(&aqo_state->stat_lock);
+
+	return res;
+}
+
+/*
  * Returns AQO statistics on controlled query classes.
  */
 Datum

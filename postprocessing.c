@@ -1006,7 +1006,7 @@ print_node_explain(ExplainState *es, PlanState *ps, Plan *plan)
 
 		for (i = 0; i < ps->worker_instrument->num_workers; i++)
 		{
-			NodeInstrumentation *instrument = &ps->worker_instrument->instrument[i];
+			Instrumentation *instrument = &ps->worker_instrument->instrument[i];
 
 			if (instrument->nloops <= 0)
 				continue;
@@ -1096,5 +1096,13 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 			ExplainPropertyInteger("Query hash", NULL,
 									query_context.query_hash, es);
 		ExplainPropertyInteger("JOINS", NULL, njoins, es);
+
+		/*
+		 * Report whether AQO has finished learning this query class, i.e.
+		 * whether the cardinality-quality series has converged.
+		 */
+		ExplainPropertyText("AQO learning",
+							aqo_query_learning_state(query_context.query_hash),
+							es);
 	}
 }

@@ -118,6 +118,35 @@ is_in_infinite_loop_cq(double *elems, int nelems)
 }
 
 /*
+ * Reports the learning state of a query class for EXPLAIN output, i.e. whether
+ * the cardinality quality (estimation error) of AQO predictions has converged.
+ *
+ * The decision reuses exactly the same convergence criteria that the automatic
+ * tuning machinery applies in automatical_query_tuning(), so what EXPLAIN shows
+ * matches what AQO itself considers a "finished" query class.
+ *
+ * The returned value is a static string and is safe to use after the caller
+ * releases the lock that protects the StatEntry.
+ */
+const char *
+aqo_learning_state(StatEntry *stat)
+{
+	if (stat == NULL || stat->cur_stat_slot_aqo < auto_tuning_window_size + 2)
+		/* Not enough AQO executions to judge convergence yet. */
+		return "in progress (not enough statistics)";
+
+	if (converged_cq(stat->est_error_aqo, stat->cur_stat_slot_aqo))
+		/* Estimation error stopped decreasing - learning finished. */
+		return "converged";
+
+	if (is_in_infinite_loop_cq(stat->est_error_aqo, stat->cur_stat_slot_aqo))
+		/* Error keeps oscillating and does not settle down. */
+		return "not converged (oscillating)";
+
+	return "in progress";
+}
+
+/*
  * Here we use execution statistics for the given query tuning. Note that now
  * we cannot execute queries on our own wish, so the tuning now is in setting
  * use_aqo and learn_aqo parameters for the query type.

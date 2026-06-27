@@ -288,6 +288,7 @@ void aqo_ExecutorEnd(QueryDesc *queryDesc);
 
 /* Automatic query tuning */
 extern void automatical_query_tuning(uint64 query_hash, struct StatEntry *stat);
+extern const char *aqo_learning_state(struct StatEntry *stat);
 
 /* Utilities */
 extern int int_cmp(const void *a, const void *b);
